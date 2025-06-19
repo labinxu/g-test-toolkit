@@ -1,4 +1,8 @@
-/** @type {import("prettier").Config} */
 module.exports = {
-  ...require('@repo/eslint-config/prettier-base'),
-};
+  semi: false,
+  singleQuote: true,
+  trailingComma: 'es5',
+  printWidth: 100,
+  tabWidth: 2,
+  plugins: ['prettier-plugin-tailwindcss'],
+}

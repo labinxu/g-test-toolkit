@@ -1,0 +1,2 @@
+* TODO <2025-06-18 Wed>[0/1]
+- [] Check the mobile phone is on power,screen displayed.

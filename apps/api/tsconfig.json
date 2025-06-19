@@ -3,5 +3,7 @@
   "compilerOptions": {
     "baseUrl": "./",
     "outDir": "./dist",
+    "esModuleInterop": true,
+    "skipLibCheck": true
   }
 }
