@@ -1,7 +1,0 @@
-((nil . ((tab-width . 2)
-         (evil-shift-width . 2)
-         (indent-tabs-mode . nil)))
- (typescript-ts-mode . ((typescript-indent-level . 2)))
- (web-mode . ((web-mode-code-indent-offset . 2)
-              (web-mode-css-indent-offset . 2)
-              (web-mode-markup-indent-offset . 2))))

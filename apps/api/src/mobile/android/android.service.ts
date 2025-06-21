@@ -4,7 +4,6 @@ import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
 import { readFileSync } from 'fs';
 import { Response } from 'express';
-import sharp from 'sharp';
 @Injectable()
 export class AndroidService {
   private logger: CustomLogger;
