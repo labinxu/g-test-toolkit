@@ -5,11 +5,17 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Get,
+  Res,
+  NotFoundException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TestCasesService } from './testcases.service';
 import { StartTestCaseDto } from './dto/start-testcase-dto';
+import { readFileSync } from 'fs';
+
 @Controller()
 export class TestCasesController {
   constructor(private readonly testCasesService: TestCasesService) {}
@@ -39,6 +45,22 @@ export class TestCasesController {
       throw new BadRequestException('No file uploaded!');
     }
     // Validation for caseName is handled by class-validator in StartTestCaseDto
-    console.log(file.originalname);
+    readFileSync(`./cases/${file.originalname}`)
+  }
+  @Post('/testcase/run')
+  async run(@Body('code') jscode:string){
+    console.log(`received code ${jscode}`)
+    return await this.testCasesService.run(jscode);
+  }
+
+  @Get('/testcase/init')
+  async init(@Res() res:Response){
+    try{
+      const content = readFileSync('./cases/types/test-case.d.ts','utf8')
+    res.type('text/plain').send({content});
+    }catch(err){
+      throw new NotFoundException('test-case.d.ts not found')
+    }
+
   }
 }

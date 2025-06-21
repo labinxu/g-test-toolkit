@@ -1,18 +1,21 @@
 'use client';
 
-import { useCallback,useEffect, useState } from 'react';
+import { useCallback,useEffect, useState , useRef} from 'react';
 import ts from 'typescript';
 import {useQuery} from '@tanstack/react-query';
 
 import Editor,{ OnMount } from '@monaco-editor/react';
+
 import type { Monaco } from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 const INITIAL_CODE = '//Test Case';
-const headers = { "Content-Type": "text/plain" };
+const headers = { "Content-Type": "application/json" };
 
 const Page: React.FC = () => {
   const [code, setCode] = useState<string>(INITIAL_CODE);
   const [testCase,setTestCase] = useState<string>('');
+   const monacoRef = useRef<Monaco>(null);
+
   const testcaseQuery = useQuery({
     queryKey: ["init"],
     queryFn: () =>
@@ -32,6 +35,14 @@ const Page: React.FC = () => {
     setTestCase(content);
     console.log(content)
   }, [testcaseQuery]);
+  useEffect(()=>{
+    if(testCase!==''){
+      monacoRef.current?.languages.typescript.typescriptDefaults.addExtraLib(
+            testCase,
+            "file:///node_modules/@types/test-case.d.ts"
+          );
+    }
+  },[testCase])
   const transpile = useCallback(()=>{
     const result = ts.transpileModule(code, {compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2017}})
     return result.outputText;
@@ -41,6 +52,8 @@ const Page: React.FC = () => {
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {
       if (!monaco) return;
+      monacoRef.current = monaco;
+
       monaco.languages.typescript.typescriptDefaults.addExtraLib(
         'declare module "my-module" { export function myFunc(): void; }',
         'my-module.d.ts'
@@ -57,11 +70,10 @@ const Page: React.FC = () => {
     []
   );
   const run = async () => {
-   const jscode =  transpile();
     const res = await fetch('/api/testcase/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jscode}),
+      body: JSON.stringify({ code}),
     });
     const data = await res.json();
     console.log(JSON.stringify(data, null, 2));
