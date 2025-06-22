@@ -11,8 +11,9 @@ export class AndroidService {
     private readonly commandService: CommandService,
     private readonly loggerService: LoggerService,
   ) {
-    this.logger = this.loggerService.createLogger('AndroidService');
+      this.logger = this.loggerService.createLogger('AppService');
   }
+
   async getDevices(): Promise<string> {
     const result = await this.commandService.runCommand('adb devices');
     return result.stdout;

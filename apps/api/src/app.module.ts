@@ -6,10 +6,10 @@ import { AppController } from './app.controller';
 import { CommandModule } from './command/command.module';
 import { LoggerService } from './logger/logger.service';
 import { TestCaseModule } from './test-cases/testcases.module';
-
+import { LoggerGateway } from './logger/logger.gateway';
 @Module({
   imports: [AndroidModule,CommandModule, TestCaseModule],
   controllers: [AppController],
-  providers: [AppService,LoggerService],
+  providers: [AppService,LoggerService,LoggerGateway],
 })
 export class AppModule {}

@@ -1,21 +1,34 @@
-import { Injectable, Scope } from '@nestjs/common';
-import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { Injectable, Scope, Optional, forwardRef } from '@nestjs/common';
 import * as winston from 'winston';
 import { Inject } from '@nestjs/common';
+import { LoggerGateway } from './logger.gateway';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CustomLogger {
-  private readonly logger: winston.Logger;
-
+  private logger: winston.Logger;
+  private context = 'LOG:';
   constructor(
-    @Inject(WINSTON_MODULE_PROVIDER) winstonLogger: winston.Logger,
-    private readonly context: string,
+    private readonly winstonLogger: winston.Logger,
+    @Optional() @Inject(forwardRef(() => LoggerGateway))
+    private readonly loggerGateway: LoggerGateway,
   ) {
-    this.logger = winstonLogger.child({ context });
+    this.logger = winstonLogger.child({ context: this.context });
+    this.winstonLogger = winstonLogger;
+  }
+private format(level: string, message: string): string {
+  const timestamp = new Date().toISOString();
+  const tag = this.context ? `[${this.context}]` : '';
+  return `${timestamp} ${level} ${tag} ${message}\n`;
+}
+  setContext(context: string) {
+    this.context = context;
+    this.logger = this.winstonLogger.child({ context });
   }
 
   log(message: string) {
     this.logger.info(message);
+
+    this.loggerGateway?.sendLog(this.format('log', message)); // Use optional chaining for safety
   }
 
   error(message: string) {
@@ -28,6 +41,8 @@ export class CustomLogger {
 
   debug(message: string) {
     this.logger.debug(message);
+     this.loggerGateway?.sendLog(this.format('log', message)); // Use optional chaining for safety
+
   }
 
   verbose(message: string) {

@@ -1,11 +1,13 @@
-import { Module, Scope } from '@nestjs/common'; // Import Scope from @nestjs/common
-import { WinstonModule, WINSTON_MODULE_PROVIDER } from 'nest-winston'; // Import WINSTON_MODULE_PROVIDER
+import { Module, Scope } from '@nestjs/common';
+import { WinstonModule, WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import * as winston from 'winston';
 import * as dotenv from 'dotenv';
 import { CustomLogger } from './logger.custom';
 import { LoggerService } from './logger.service';
+import { LoggerGateway } from './logger.gateway';
 
 dotenv.config();
+
 const loggerFormat = winston.format.printf(
   ({ timestamp, level, message, context }) => {
     const tag = context ? `[${context}]` : '';
@@ -27,7 +29,7 @@ const loggerFormat = winston.format.printf(
         }),
         new winston.transports.File({
           filename: process.env.LOG_FILE,
-          level: process.env.LOG_LEVEL_FILE|| 'error',
+          level: process.env.LOG_LEVEL_FILE || 'error',
           zippedArchive: true,
           maxsize: 20 * 1024 * 1024,
           maxFiles: 30,
@@ -40,16 +42,23 @@ const loggerFormat = winston.format.printf(
     }),
   ],
   providers: [
+    LoggerGateway,
     {
       provide: CustomLogger,
-      useFactory: (winstonLogger: winston.Logger, context?: string) => {
-        return new CustomLogger(winstonLogger, context || 'Default');
+      useFactory: (winstonLogger: winston.Logger, loggerGateway: LoggerGateway) => {
+        return new CustomLogger(winstonLogger, loggerGateway);
       },
-      inject: [WINSTON_MODULE_PROVIDER], // Now correctly recognized
-      scope: Scope.TRANSIENT, // Now correctly recognized
+      inject: [WINSTON_MODULE_PROVIDER, LoggerGateway],
+      scope: Scope.TRANSIENT,
     },
-    LoggerService, // Add LoggerService as a provider
+    {
+      provide: LoggerService,
+      useFactory: (winstonLogger: winston.Logger, loggerGateway: LoggerGateway) => {
+        return new LoggerService(winstonLogger, loggerGateway);
+      },
+      inject: [WINSTON_MODULE_PROVIDER, LoggerGateway],
+    },
   ],
-  exports: [LoggerService, CustomLogger], // Export both for use in other modules
+  exports: [LoggerService, CustomLogger, LoggerGateway], // Add LoggerGateway to exports
 })
 export class LoggerModule {}

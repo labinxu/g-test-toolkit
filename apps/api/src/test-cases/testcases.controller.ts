@@ -49,7 +49,6 @@ export class TestCasesController {
   }
   @Post('/testcase/run')
   async run(@Body('code') jscode:string){
-    console.log(`received code ${jscode}`)
     return await this.testCasesService.run(jscode);
   }
 

@@ -3,18 +3,16 @@ import { LoggerService } from 'src/logger/logger.service';
 import { CustomLogger } from './logger/logger.custom';
 @Injectable()
 export class AppService {
-   private logger: CustomLogger;
+  private logger: CustomLogger;
 
-  constructor(
-    private readonly loggerService: LoggerService,
-  ) {
-    this.logger = this.loggerService.createLogger('AppService');
+  constructor(private readonly loggerService: LoggerService) {}
+  async onModuleInit() {
+    this.logger = await this.loggerService.createLogger('AppService');
   }
-
   getHello(): string {
     return 'Hello World!';
   }
- async start(){
-  this.logger.debug('start browser')
+  async start() {
+    this.logger.debug('start browser');
   }
 }

@@ -18,7 +18,9 @@
     "@nestjs/common": "^11.1.3",
     "@nestjs/core": "^11.1.3",
     "@nestjs/platform-express": "^11.1.3",
+    "@nestjs/platform-socket.io": "^11.1.3",
     "@nestjs/swagger": "^11.2.0",
+    "@nestjs/websockets": "^11.1.3",
     "@repo/api": "workspace:*",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
@@ -30,6 +32,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.2",
+    "socket.io": "^4.8.1",
     "winston": "^3.17.0"
   },
   "devDependencies": {

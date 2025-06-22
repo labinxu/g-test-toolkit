@@ -9,8 +9,9 @@ export class TestCasesService {
   private logger: CustomLogger;
 
   constructor(private readonly loggerService: LoggerService) {
-    this.logger = this.loggerService.createLogger('TeseCases');
+      this.logger = this.loggerService.createLogger('AppService');
   }
+
   private transpile(code:string){
     const compiledCode = ts.transpile(code,{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2017});
 
@@ -18,11 +19,12 @@ export class TestCasesService {
   }
 
   async runcase(fullcode: string) {
-    const sandbox = { result: null, console };
+    const testlogger = this.loggerService.createLogger('TestCase')
+    const sandbox = { exports: {}, module: { exports: {} }, testlogger, result: null, console };
     const context = createContext(sandbox);
     const wrapperCode = `
       ${fullcode}
-      result = main()
+      result = main(testlogger)
     `;
     // 5. 执行
     try {
@@ -30,17 +32,15 @@ export class TestCasesService {
       script.runInContext(context,{timeout:5000});
       await sandbox.result; // 等待 main(page) 执行完成
     } catch (e) {
-      console.error('用户代码异常:', e);
+      this.logger.error(`Exception in case: ${e}`);
     } finally {
-      console.log('执行完成')
+      this.logger.debug('Test Case finished!')
     }
   }
   async run(code: string) {
     const testCaseCode = readFileSync('./cases/test-case.ts', 'utf-8');
     const fullCode = testCaseCode + '\n' + code;
     const jsFullCode = this.transpile(fullCode);
-    this.logger.debug(`run tscode:${fullCode}`)
-    this.logger.debug(`run jsfullcode: ${jsFullCode}`);
     this.runcase(jsFullCode)
     return { code: jsFullCode };
   }
