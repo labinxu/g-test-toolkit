@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState, useRef } from 'react';
-import ts from 'typescript';
 import { useQuery } from '@tanstack/react-query';
 
 import Editor, { OnMount } from '@monaco-editor/react';
@@ -14,11 +13,20 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
-const INITIAL_CODE = '//Test Case';
+const INITIAL_CODE = `
+import { TestCase, Regist } from 'test-case';
+@Regist()
+class MyTest implements TestCase {
+  async test() {
+    console.log('Test executed');
+  }
+}
+`;
 const headers = { 'Content-Type': 'application/json' };
 let socket: Socket | null = null;
 const Page: React.FC = () => {
   const [code, setCode] = useState<string>(INITIAL_CODE);
+  const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [testCase, setTestCase] = useState<string>('');
   const [logs, setLogs] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
@@ -40,15 +48,15 @@ const Page: React.FC = () => {
   useEffect(() => {
     // 连接到 NestJS WebSocket Gateway
     socket = io('http://localhost:3001/log');
-    if(!socket){
-      console.log(`can not connect server`)
+    if (!socket) {
+      console.log(`can not connect server`);
       return;
     }
     socket.on('connect', () => {
       setConnected(true);
-      console.log('Connected:', socket.id);
+      console.log('Connected:', socket?.id);
       // 可发送 hello 消息给服务端
-      socket.emit('hello', 'Hello from Next.js client!');
+      socket?.emit('hello', 'Hello from Next.js client!');
     });
 
     socket.on('disconnect', () => {
@@ -57,11 +65,11 @@ const Page: React.FC = () => {
     });
 
     socket.on('log', (msg: string) => {
-      setLogs(prev => [...prev, msg]);
+      setLogs((prev) => [...prev, msg]);
     });
-    socket.on('hello',(msg:string)=>{
-      setLogs(prev=>[...prev, msg])
-    })
+    socket.on('hello', (msg: string) => {
+      setLogs((prev) => [...prev, msg]);
+    });
     // 清理
     return () => {
       socket?.disconnect();
@@ -72,30 +80,30 @@ const Page: React.FC = () => {
     const { content } = testcaseQuery.data;
     setTestCase(content);
   }, [testcaseQuery]);
+
   useEffect(() => {
-    if (testCase !== '') {
-      monacoRef.current?.languages.typescript.typescriptDefaults.addExtraLib(
-        testCase,
-        'file:///node_modules/@types/test-case.d.ts',
+    console.log('testCase', testCase, monacoRef.current, monacoInited);
+    if (testCase !== '' && monacoRef.current) {
+      // Add test-case.d.ts as a module
+      monacoRef.current.languages.typescript.typescriptDefaults.addExtraLib(
+        `declare module "test-case" { ${testCase} }`,
+        'test-case.d.ts',
+      );
+      // Log registered libs for debugging
+      console.log(
+        'Extra libs:',
+        monacoRef.current.languages.typescript.typescriptDefaults.getExtraLibs(),
       );
     }
-  }, [testCase]);
-  const transpile = useCallback(() => {
-    const result = ts.transpileModule(code, {
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2017,
-      },
-    });
-    return result.outputText;
-  }, [code]);
+  }, [testCase, monacoInited]);
 
   // 编辑器挂载时初始化
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {
       if (!monaco) return;
+      console.log('monaco', monaco);
       monacoRef.current = monaco;
-
+      setMonacoInited(true);
       monaco.languages.typescript.typescriptDefaults.addExtraLib(
         'declare module "my-module" { export function myFunc(): void; }',
         'my-module.d.ts',
@@ -148,18 +156,23 @@ const Page: React.FC = () => {
             <Label htmlFor="terms">RUN IN BROWSER</Label>
           </div>
           <div>
-        <strong>Server Status:</strong>{' '}
-        <span style={{ color: connected ? 'green' : 'red' }}>
-          {connected ? 'Connected' : 'Disconnected'}
-        </span>
-      </div>
+            <strong>Server Status:</strong>{' '}
+            <span style={{ color: connected ? 'green' : 'red' }}>
+              {connected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
           <Button variant={'link'} onClick={run}>
             Run
           </Button>
         </div>
         <div className="flex flex-col flex-1 min-h-0 m-1 rounded-lg shadow-sm ">
           <Label htmlFor="console">Output:</Label>
-          <Textarea id="console" className="w-full h-full" value={logs} onChange={()=>{}}/>
+          <Textarea
+            id="console"
+            className="w-full h-full"
+            value={logs}
+            onChange={() => {}}
+          />
         </div>
       </div>
     </div>
