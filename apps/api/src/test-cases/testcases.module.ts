@@ -6,9 +6,14 @@ import { TestCasesController } from './testcases.controller';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { LoggerModule } from 'src/logger/logger.module';
+import { AndroidService } from 'src/mobile/android/android.service';
+import { AndroidModule } from 'src/mobile/android/android.module';
+import { CommandService } from 'src/command/command.service';
 @Module({
-  imports: [CommandModule,
+  imports: [
+    CommandModule,
     LoggerModule,
+    AndroidModule,
     MulterModule.register({
       storage: diskStorage({
         destination: './cases',
@@ -20,6 +25,6 @@ import { LoggerModule } from 'src/logger/logger.module';
       limits:{ fileSize: 5 * 1024 * 1024 },
     }),],
   controllers: [TestCasesController],
-  providers: [TestCasesService,],
+  providers: [CommandService, TestCasesService,AndroidService],
 })
 export class TestCaseModule {}

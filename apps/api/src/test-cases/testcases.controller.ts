@@ -55,7 +55,7 @@ export class TestCasesController {
   @Get('/testcase/init')
   async init(@Res() res:Response){
     try{
-      const content = readFileSync('./cases/types/test-case.d.ts','utf8')
+      const content = readFileSync('./dist/cases/test-case.d.ts','utf8')
     res.type('text/plain').send({content});
     }catch(err){
       throw new NotFoundException('test-case.d.ts not found')

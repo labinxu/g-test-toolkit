@@ -3,15 +3,17 @@ import { CommandService } from 'src/command/command.service';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
 import { readFileSync } from 'fs';
+import { XMLParser } from 'fast-xml-parser';
 import { Response } from 'express';
 @Injectable()
 export class AndroidService {
   private logger: CustomLogger;
+  private dumpedObj: any;
   constructor(
     private readonly commandService: CommandService,
     private readonly loggerService: LoggerService,
   ) {
-      this.logger = this.loggerService.createLogger('AppService');
+    this.logger = this.loggerService.createLogger('AndroidService');
   }
 
   async getDevices(): Promise<string> {
@@ -71,28 +73,14 @@ export class AndroidService {
     const fileStream = readFileSync(filePath);
     res.send(fileStream);
   }
-  async screenOn(deviceId:string,checkKeywords='holding display',password='125698',swipeCord:string){
-    const displaycommand = `adb -s ${deviceId} shell dumpsys power`;
-    let result = await this.commandService.runCommand(displaycommand);
-    let goon= result.stdout.search(checkKeywords)
-    let counter = 3
-    while(goon===-1 && counter >0){
-      counter -= 1;
-      const command = `adb -s ${deviceId} shell input keyevent 26`;
-      await this.commandService.runCommand(command);
-      result = await this.commandService.runCommand(displaycommand);
-      goon = result.stdout.search(checkKeywords);
-    }
-    const swipeOn = `adb -s ${deviceId} shell input swipe ${swipeCord}`;
-    this.logger.debug(swipeOn)
-    await this.commandService.runCommand(swipeOn);
-    const inputpassword = `adb -s ${deviceId} shell input text ${password}`
-    this.logger.debug(inputpassword)
-    await this.commandService.runCommand(inputpassword);
 
-    const enterCmd = `adb -s ${deviceId} shell input keyevent 66`;
-    this.logger.debug(enterCmd)
-    await this.commandService.runCommand(enterCmd);
+  async screenOn(
+    deviceId: string,
+    checkKeywords = 'holding display',
+    password = '125698',
+    swipeData: string,
+  ) {
+    await this.commandService.unlockScreen(deviceId, checkKeywords, password, swipeData)
   }
   async dumpxml(deviceId: string, res: Response) {
     try {
@@ -110,5 +98,59 @@ export class AndroidService {
       const fileStream = readFileSync(xmlfilepath);
       res.send(fileStream);
     } catch (err) {}
+  }
+  findNode(node: any, attribute: string, text: string) {
+    if (!node) return null;
+    if (node[`@_${attribute}`] === text) {
+      return node; // 找到即返回
+    }
+    // 递归子节点（node 可能有 node 或 node 数组）
+    if (node.node) {
+      if (Array.isArray(node.node)) {
+        for (const child of node.node) {
+          const found = this.findNode(child, attribute, text);
+          if (found) return found;
+        }
+      } else {
+        return this.findNode(node.node, attribute, text);
+      }
+    }
+    return null;
+  }
+
+  async dumpxmlOnServer(deviceId: string) {
+    try {
+      if (!/^[a-zA-Z0-9_-]+$/.test(deviceId)) {
+        throw new Error('Invalid device ID');
+      }
+      await this.commandService.dumpxml(deviceId)
+      const xmlfilepath = `./tmp/window_dump-${deviceId}.xml`;
+      await this.commandService.pullDumpedXml(deviceId, xmlfilepath)
+      const xmlstring = readFileSync(xmlfilepath);
+      const parser = new XMLParser({ ignoreAttributes: false });
+      this.dumpedObj = parser.parse(xmlstring);
+    } catch (err) {
+      throw new NotFoundException('Dump xml Error');
+    }
+  }
+
+  async click(deviceId: string, attribute: string, text: string) {
+    const node = this.findNode(this.dumpedObj.hierarchy.node, attribute, text);
+    if (!node) {
+      this.logger.sendLog(`${attribute} ${text} not found`);
+      return;
+    }
+    const match = node['@_bounds'].match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+    if (match) {
+      const x1 = parseInt(match[1]);
+      const y1 = parseInt(match[2]);
+      const x2 = parseInt(match[3]);
+      const y2 = parseInt(match[4]);
+
+      const cmd = `adb -s ${deviceId} shell input tap ${(x1 + x2) / 2} ${(y1 + y2) / 2}`;
+      await this.commandService.runCommand(cmd);
+    } else {
+      this.logger.sendLog(`Error found bounds`);
+    }
   }
 }

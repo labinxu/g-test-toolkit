@@ -1,41 +1,36 @@
 import { Injectable } from '@nestjs/common';
 import { LoggerService } from 'src/logger/logger.service';
+import { AndroidService } from 'src/mobile/android/android.service';
 import { readFileSync } from 'fs';
-import * as ts from 'typescript';
+import ts from 'typescript';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { Script, createContext } from 'vm';
+import { BrowserControl } from 'src/browser/browser';
+
 @Injectable()
 export class TestCasesService {
   private logger: CustomLogger;
-
-  constructor(private readonly loggerService: LoggerService) {
+  constructor(private readonly loggerService: LoggerService,private readonly androidService:AndroidService) {
     this.logger = this.loggerService.createLogger('AppService');
   }
 
-  private transpile(code: string) {
-    const compiledCode = ts.transpile(code, {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2017,
-    });
-
-    return compiledCode;
-  }
-
-  async runcase(fullcode: string) {
+  async runcase(frontCode: string) {
+    //await this.androidService.screenOn('0A171FDD40063C', 'holding display', '125698', "300 900 300 200")
+    const bc = new BrowserControl(this.logger);
+    const page = await bc.launch();
     const testLogger = this.loggerService.createLogger('TestCase');
-    const testCaseCodeTs = readFileSync('./cases/test-case.ts', 'utf-8');
-
-    const testCaseJs = ts.transpileModule(testCaseCodeTs, {
+    //const testCaseCodeTs = readFileSync('./cases/test-case.ts', 'utf-8');
+    const testCaseCodeJsFromdist = readFileSync('./dist/cases/test-case.js','utf-8')
+    const testCaseJs = ts.transpileModule(testCaseCodeJsFromdist, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, experimentalDecorators: true },
     }).outputText;
     const testCaseSandbox = { module: { exports: {} },exports };
-    testCaseSandbox.exports = testCaseSandbox.module.exports; // 关键：让 exports 和 module.exports 指向同一个对象
-
+    testCaseSandbox.exports = testCaseSandbox.module.exports; // make exports and module.exports point to same object
     createContext(testCaseSandbox);
     new Script(testCaseJs).runInContext(testCaseSandbox);
     const testCaseExports = testCaseSandbox.module.exports;
 
-    let codeFromFrontend = fullcode.replace(
+    let codeFromFrontend = frontCode.replace(
       /import\s+{([^}]+)}\s+from\s+['"]test-case['"]\s*;/g,
       'const {$1} = require("test-case");'
     );
@@ -51,29 +46,32 @@ export class TestCasesService {
       exports: {},
       module: { exports: {} },
       testLogger,
+      service:this.androidService,
       result: null,
       console,
       require: (name: string) => {
         if (name === 'test-case') return testCaseExports;
         throw new Error('Module not found: ' + name);
       },
+      page
     };
     const context = createContext(sandbox);
     new Script(codeJs).runInContext(context, { timeout: 3000 });
 
     // 5. 执行
     try {
-      new Script('const { main } = require("test-case"); result = main(testLogger)').runInContext(context, { timeout: 5000 });
+      new Script('const { main } = require("test-case"); result = main(testLogger,service,page)').runInContext(context, { timeout: 5000 });
       await sandbox.result; // 等待 main(page) 执行完成
     } catch (e) {
       this.logger.error(`Exception in case: ${e}`);
     } finally {
-      this.logger.debug('Test Case finished!');
+      await bc.closeBrowser()
+      this.logger.sendLog('Test Case finished!');
+      this.logger.sendCtl("END");
     }
   }
   async run(code: string) {
-
     this.runcase(code);
-    return { code: code };
+    return { status:'ok',message:''};
   }
 }

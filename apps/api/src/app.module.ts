@@ -7,8 +7,9 @@ import { CommandModule } from './command/command.module';
 import { LoggerService } from './logger/logger.service';
 import { TestCaseModule } from './test-cases/testcases.module';
 import { LoggerGateway } from './logger/logger.gateway';
+import { FilesModule } from './files/files.module';
 @Module({
-  imports: [AndroidModule,CommandModule, TestCaseModule],
+  imports: [AndroidModule,CommandModule, TestCaseModule,FilesModule],
   controllers: [AppController],
   providers: [AppService,LoggerService,LoggerGateway],
 })

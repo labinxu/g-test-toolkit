@@ -29,11 +29,13 @@ export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   sendLog(message: string) {
     this.server.emit('log', message);
   }
-
+  sendControl(ctlMsg:string){
+    this.server.emit('ctl',ctlMsg)
+  }
   // 监听客户端发来的自定义消息（可选）
   @SubscribeMessage('hello')
   handleHello(@MessageBody() data: string, @ConnectedSocket() client: Socket) {
     console.log('Received from client:', data);
-    client.emit('hello', 'Hello from server');
+    client.emit('hello', 'Hello from server\n');
   }
 }

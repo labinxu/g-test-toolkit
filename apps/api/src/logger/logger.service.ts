@@ -8,16 +8,18 @@ import { forwardRef } from '@nestjs/common';
 @Injectable()
 export class LoggerService {
   constructor(
-    @Inject(WINSTON_MODULE_PROVIDER) private readonly winstonLogger: winston.Logger,
-    @Inject(forwardRef(() => LoggerGateway)) private readonly loggerGateway: LoggerGateway,
+    @Inject(WINSTON_MODULE_PROVIDER)
+    private readonly winstonLogger: winston.Logger,
+    @Inject(forwardRef(() => LoggerGateway))
+    private readonly loggerGateway: LoggerGateway,
   ) {}
 
   createLogger(context: string): CustomLogger {
-    const customLogger = new CustomLogger(this.winstonLogger, this.loggerGateway);
+    const customLogger = new CustomLogger(
+      this.winstonLogger,
+      this.loggerGateway,
+    );
     customLogger.setContext(context);
     return customLogger;
-  }
-  sendLog(msg: string) {
-    this.loggerGateway.sendLog(msg); // 推送到所有WebSocket客户端
   }
 }
