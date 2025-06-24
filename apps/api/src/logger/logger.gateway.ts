@@ -8,6 +8,9 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { spawn } from 'child_process';
+import { writeFile, unlink } from 'fs/promises';
+import { randomUUID } from 'crypto';
 
 @WebSocketGateway({
   cors: { origin: '*' }, // 允许跨域，生产环境请配置安全域名
@@ -37,5 +40,33 @@ export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleHello(@MessageBody() data: string, @ConnectedSocket() client: Socket) {
     console.log('Received from client:', data);
     client.emit('hello', 'Hello from server\n');
+  }
+   @SubscribeMessage('run-script')
+  async handleRunScript(
+    @MessageBody() script: string,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const filename =`/tmp/${randomUUID()}.sh`;
+    try{
+    await writeFile(filename, script, { mode: 0o700 });
+    // 可将 script 写入临时文件，然后执行 "bash 临时文件"
+   const proc = spawn('bash', [filename]);
+    proc.stdout.on('data', data => {
+      // 分片逐条发给前端
+      client.emit('stdout', data.toString());
+    });
+
+    proc.stderr.on('data', data => {
+      client.emit('stderr', data.toString());
+    });
+
+    proc.on('close', code => {
+      client.emit('close', `process exit,code：${code}`);
+      unlink(filename)
+    });
+    } catch(err){
+
+    }finally{
+    }
   }
 }

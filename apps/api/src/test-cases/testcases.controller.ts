@@ -13,14 +13,14 @@ import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TestCasesService } from './testcases.service';
-import { StartTestCaseDto } from './dto/start-testcase-dto';
+import { StartTestCaseDto, TestCaseDto } from './dto/start-testcase-dto';
 import { readFileSync } from 'fs';
 
-@Controller()
+@Controller('testcase')
 export class TestCasesController {
   constructor(private readonly testCasesService: TestCasesService) {}
 
-  @Post('/testcase')
+  @Post('/')
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -47,15 +47,21 @@ export class TestCasesController {
     // Validation for caseName is handled by class-validator in StartTestCaseDto
     readFileSync(`./cases/${file.originalname}`)
   }
-  @Post('/testcase/run')
+  @Post('run')
   async run(@Body('code') jscode:string){
     return await this.testCasesService.run(jscode);
   }
 
-  @Get('/testcase/init')
+  @Post('run/script')
+  async runScript(@Body() caseDto:TestCaseDto){
+    return await this.testCasesService.runcase(caseDto.code,caseDto.useBrowser)
+  }
+
+
+  @Get('init')
   async init(@Res() res:Response){
     try{
-      const content = readFileSync('./dist/cases/test-case.d.ts','utf8')
+      const content = readFileSync('./cases/types/test-case.d.ts','utf8')
     res.type('text/plain').send({content});
     }catch(err){
       throw new NotFoundException('test-case.d.ts not found')

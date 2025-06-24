@@ -11,7 +11,7 @@ async function bootstrap() {
     .setTitle('G-TOOLKIT API document')
     .setDescription('Doggy api...')
     .setVersion('1.0')
-    .addServer('http://127.0.0.1:3000', 'Local environment')
+    .addServer('http://127.0.0.1:3001', 'Local environment')
     .addTag('G-TOOLKIT API TABLE')
     .build();
   const document = SwaggerModule.createDocument(app, options);

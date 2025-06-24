@@ -1,12 +1,11 @@
 import {
-  Tag,
   Users,
   Settings,
-  Bookmark,
   SquarePen,
   LayoutGrid,
-  LucideIcon
-} from "lucide-react";
+  LucideIcon,
+  TabletSmartphone
+} from 'lucide-react';
 
 type Submenu = {
   href: string;
@@ -30,60 +29,73 @@ type Group = {
 export function getMenuList(pathname: string): Group[] {
   return [
     {
-      groupLabel: "",
+      groupLabel: '',
       menus: [
         {
-          href: "/dashboard",
-          label: "Dashboard",
+          href: '/dashboard',
+          label: 'Dashboard',
           icon: LayoutGrid,
-          submenus: []
-        }
-      ]
+          submenus: [],
+        },
+      ],
     },
     {
-      groupLabel: "Contents",
+      groupLabel: 'Contents',
       menus: [
         {
-          href: "",
-          label: "TestCases",
+          href: '',
+          label: 'TestCases',
           icon: SquarePen,
           submenus: [
             {
-              href: "/testcases",
-              label: "All TestCases"
+              href: '/testcases',
+              label: 'TestCases',
+            },
+          ],
+        },
+         {
+          href: '',
+          label: 'Commands',
+          icon: SquarePen,
+          submenus: [
+            {
+              href: '/commands/android',
+              label: 'Android',
             },
             {
-              href: "/testcases/new",
-              label: "New TestCase"
-            }
-          ]
+              href: '/commands/web',
+              label: 'Web',
+            },
+            {
+              href: '/commands/system',
+              label: 'System',
+            },
+
+          ],
         },
-        {
-          href: "/categories",
-          label: "Categories",
-          icon: Bookmark
-        },
-        {
-          href: "/tags",
-          label: "Tags",
-          icon: Tag
-        }
-      ]
+
+      ],
     },
     {
-      groupLabel: "Settings",
+      groupLabel: 'Settings',
       menus: [
+{
+          href: '/devices',
+          label: 'Devices',
+          icon: TabletSmartphone,
+        },
+
         {
-          href: "/users",
-          label: "Users",
-          icon: Users
+          href: '/users',
+          label: 'Users',
+          icon: Users,
         },
         {
-          href: "/account",
-          label: "Account",
-          icon: Settings
-        }
-      ]
-    }
+          href: '/account',
+          label: 'Account',
+          icon: Settings,
+        },
+      ],
+    },
   ];
 }

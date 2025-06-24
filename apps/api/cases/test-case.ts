@@ -1,18 +1,15 @@
 import { Page } from 'puppeteer';
-import { CommandService } from 'src/command/command.service';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { AndroidService } from 'src/mobile/android/android.service';
 
 export class TestCase {
   private logger: CustomLogger | null;
-  private page: Page | null;
+  private p: Page | null;
   private phoneSn: string;
   private screenOnKeyWords: string;
   private screenPwd: string;
   private swipeCordForScreenOn: string;
   private androidService: AndroidService | null;
-  private commandService: CommandService | null;
-  private xmlObj: any;
   async test(): Promise<void> {
     throw new Error('Not implemented');
   }
@@ -23,16 +20,23 @@ export class TestCase {
   }
 
   setPage(page: Page) {
-    this.page = page;
+    this.p = page;
+    for (const key of Object.getOwnPropertyNames(Page.prototype)) {
+      if (key !== "constructor" && typeof this.p[key] === "function") {
+        this[key] = this.p[key].bind(this.p);
+      }
+    }
+  }
+  page() {
+    return this.p;
   }
   print(msg: string) {
     this.logger.debug(msg);
     this.logger.sendLog(msg);
   }
-  async goto(url: string) {
-    await this.page.goto(url);
-  }
+
   async dumpxml() {
+    this.print(`dump xml ${this.phoneSn}`)
     try {
       await this.androidService.dumpxmlOnServer(this.phoneSn);
     } catch (err) {
@@ -40,8 +44,8 @@ export class TestCase {
     }
   }
 
-  async click(attribute:string,text:string){
-    await this.androidService.click(this.phoneSn,attribute,text)
+  async mobileClick(attribute: string, text: string) {
+    await this.androidService.click(this.phoneSn, attribute, text);
   }
   configurePhone(
     sn: string,
@@ -65,15 +69,11 @@ export class TestCase {
   setAndroidService(service: AndroidService) {
     this.androidService = service;
   }
-  setCommandService(service:CommandService){
-    this.commandService = service;
-  }
 }
 const __testCaseClasses: any[] = [];
 
 export function Regist(): ClassDecorator {
   return function (constructor: Function, context?: any) {
-    // 装饰器的实现逻辑，比如注册类等
     __testCaseClasses.push(constructor);
   } as any;
 }
@@ -88,10 +88,12 @@ export async function main(
     page && instance.setPage(page);
     service && instance.setAndroidService(service);
     logger.setContext(Ctor.name);
+    //const transport= logger.addLogFileTransports(`${Ctor.name}-${Date.now()}.log`)
     if (typeof instance.test === 'function') {
       await instance.test();
     }
-    await page.close();
+    //await page.close();
     logger.debug(`Test ${Ctor.name} Complete!`);
+    //logger.removeLogFileTransports(transport)
   }
 }

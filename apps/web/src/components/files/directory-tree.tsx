@@ -37,10 +37,12 @@ function getAllDirPaths(tree: FileNode[]): string[] {
 type DeleteTarget = { path: string; isDirectory: boolean } | null;
 
 export default function DirectoryTree({
+  currentDir,
   onSelect,
   onDirSelect,
   collapsible = true,
 }: {
+  currentDir:string;
   onSelect: (filePath: string) => void;
   onDirSelect?: (dirPath: string) => void;
   collapsible?: boolean; // 供外部控制是否有折叠逻辑
@@ -54,7 +56,7 @@ export default function DirectoryTree({
 
   // Initialize and restore expanded state
   useEffect(() => {
-    fetch('/api/files/tree?dir=./user-cases&depth=3')
+    fetch(`/api/files/tree?dir=${currentDir}&depth=3`)
       .then(res => res.json())
       .then((treeData: FileNode[]) => {
         setTree(treeData);
@@ -181,7 +183,7 @@ export default function DirectoryTree({
           </Button>
         </div>
         {/* Child nodes (only show when expanded) */}
-        {node.isDirectory && isOpen && node.children &&
+        {node && node.isDirectory && isOpen && node.children &&
           node.children.map((child, idx) =>
             renderNode(
               child,

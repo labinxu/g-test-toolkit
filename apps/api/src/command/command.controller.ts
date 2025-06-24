@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get,Post,Body } from '@nestjs/common';
 import { CommandService } from './command.service';
 
 @Controller('commands')
@@ -10,4 +10,6 @@ export class CommandController {
     const result = await this.commandService.runCommand('adb devices');
     return { output: result.stdout, error: result.stderr };
   }
+
+
 }

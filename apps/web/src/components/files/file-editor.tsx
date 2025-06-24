@@ -9,11 +9,13 @@ import { OnMount } from '@monaco-editor/react';
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
 export default function FileEditor({
+  template,
   filePath,
   onMount,
   content,
   setContent
 }: {
+  template:string;
   onMount:OnMount;
   filePath: string;
   content:string;
@@ -23,11 +25,11 @@ export default function FileEditor({
   const [saving, setSaving] = useState(false);
   const [changed, setChanged] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [language,setLanguage]=useState<string>('typescript')
   const lastLoadedPath = useRef<string | null>(null);
 
   // Load file content
   useEffect(() => {
-    console.log(filePath)
     if (!filePath) return;
     setLoading(true);
     setError(null);
@@ -37,8 +39,12 @@ export default function FileEditor({
         return res.json();
       })
       .then(data => {
-        console.log(data.content)
-        setContent(data.content ?? '');
+        const {content} = data;
+        if(content.length<3){
+          setContent(template)
+        }else{
+          setContent(content)
+        }
         setChanged(false);
         lastLoadedPath.current = filePath;
       })
@@ -68,6 +74,11 @@ export default function FileEditor({
 
   // Ctrl+S/Cmd+S 快捷保存
   useEffect(() => {
+    if(filePath.endsWith('ts')){
+      setLanguage('typescript')
+    }else if(filePath.endsWith('sh')){
+      setLanguage('bash')
+    }
     function onKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         if (!filePath || !changed || saving) return;
@@ -116,7 +127,7 @@ export default function FileEditor({
           <div className="rounded-xl overflow-hidden h-full bg-white shadow-xl">
             <MonacoEditor
               height="60vh"
-              language={'typescript'}
+              language={language}
               theme="vs"
               value={content}
               options={{

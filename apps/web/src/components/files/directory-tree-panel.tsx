@@ -1,30 +1,23 @@
 'use client';
-import { useRef, useState, useEffect } from 'react';
+import { useState, } from 'react';
 import DirectoryTree from './directory-tree';
 import NewFileOrFolder from './new-file-folder';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function DirectoryTreePanel({
+  currentDir,
   onSelect,
   onDirSelect,
-  onCollapseChange,
 }: {
+  currentDir:string;
   onSelect: (filePath: string) => void;
   onDirSelect?: (dirPath: string) => void;
-  onCollapseChange?: (c: boolean) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [currentDir, setCurrentDir] = useState('./user-cases');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // 通知父组件折叠状态变化
-  useEffect(() => {
-    onCollapseChange?.(collapsed);
-  }, [collapsed, onCollapseChange]);
-
-  // 固定宽度
-  const sidebarWidth = 288;
+    const sidebarWidth = 288;
   const collapsedWidth = 28;
 
   return (
@@ -52,10 +45,10 @@ export default function DirectoryTreePanel({
           onCreated={() => setRefreshKey((k) => k + 1)}
         />
         <DirectoryTree
+          currentDir={currentDir}
           key={refreshKey}
           onSelect={onSelect}
           onDirSelect={(dir) => {
-            setCurrentDir(dir);
             onDirSelect?.(dir);
           }}
           collapsible={false}

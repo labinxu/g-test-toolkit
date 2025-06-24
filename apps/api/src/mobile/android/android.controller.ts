@@ -1,24 +1,27 @@
-import { Controller, Get, Post, NotFoundException, Param, Res, Body } from '@nestjs/common'
+import { Controller, Get, Post, NotFoundException, Param,StreamableFile, Res, Body } from '@nestjs/common'
 import { AndroidService } from './android.service'
+import { createReadStream } from 'fs'
 import { Response } from 'express'
 import { ScreenOnDto } from './dto/screenon.dto'
-@Controller()
+@Controller('android')
 export class AndroidController {
   constructor(private readonly androidService: AndroidService) { }
 
-  @Get('/mobile/android/devices')
-  async getDevices(): Promise<string> {
+  @Get('/devices')
+  async getDevices()  {
     return await this.androidService.getDevices()
   }
-  @Get('/mobile/android/screen/:deviceId')
+  @Get('/screen/:deviceId')
   async getScreen(@Param('deviceId') deviceId: string, @Res({ passthrough: true }) res: Response) {
     try {
-      await this.androidService.streamScreen(deviceId, res)
+      const filePath = await this.androidService.streamScreen(deviceId, res)
+      res.contentType('image/png');
+  return new StreamableFile(createReadStream(filePath));
     } catch (err) {
       throw new NotFoundException(`Failed to retrieve screenshot from device: ${deviceId}`)
     }
   }
-  @Get('/mobile/android/dump/:deviceId')
+  @Get('/dump/:deviceId')
   async getDumpxml(@Param('deviceId') deviceId: string, @Res() res: Response) {
     try {
       await this.androidService.dumpxml(deviceId, res)
@@ -26,7 +29,7 @@ export class AndroidController {
       throw new NotFoundException('Failed to retrieve dump file')
     }
   }
-  @Post('/mobile/android/screenon')
+  @Post('/screenon')
   async screenOn(@Body() screenOndto: ScreenOnDto) {
     await this.androidService.screenOn(
       screenOndto.deviceId,

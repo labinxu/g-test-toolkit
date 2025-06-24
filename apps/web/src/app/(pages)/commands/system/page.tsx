@@ -1,71 +1,24 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Switch } from '@/components/ui/switch'; // shadcn/ui Switch
-import { Label } from '@/components/ui/label';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { OnMount } from '@monaco-editor/react';
+import  { OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
 import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 import FileEditor from '@/components/files/file-editor';
-import { useQuery } from '@tanstack/react-query';
 import io, { Socket } from 'socket.io-client';
 
-const INITIAL_CODE = `import { TestCase, Regist } from 'test-case';
-@Regist()
-class MyTest extends TestCase {
-  async test() {
-    this.print('Test executed');
-  }
-}
-`;
-const headers = { 'Content-Type': 'application/json' };
 let socket: Socket | null = null;
 export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
-  const [currentDir, setCurrentDir] = useState('./user-cases/cases');
+  const [currentDir, setCurrentDir] = useState('./user-cases/commands');
   const [logs, setLogs] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
-  const [code, setCode] = useState<string>(INITIAL_CODE);
-  const [monacoInited, setMonacoInited] = useState<boolean>(false);
-  const [testCase, setTestCase] = useState<string>('');
-  const [useBrowser,setUseBrowser] = useState(true)
-  const monacoRef = useRef<Monaco>(null);
-
-  const testcaseQuery = useQuery({
-    queryKey: ['init'],
-    queryFn: () =>
-      fetch(`/api/testcase/init`, {
-        method: 'GET',
-        //credentials: "include",
-        headers: { ...headers },
-      }).then((res) => {
-        if (res.ok) {
-          return res.json();
-        }
-      }),
-  });
-
-  useEffect(() => {
-    if (testcaseQuery.isPending) return;
-    const { content } = testcaseQuery.data;
-    setTestCase(content);
-  }, [testcaseQuery]);
-
+  const [scripts,setScripts] = useState<string>('')
   useEffect(() => {
     if (running) run();
   }, [running]);
   useEffect(() => {
-    if (testCase !== '' && monacoRef.current) {
-      // Add test-case.d.ts as a module
-      monacoRef.current.languages.typescript.typescriptDefaults.addExtraLib(
-        `declare module "test-case" { ${testCase} }`,
-        'test-case.d.ts',
-      );
-    }
-    return ()=>{setMonacoInited(false)}
-  }, [testCase, monacoInited]);
-useEffect(() => {
     // 连接到 NestJS WebSocket Gateway
     socket = io('http://localhost:3001/log');
     if (!socket) {
@@ -92,11 +45,15 @@ useEffect(() => {
     });
     socket.on('ctl', (msg: string) => {
       console.log('ctl message from server', msg);
-      if(msg==='END'){
-        console.log('set running to false')
-        setRunning(false)
+      if (msg === 'END') {
+        console.log('set running to false');
+        setRunning(false);
       }
-
+    });
+    socket.on('stdout', (msg) => setLogs((prev) => [...prev, msg]));
+    socket.on('stderr', (msg) => setLogs((prev) => [...prev, msg]));
+    socket.on('close', (msg) =>{ setLogs((prev) => [...prev, msg])
+      setRunning(false)
     });
 
     return () => {
@@ -105,22 +62,17 @@ useEffect(() => {
   }, []);
 
   const run = async () => {
-    setLogs([]);
-    await fetch('/api/testcase/run/script', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code,useBrowser }),
-    });
+    if(!socket || scripts===''){
+      setLogs(['ERROR: Socket not initialized!'])
+      return;
+    }
+    setLogs([ 'RUN Script'])
+
+    socket.emit('run-script', scripts);
   };
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {
       if (!monaco || !editor) return;
-      monacoRef.current = monaco;
-      setMonacoInited(true);
-      monaco.languages.typescript.typescriptDefaults.addExtraLib(
-        'declare module "my-module" { export function myFunc(): void; }',
-        'my-module.d.ts',
-      );
       monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
         target: monaco.languages.typescript.ScriptTarget.ESNext,
         allowNonTsExtensions: true,
@@ -152,6 +104,7 @@ useEffect(() => {
       );
     });
   };
+
   return (
     <div className="flex h-full w-full gap-0 m-4 rounded-lg">
       <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
@@ -163,22 +116,14 @@ useEffect(() => {
       </div>
       <div className="flex-1 pl-4 h-full min-w-0 flex flex-col transition-all duration-300">
         <FileEditor
-          template={INITIAL_CODE}
           filePath={currentFile}
           onMount={handleEditorDidMount}
-          content={code}
-          setContent={setCode}
+          content={scripts}
+          setContent={setScripts}
         />
         <div className="rounded-lg shadow-sm basis-2/5 flex flex-col min-h-0">
           <div className="flex justify-between items-center m-1 rounded-lg shadow-sm ">
-            <div className="flex items-center gap-2 m-1">
-              <Label htmlFor="run-in-browser" className="mr-2">
-                RUN IN BROWSER
-              </Label>
-              <Switch id="run-in-browser" checked={useBrowser} onCheckedChange={setUseBrowser} />
-            </div>
-            <div>
-              {currentFile?
+                        <div>
               <Button
                 variant={'outline'}
                 size={'sm'}
@@ -188,7 +133,7 @@ useEffect(() => {
                 }}
               >
                 {!running ? 'Execute' : 'Running'}
-              </Button>:null}
+              </Button>
             </div>
             <div className="flex flex-row m-1 gap-3">
               <strong>Server Status:</strong>{' '}

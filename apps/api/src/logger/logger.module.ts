@@ -14,10 +14,18 @@ const loggerFormat = winston.format.printf(
     return `${timestamp} ${level} ${tag} ${message}`;
   },
 );
-
+const customLevels = {
+  error: 0,
+  warn: 1,
+  tc: 2, // 新增的 level
+  info: 3,
+  debug: 4,
+};
+winston.addColors({ tc: 'cyan' });
 @Module({
   imports: [
     WinstonModule.forRoot({
+      levels: customLevels,
       transports: [
         new winston.transports.Console({
           level: process.env.LOG_LEVEL_CONSOLE,
@@ -45,7 +53,10 @@ const loggerFormat = winston.format.printf(
     LoggerGateway,
     {
       provide: CustomLogger,
-      useFactory: (winstonLogger: winston.Logger, loggerGateway: LoggerGateway) => {
+      useFactory: (
+        winstonLogger: winston.Logger,
+        loggerGateway: LoggerGateway,
+      ) => {
         return new CustomLogger(winstonLogger, loggerGateway);
       },
       inject: [WINSTON_MODULE_PROVIDER, LoggerGateway],
@@ -53,7 +64,10 @@ const loggerFormat = winston.format.printf(
     },
     {
       provide: LoggerService,
-      useFactory: (winstonLogger: winston.Logger, loggerGateway: LoggerGateway) => {
+      useFactory: (
+        winstonLogger: winston.Logger,
+        loggerGateway: LoggerGateway,
+      ) => {
         return new LoggerService(winstonLogger, loggerGateway);
       },
       inject: [WINSTON_MODULE_PROVIDER, LoggerGateway],

@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException,StreamableFile } from '@nestjs/common';
 import { CommandService } from 'src/command/command.service';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
 import { readFileSync } from 'fs';
+import { createReadStream } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
 import { Response } from 'express';
 @Injectable()
@@ -16,9 +17,9 @@ export class AndroidService {
     this.logger = this.loggerService.createLogger('AndroidService');
   }
 
-  async getDevices(): Promise<string> {
+  async getDevices() {
     const result = await this.commandService.runCommand('adb devices');
-    return result.stdout;
+    return {devices: result.stdout};
   }
   async getScreen(deviceId: string) {
     try {
@@ -69,9 +70,7 @@ export class AndroidService {
       this.logger.error(`Screenshot file not found at ${filePath}`);
       throw new NotFoundException('Screenshot file not found');
     }
-    res.contentType('image/png');
-    const fileStream = readFileSync(filePath);
-    res.send(fileStream);
+    return filePath;
   }
 
   async screenOn(
