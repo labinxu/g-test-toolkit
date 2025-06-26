@@ -45,27 +45,31 @@ export class TestCasesController {
       throw new BadRequestException('No file uploaded!');
     }
     // Validation for caseName is handled by class-validator in StartTestCaseDto
-    readFileSync(`./cases/${file.originalname}`)
+    readFileSync(`./cases/${file.originalname}`);
   }
   @Post('run')
-  async run(@Body('code') jscode:string){
+  async run(@Body('code') jscode: string) {
     return await this.testCasesService.run(jscode);
   }
 
   @Post('run/script')
-  async runScript(@Body() caseDto:TestCaseDto){
-    return await this.testCasesService.runcase(caseDto.code,caseDto.useBrowser)
+  async runScript(@Body() caseDto: TestCaseDto) {
+    try {
+      return await this.testCasesService.runcase(
+        caseDto.code,
+        caseDto.useBrowser,
+        caseDto.clientId,
+      );
+    } catch (err) {}
   }
 
-
   @Get('init')
-  async init(@Res() res:Response){
-    try{
-      const content = readFileSync('./cases/types/test-case.d.ts','utf8')
-    res.type('text/plain').send({content});
-    }catch(err){
-      throw new NotFoundException('test-case.d.ts not found')
+  async init(@Res() res: Response) {
+    try {
+      const content = readFileSync('./cases/types/test-case.d.ts', 'utf8');
+      res.type('text/plain').send({ content });
+    } catch (err) {
+      throw new NotFoundException('test-case.d.ts not found');
     }
-
   }
 }

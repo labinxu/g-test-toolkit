@@ -7,7 +7,7 @@ export class AppService {
 
   constructor(private readonly loggerService: LoggerService) {}
   async onModuleInit() {
-    this.logger = await this.loggerService.createLogger('AppService');
+    this.logger = this.loggerService.createLogger('AppService');
   }
   getHello(): string {
     return 'Hello World!';

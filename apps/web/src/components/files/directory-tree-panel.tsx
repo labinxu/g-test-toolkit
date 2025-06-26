@@ -1,5 +1,5 @@
 'use client';
-import { useState, } from 'react';
+import { useState } from 'react';
 import DirectoryTree from './directory-tree';
 import NewFileOrFolder from './new-file-folder';
 import { Button } from '@/components/ui/button';
@@ -10,14 +10,14 @@ export default function DirectoryTreePanel({
   onSelect,
   onDirSelect,
 }: {
-  currentDir:string;
+  currentDir: string;
   onSelect: (filePath: string) => void;
   onDirSelect?: (dirPath: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
-    const sidebarWidth = 288;
+  const sidebarWidth = 288;
   const collapsedWidth = 28;
 
   return (
@@ -26,7 +26,7 @@ export default function DirectoryTreePanel({
       style={{
         minWidth: collapsed ? collapsedWidth : 180,
         width: collapsed ? collapsedWidth : sidebarWidth,
-        transition: 'width 0.2s'
+        transition: 'width 0.2s',
       }}
     >
       {/* 侧栏内容，折叠时隐藏但节点不移除 */}
@@ -36,7 +36,7 @@ export default function DirectoryTreePanel({
           width: collapsed ? 0 : sidebarWidth,
           minWidth: 0,
           overflow: 'hidden',
-          display: collapsed ? 'none' : undefined
+          display: collapsed ? 'none' : undefined,
         }}
       >
         <NewFileOrFolder
@@ -46,7 +46,8 @@ export default function DirectoryTreePanel({
         />
         <DirectoryTree
           currentDir={currentDir}
-          key={refreshKey}
+          refreshKey={refreshKey}
+          setRefreshKey={setRefreshKey}
           onSelect={onSelect}
           onDirSelect={(dir) => {
             onDirSelect?.(dir);
@@ -63,9 +64,7 @@ export default function DirectoryTreePanel({
           userSelect: 'none',
         }}
       >
-        <div
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40"
-        >
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40">
           <Button
             variant="ghost"
             size="icon"

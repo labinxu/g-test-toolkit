@@ -10,7 +10,7 @@ class MyTest extends TestCase {
       await this.type('input#email',"labin_test1")
       await this.type('input#password','!labin_test1')
       await this.click('button[type="submit"]')
-      this.
+      
     }else{
       this.print(
         "can not found log in with password"

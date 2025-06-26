@@ -14,7 +14,7 @@ import { randomUUID } from 'crypto';
 
 @WebSocketGateway({
   cors: { origin: '*' }, // 允许跨域，生产环境请配置安全域名
-  namespace: '/log',     // 可选，命名空间
+  namespace: '/log', // 可选，命名空间
 })
 export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -32,41 +32,44 @@ export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   sendLog(message: string) {
     this.server.emit('log', message);
   }
-  sendControl(ctlMsg:string){
-    this.server.emit('ctl',ctlMsg)
+  sendLogTo(clientId: string, message: string) {
+    this.server.to(clientId).emit('log', message);
   }
+  sendExitTo(clientId: string) {
+    this.server.to(clientId).emit('ctl', 'exit');
+  }
+
   // 监听客户端发来的自定义消息（可选）
   @SubscribeMessage('hello')
   handleHello(@MessageBody() data: string, @ConnectedSocket() client: Socket) {
     console.log('Received from client:', data);
-    client.emit('hello', 'Hello from server\n');
+    client.emit('hello', JSON.stringify({ clientId: client.id }));
   }
-   @SubscribeMessage('run-script')
+  @SubscribeMessage('run-script')
   async handleRunScript(
     @MessageBody() script: string,
     @ConnectedSocket() client: Socket,
   ) {
-    const filename =`/tmp/${randomUUID()}.sh`;
-    try{
-    await writeFile(filename, script, { mode: 0o700 });
-    // 可将 script 写入临时文件，然后执行 "bash 临时文件"
-   const proc = spawn('bash', [filename]);
-    proc.stdout.on('data', data => {
-      // 分片逐条发给前端
-      client.emit('stdout', data.toString());
-    });
+    const filename = `/tmp/${randomUUID()}.sh`;
+    try {
+      await writeFile(filename, script, { mode: 0o700 });
+      // 可将 script 写入临时文件，然后执行 "bash 临时文件"
+      const proc = spawn('bash', [filename]);
+      proc.stdout.on('data', (data) => {
+        // 分片逐条发给前端
+        client.emit('stdout', data.toString());
+      });
 
-    proc.stderr.on('data', data => {
-      client.emit('stderr', data.toString());
-    });
+      proc.stderr.on('data', (data) => {
+        client.emit('stderr', data.toString());
+      });
 
-    proc.on('close', code => {
-      client.emit('close', `process exit,code：${code}`);
-      unlink(filename)
-    });
-    } catch(err){
-
-    }finally{
+      proc.on('close', (code) => {
+        client.emit('close', `process exit,code：${code}`);
+        unlink(filename);
+      });
+    } catch (err) {
+    } finally {
     }
   }
 }

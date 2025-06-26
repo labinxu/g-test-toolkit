@@ -29,7 +29,8 @@ export default function Page() {
   const [code, setCode] = useState<string>(INITIAL_CODE);
   const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [testCase, setTestCase] = useState<string>('');
-  const [useBrowser,setUseBrowser] = useState(true)
+  const [useBrowser, setUseBrowser] = useState(true);
+  const [clientId, setClientId] = useState<string | undefined>();
   const monacoRef = useRef<Monaco>(null);
 
   const testcaseQuery = useQuery({
@@ -63,9 +64,11 @@ export default function Page() {
         'test-case.d.ts',
       );
     }
-    return ()=>{setMonacoInited(false)}
+    return () => {
+      setMonacoInited(false);
+    };
   }, [testCase, monacoInited]);
-useEffect(() => {
+  useEffect(() => {
     // 连接到 NestJS WebSocket Gateway
     socket = io('http://localhost:3001/log');
     if (!socket) {
@@ -75,6 +78,7 @@ useEffect(() => {
     socket.on('connect', () => {
       setConnected(true);
       console.log('Connected:', socket?.id);
+      setClientId(socket?.id);
       // 可发送 hello 消息给服务端
       socket?.emit('hello', 'Hello from Next.js client!');
     });
@@ -88,15 +92,14 @@ useEffect(() => {
       setLogs((prev) => [...prev, msg]);
     });
     socket.on('hello', (msg: string) => {
-      console.log('hello from server', msg);
+      console.log('hello from server', JSON.parse(msg));
     });
     socket.on('ctl', (msg: string) => {
       console.log('ctl message from server', msg);
-      if(msg==='END'){
-        console.log('set running to false')
-        setRunning(false)
+      if (msg.toLocaleLowerCase() === 'exit') {
+        console.log('set running to false');
+        setRunning(false);
       }
-
     });
 
     return () => {
@@ -109,7 +112,7 @@ useEffect(() => {
     await fetch('/api/testcase/run/script', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code,useBrowser }),
+      body: JSON.stringify({ code, useBrowser, clientId: clientId }),
     });
   };
   const handleEditorDidMount: OnMount = useCallback(
@@ -175,20 +178,25 @@ useEffect(() => {
               <Label htmlFor="run-in-browser" className="mr-2">
                 RUN IN BROWSER
               </Label>
-              <Switch id="run-in-browser" checked={useBrowser} onCheckedChange={setUseBrowser} />
+              <Switch
+                id="run-in-browser"
+                checked={useBrowser}
+                onCheckedChange={setUseBrowser}
+              />
             </div>
             <div>
-              {currentFile?
-              <Button
-                variant={'outline'}
-                size={'sm'}
-                onClick={() => {
-                  if (running) return;
-                  setRunning(!running);
-                }}
-              >
-                {!running ? 'Execute' : 'Running'}
-              </Button>:null}
+              {currentFile ? (
+                <Button
+                  variant={'outline'}
+                  size={'sm'}
+                  onClick={() => {
+                    if (running) return;
+                    setRunning(!running);
+                  }}
+                >
+                  {!running ? 'Execute' : 'Running'}
+                </Button>
+              ) : null}
             </div>
             <div className="flex flex-row m-1 gap-3">
               <strong>Server Status:</strong>{' '}

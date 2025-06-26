@@ -1,7 +1,7 @@
 import { TestCase, Regist } from 'test-case';
 @Regist()
 class MyTest extends TestCase {
-  async run() {
+  async test() {
     await this.goto('https://qa1-prod.gettr-qa.com/login?step=sea_login_with_email')
     // login with password
     const spans = await this.$$('form.form.notranslate div span');
@@ -17,7 +17,6 @@ class MyTest extends TestCase {
         return;
     }
     await result[0].click()
-    this.print("LOG IN")
     try{
       await this.type('input#email',"labin_test1")
       await this.type('input#password','!labin_test1')
@@ -36,7 +35,7 @@ class MyTest extends TestCase {
       this.print('click create post')
       await buttons[0].click();
       
-      await this.type('div.post-preview-box div.ql-editor',"this is post by puppeteer"+Date.now())
+      await this.type('div.post-preview-box div.ql-editor',`this is post by puppeteer ${Date.now()}`)
       await this.waitForNetworkIdle()
       await this.click('div.action-bar > button');
     }catch(error){

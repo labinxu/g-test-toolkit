@@ -18,15 +18,16 @@ export class TestCasesService {
     this.logger = this.loggerService.createLogger('AppService');
   }
 
-  async runcase(frontCode: string, useBrowser: boolean) {
+  async runcase(frontCode: string, useBrowser: boolean, clientId: string) {
     //await this.androidService.screenOn('0A171FDD40063C', 'holding display', '125698', "300 900 300 200")
     let page: Page | null = null;
-    let bc:BrowserControl|null = null;
+    let bc: BrowserControl | null = null;
     if (useBrowser) {
       bc = new BrowserControl(this.logger);
       page = await bc.launch();
     }
     const testLogger = this.loggerService.createLogger('TestCase');
+    testLogger.setClientId(clientId);
     //const testCaseCodeTs = readFileSync('./cases/test-case.ts', 'utf-8');
     const testCaseCodeJsFromdist = readFileSync(
       './dist/cases/test-case.js',
@@ -71,7 +72,6 @@ export class TestCasesService {
     };
     const context = createContext(sandbox);
     new Script(codeJs).runInContext(context, { timeout: 3000 });
-
     // 5. 执行
     try {
       new Script(
@@ -80,14 +80,14 @@ export class TestCasesService {
       await sandbox.result; // 等待 main(page) 执行完成
     } catch (e) {
       this.logger.error(`Exception in case: ${e}`);
+      this.logger.sendLogTo(`Exception in case: ${e}`);
+      this.logger.sendExitTo();
     } finally {
       //await bc?.closeBrowser();
-      this.logger.sendLog('Test Case finished!');
-      this.logger.sendCtl('END');
     }
   }
   async run(code: string) {
-    this.runcase(code,false);
+    this.runcase(code, false, 'aa');
     return { status: 'ok', message: '' };
   }
 }

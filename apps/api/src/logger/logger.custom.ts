@@ -13,6 +13,7 @@ const loggerFormat = winston.format.printf(
 export class CustomLogger {
   private logger: winston.Logger;
   private context = 'LOG:';
+  private clientId: string = '';
   constructor(
     private readonly winstonLogger: winston.Logger,
     @Optional()
@@ -31,6 +32,9 @@ export class CustomLogger {
   setContext(context: string) {
     this.context = context;
     this.logger = this.winstonLogger.child({ context });
+  }
+  setClientId(clientId: string) {
+    this.clientId = clientId;
   }
   addLogFileTransports(filename: string) {
     const contextTrans = new winston.transports.File({
@@ -63,13 +67,26 @@ export class CustomLogger {
   debug(message: string) {
     this.logger.debug(message);
   }
+
+  sendLogTo(message: string) {
+    if (!this.clientId) {
+      this.logger.error('client id not initialized!');
+      return;
+    }
+    this.loggerGateway?.sendLogTo(this.clientId, message);
+  }
+  sendExitTo() {
+    if (!this.clientId) {
+      this.logger.error('client id not initialized!');
+      return;
+    }
+    this.loggerGateway.sendExitTo(this.clientId);
+  }
   sendLog(message: string) {
     this.loggerGateway?.sendLog(this.format('', message));
-    this.logger.log('tc',message)
+    this.logger.log('tc', message);
   }
-  sendCtl(ctlMsg: string) {
-    this.loggerGateway.sendControl(ctlMsg);
-  }
+
   verbose(message: string) {
     this.logger.verbose(message);
   }

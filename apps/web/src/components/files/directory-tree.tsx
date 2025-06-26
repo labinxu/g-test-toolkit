@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -40,24 +40,29 @@ export default function DirectoryTree({
   currentDir,
   onSelect,
   onDirSelect,
+  refreshKey = 0, // 新增
+  setRefreshKey,
   collapsible = true,
 }: {
-  currentDir:string;
+  currentDir: string;
   onSelect: (filePath: string) => void;
   onDirSelect?: (dirPath: string) => void;
+  refreshKey?: number; // 新增
+  setRefreshKey: (k: number) => void;
   collapsible?: boolean; // 供外部控制是否有折叠逻辑
 }) {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [refreshKey, setRefreshKey] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [deleting, setDeleting] = useState(false);
-
+  const rootDir = useMemo(() => {
+    return currentDir;
+  }, []);
   // Initialize and restore expanded state
   useEffect(() => {
-    fetch(`/api/files/tree?dir=${currentDir}&depth=3`)
-      .then(res => res.json())
+    fetch(`/api/files/tree?dir=${rootDir}&depth=3`)
+      .then((res) => res.json())
       .then((treeData: FileNode[]) => {
         setTree(treeData);
         // Restore expanded state
@@ -76,7 +81,6 @@ export default function DirectoryTree({
   function toggleFolder(path: string) {
     setExpanded((prev) => ({ ...prev, [path]: !prev[path] }));
   }
-
   function expandAll() {
     const allDirs = getAllDirPaths(tree);
     const newState: Record<string, boolean> = {};
@@ -96,7 +100,7 @@ export default function DirectoryTree({
       body: JSON.stringify({ path }),
     });
     setDeleting(false);
-    setRefreshKey(k => k + 1);
+    setRefreshKey(refreshKey - 1);
     if (selectedPath === path) setSelectedPath(null);
     setDeleteTarget(null);
   }
@@ -106,14 +110,12 @@ export default function DirectoryTree({
     const isOpen = expanded[node.path] ?? false;
     const base =
       'relative flex items-center px-2 py-1 cursor-pointer select-none';
-    const folder =
-      isSelected
-        ? 'bg-blue-100 text-blue-700 font-bold'
-        : 'hover:bg-blue-50 font-bold text-gray-700';
-    const file =
-      isSelected
-        ? 'bg-green-100 text-green-700'
-        : 'hover:bg-green-50 text-gray-600';
+    const folder = isSelected
+      ? 'bg-blue-100 text-blue-700 font-bold'
+      : 'hover:bg-blue-50 font-bold text-gray-700';
+    const file = isSelected
+      ? 'bg-green-100 text-green-700'
+      : 'hover:bg-green-50 text-gray-600';
 
     return (
       <div key={node.path} className="relative group">
@@ -165,7 +167,9 @@ export default function DirectoryTree({
           ) : (
             <span className="mr-2 w-4">📄</span>
           )}
-          <span>{node.isDirectory ? '📁' : ''} {node.name}</span>
+          <span>
+            {node.isDirectory ? '📁' : ''} {node.name}
+          </span>
           {/* Delete button, only show on hover or selected */}
           <Button
             type="button"
@@ -173,9 +177,12 @@ export default function DirectoryTree({
             size="icon"
             className={`ml-2 p-1 h-6 w-6 text-red-500 opacity-0 group-hover:opacity-100 ${isSelected ? 'opacity-100' : ''}`}
             tabIndex={-1}
-            onClick={e => {
+            onClick={(e) => {
               e.stopPropagation();
-              setDeleteTarget({ path: node.path, isDirectory: node.isDirectory });
+              setDeleteTarget({
+                path: node.path,
+                isDirectory: node.isDirectory,
+              });
             }}
             title={`Delete ${node.isDirectory ? 'folder' : 'file'}`}
           >
@@ -183,13 +190,14 @@ export default function DirectoryTree({
           </Button>
         </div>
         {/* Child nodes (only show when expanded) */}
-        {node && node.isDirectory && isOpen && node.children &&
-          node.children.map((child, idx) =>
-            renderNode(
-              child,
-              level + 1,
-              idx === node.children.length - 1
-            )
+        {node &&
+          node.isDirectory &&
+          isOpen &&
+          node.children &&
+          node.children.map(
+            (child, idx) =>
+              node.children?.length &&
+              renderNode(child, level + 1, idx === node.children.length - 1),
           )}
       </div>
     );
@@ -219,20 +227,25 @@ export default function DirectoryTree({
         </div>
       )}
       <div className="flex-1 min-h-0 overflow-auto">
-        {tree.map((node, idx) =>
-          renderNode(node, 0, idx === tree.length - 1)
-        )}
+        {tree.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))}
       </div>
 
       {/* shadcn/ui AlertDialog for delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               Delete {deleteTarget?.isDirectory ? 'Folder' : 'File'}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {deleteTarget?.isDirectory ? 'folder' : 'file'}: <b>{deleteTarget?.path}</b>? This action cannot be undone.
+              Are you sure you want to delete{' '}
+              {deleteTarget?.isDirectory ? 'folder' : 'file'}:{' '}
+              <b>{deleteTarget?.path}</b>? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

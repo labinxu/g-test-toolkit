@@ -14,7 +14,9 @@ export class TestCase {
     throw new Error('Not implemented');
   }
   constructor() {}
-
+  async run(): Promise<void> {
+    throw new Error('Not implemented');
+  }
   setLogger(logger: CustomLogger) {
     this.logger = logger;
   }
@@ -22,7 +24,7 @@ export class TestCase {
   setPage(page: Page) {
     this.p = page;
     for (const key of Object.getOwnPropertyNames(Page.prototype)) {
-      if (key !== "constructor" && typeof this.p[key] === "function") {
+      if (key !== 'constructor' && typeof this.p[key] === 'function') {
         this[key] = this.p[key].bind(this.p);
       }
     }
@@ -31,12 +33,11 @@ export class TestCase {
     return this.p;
   }
   print(msg: string) {
-    this.logger.debug(msg);
-    this.logger.sendLog(msg);
+    this.logger.sendLogTo(msg);
   }
 
   async dumpxml() {
-    this.print(`dump xml ${this.phoneSn}`)
+    this.print(`dump xml ${this.phoneSn}`);
     try {
       await this.androidService.dumpxmlOnServer(this.phoneSn);
     } catch (err) {
@@ -89,11 +90,12 @@ export async function main(
     service && instance.setAndroidService(service);
     logger.setContext(Ctor.name);
     //const transport= logger.addLogFileTransports(`${Ctor.name}-${Date.now()}.log`)
-    if (typeof instance.test === 'function') {
-      await instance.test();
+    if (typeof instance.run === 'function') {
+      await instance.run();
     }
     //await page.close();
-    logger.debug(`Test ${Ctor.name} Complete!`);
+    logger.sendLogTo(`Test ${Ctor.name} Complete!`);
+    logger.info(`Test ${Ctor.name} Complete!`);
     //logger.removeLogFileTransports(transport)
   }
 }
