@@ -4,7 +4,8 @@ import {
   SquarePen,
   LayoutGrid,
   LucideIcon,
-  TabletSmartphone
+  TabletSmartphone,
+  CommandIcon,
 } from 'lucide-react';
 
 type Submenu = {
@@ -53,10 +54,10 @@ export function getMenuList(pathname: string): Group[] {
             },
           ],
         },
-         {
+        {
           href: '',
           label: 'Commands',
-          icon: SquarePen,
+          icon: CommandIcon,
           submenus: [
             {
               href: '/commands/android',
@@ -70,16 +71,14 @@ export function getMenuList(pathname: string): Group[] {
               href: '/commands/system',
               label: 'System',
             },
-
           ],
         },
-
       ],
     },
     {
       groupLabel: 'Settings',
       menus: [
-{
+        {
           href: '/devices',
           label: 'Devices',
           icon: TabletSmartphone,

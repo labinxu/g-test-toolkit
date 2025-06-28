@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { exec } from 'child_process';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
 import { promisify } from 'util';
-
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const execPromise = promisify(exec);
 
 @Injectable()
@@ -35,13 +35,14 @@ export class CommandService {
   }
   async unlock(deviceId: string) {
     await this.runCommand(`adb -s ${deviceId} shell input keyevent 66`);
+    await sleep(3000);
   }
-  async dumpxml(deviceId:string){
-     const dumpcommand = `adb -s ${deviceId} shell uiautomator dump`;
-    await this.runCommand(dumpcommand)
+  async dumpxml(deviceId: string) {
+    const dumpcommand = `adb -s ${deviceId} shell uiautomator dump`;
+    await this.runCommand(dumpcommand);
   }
-  async pullDumpedXml(deviceId:string,outPath:string){
-     const pullcommand = `adb -s ${deviceId} pull /sdcard/window_dump.xml ${outPath}`;
+  async pullDumpedXml(deviceId: string, outPath: string) {
+    const pullcommand = `adb -s ${deviceId} pull /sdcard/window_dump.xml ${outPath}`;
     await this.runCommand(pullcommand);
   }
   async unlockScreen(
@@ -68,7 +69,31 @@ export class CommandService {
     await this.runCommand(swipeOn);
     const inputpassword = `adb -s ${deviceId} shell input text ${password}`;
     await this.runCommand(inputpassword);
-    await this.unlock(deviceId)
+    await this.unlock(deviceId);
     await this.home(deviceId);
+  }
+  async dumpNotif(deviceId: string) {
+    const cmd = `adb -s ${deviceId} shell dumpsys notification`;
+    return await this.runCommand(cmd);
+  }
+  async dumpNotifWithText(deviceId: string, searchString: string) {
+    const cmd = `adb -s ${deviceId} shell dumpsys notification --noredact`;
+    const { stdout, stderr } = await this.runCommand(cmd);
+    if (stderr) {
+      throw new NotFoundException(`Failed to execute ${cmd}`);
+    }
+    return stdout.includes(searchString);
+  }
+  async expandNotifBar(deviceId: string) {
+    const cmd = `adb -s ${deviceId} shell cmd statusbar expand-notifications`;
+    await this.runCommand(cmd);
+  }
+  async snapshot(deviceId: string) {
+    const command = `adb -s ${deviceId} shell screencap -p /sdcard/screenshot.png`;
+    await this.runCommand(command);
+  }
+  async pullSnapshot(deviceId: string, outfile: string) {
+    const command = `adb -s ${deviceId} pull /sdcardscreenshot.png ${outfile}`;
+    await this.runCommand(command);
   }
 }

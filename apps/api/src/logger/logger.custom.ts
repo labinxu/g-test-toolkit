@@ -13,15 +13,17 @@ const loggerFormat = winston.format.printf(
 export class CustomLogger {
   private logger: winston.Logger;
   private context = 'LOG:';
-  private clientId: string = '';
+  private clientId: string | null;
   constructor(
     private readonly winstonLogger: winston.Logger,
     @Optional()
     @Inject(forwardRef(() => LoggerGateway))
     private readonly loggerGateway: LoggerGateway,
+    clientId?: string,
   ) {
-    this.logger = winstonLogger.child({ context: this.context });
+    this.logger = winstonLogger.child({ context: this.context, clientId });
     this.winstonLogger = winstonLogger;
+    this.clientId = clientId;
   }
 
   private format(level: string, message: string): string {
@@ -30,11 +32,12 @@ export class CustomLogger {
     return `${timestamp} ${level} ${tag} ${message}`;
   }
   setContext(context: string) {
+    this.logger.debug(`set context: clientID:${this.clientId}`);
     this.context = context;
-    this.logger = this.winstonLogger.child({ context });
-  }
-  setClientId(clientId: string) {
-    this.clientId = clientId;
+    this.logger = this.winstonLogger.child({
+      context,
+      clientId: this.clientId,
+    });
   }
   addLogFileTransports(filename: string) {
     const contextTrans = new winston.transports.File({
@@ -68,23 +71,35 @@ export class CustomLogger {
     this.logger.debug(message);
   }
 
-  sendLogTo(message: string) {
-    if (!this.clientId) {
+  sendLogTo(clientId: string, message: string) {
+    this.loggerGateway?.sendLogTo(clientId, this.format('', message));
+  }
+  sendDebugTo(clientId: string, message: string) {
+    if (!clientId) {
       this.logger.error('client id not initialized!');
       return;
     }
-    this.loggerGateway?.sendLogTo(this.clientId, message);
+    this.loggerGateway?.sendLogTo(clientId, this.format('debug', message));
+    this.logger.debug(message);
   }
-  sendExitTo() {
-    if (!this.clientId) {
+  sendErrorTo(clientId: string, message: string) {
+    if (!clientId) {
       this.logger.error('client id not initialized!');
       return;
     }
-    this.loggerGateway.sendExitTo(this.clientId);
+    this.loggerGateway?.sendLogTo(clientId, this.format('error', message));
+    this.logger.error(message);
   }
-  sendLog(message: string) {
-    this.loggerGateway?.sendLog(this.format('', message));
-    this.logger.log('tc', message);
+  sendInfoTo(clientId: string, message: string) {
+    this.loggerGateway?.sendLogTo(clientId, this.format('info', message));
+    this.logger.info(message);
+  }
+  sendWarnTo(clientId: string, message: string) {
+    this.loggerGateway?.sendLogTo(clientId, this.format('warn', message));
+    this.logger.warn(message);
+  }
+  sendExitTo(clientId: string) {
+    this.loggerGateway.sendExitTo(clientId);
   }
 
   verbose(message: string) {

@@ -1,11 +1,13 @@
-import { Injectable, NotFoundException,StreamableFile } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CommandService } from 'src/command/command.service';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
 import { readFileSync } from 'fs';
-import { createReadStream } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
 import { Response } from 'express';
+import { getDefaultAutoSelectFamilyAttemptTimeout } from 'net';
+import { unlink } from 'fs/promises';
+
 @Injectable()
 export class AndroidService {
   private logger: CustomLogger;
@@ -16,10 +18,9 @@ export class AndroidService {
   ) {
     this.logger = this.loggerService.createLogger('AndroidService');
   }
-
   async getDevices() {
     const result = await this.commandService.runCommand('adb devices');
-    return {devices: result.stdout};
+    return { devices: result.stdout };
   }
   async getScreen(deviceId: string) {
     try {
@@ -79,7 +80,15 @@ export class AndroidService {
     password = '125698',
     swipeData: string,
   ) {
-    await this.commandService.unlockScreen(deviceId, checkKeywords, password, swipeData)
+    await this.commandService.unlockScreen(
+      deviceId,
+      checkKeywords,
+      password,
+      swipeData,
+    );
+  }
+  async goHome(deviceId: string) {
+    await this.commandService.home(deviceId);
   }
   async dumpxml(deviceId: string, res: Response) {
     try {
@@ -117,14 +126,14 @@ export class AndroidService {
     return null;
   }
 
-  async dumpxmlOnServer(deviceId: string) {
+  async dumpxmlTo(deviceId: string, workspace: string) {
     try {
       if (!/^[a-zA-Z0-9_-]+$/.test(deviceId)) {
         throw new Error('Invalid device ID');
       }
-      await this.commandService.dumpxml(deviceId)
-      const xmlfilepath = `./tmp/window_dump-${deviceId}.xml`;
-      await this.commandService.pullDumpedXml(deviceId, xmlfilepath)
+      await this.commandService.dumpxml(deviceId);
+      const xmlfilepath = `${workspace}/window_dump-${deviceId}.xml`;
+      await this.commandService.pullDumpedXml(deviceId, xmlfilepath);
       const xmlstring = readFileSync(xmlfilepath);
       const parser = new XMLParser({ ignoreAttributes: false });
       this.dumpedObj = parser.parse(xmlstring);
@@ -136,7 +145,7 @@ export class AndroidService {
   async click(deviceId: string, attribute: string, text: string) {
     const node = this.findNode(this.dumpedObj.hierarchy.node, attribute, text);
     if (!node) {
-      this.logger.sendLog(`${attribute} ${text} not found`);
+      this.logger.error(`${attribute} ${text} not found`);
       return;
     }
     const match = node['@_bounds'].match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
@@ -149,7 +158,37 @@ export class AndroidService {
       const cmd = `adb -s ${deviceId} shell input tap ${(x1 + x2) / 2} ${(y1 + y2) / 2}`;
       await this.commandService.runCommand(cmd);
     } else {
-      this.logger.sendLog(`Error found bounds`);
+      this.logger.error(`Error found bounds`);
     }
+  }
+  async hasNotifIncludesText(
+    deviceId: string,
+    searchString: string,
+  ): Promise<boolean> {
+    return await this.commandService.dumpNotifWithText(deviceId, searchString);
+  }
+  async clearAllNotif(
+    deviceId: string,
+    keywords = 'holding display',
+    password = '125698',
+    swipeData: string,
+    attribute = 'text',
+    text = 'Clear all',
+  ) {
+    await this.commandService.unlockScreen(
+      deviceId,
+      keywords,
+      password,
+      swipeData,
+    );
+    const dumppath = `/tmp/${deviceId}.xml`;
+    await this.commandService.expandNotifBar(deviceId);
+    await this.dumpxmlTo(deviceId, dumppath);
+    await this.click(deviceId, attribute, text);
+    await unlink(dumppath);
+  }
+  async snapscreenTo(deviceId: string, filePath: string) {
+    await this.commandService.snapshot(deviceId);
+    await this.commandService.pullSnapshot(deviceId, filePath);
   }
 }

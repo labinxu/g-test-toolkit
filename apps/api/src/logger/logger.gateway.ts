@@ -11,11 +11,37 @@ import { Server, Socket } from 'socket.io';
 import { spawn } from 'child_process';
 import { writeFile, unlink } from 'fs/promises';
 import { randomUUID } from 'crypto';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 @WebSocketGateway({
   cors: { origin: '*' }, // 允许跨域，生产环境请配置安全域名
   namespace: '/log', // 可选，命名空间
 })
+// const proc = spawn('tail', ['-f', process.env.LOG_FILE]);
+// const clientMap = new Map<string, Socket>()
+// proc.stdout.on('data', (data: Buffer) => {
+//   const lines = data.toString().split('\n');
+//   for (const line of lines) {
+//     // 假设日志格式: 2025-06-27T03:45:00.123Z info [TestCase] [client123] message
+//     const match = line.match(/\[(client[^\]]+)\]/); // 捕获[client123]
+//     if (match) {
+//       const clientId = match[1]; // 例如 client123
+//       const client = clientMap.get(clientId);
+//       if (client) {
+//         client.emit('log', line);
+//       }
+//     }
+//     // 如果希望广播没有clientId的日志，可以加else分支
+//   }
+// });
+
+// proc.stderr.on('data', (data: Buffer) => {
+//   // 你可以选择广播到所有client，或单独处理
+//   for (const client of clientMap.values()) {
+//     client.emit('log', data.toString());
+//   }
+// });
 export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -44,6 +70,10 @@ export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleHello(@MessageBody() data: string, @ConnectedSocket() client: Socket) {
     console.log('Received from client:', data);
     client.emit('hello', JSON.stringify({ clientId: client.id }));
+  }
+  @SubscribeMessage('log')
+  handleLog(@MessageBody() data: string, @ConnectedSocket() client: Socket) {
+    console.log('Received from client:', data + client.id);
   }
   @SubscribeMessage('run-script')
   async handleRunScript(

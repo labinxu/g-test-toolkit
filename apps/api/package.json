@@ -25,6 +25,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "fast-xml-parser": "^5.2.5",
+    "isolated-vm": "^6.0.0",
     "nest-winston": "^1.10.2",
     "puppeteer": "^24.10.2",
     "puppeteer-core": "^24.10.2",

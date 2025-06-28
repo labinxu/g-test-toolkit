@@ -7,6 +7,10 @@ import { CustomLogger } from 'src/logger/logger.custom';
 import { Script, createContext } from 'vm';
 import { BrowserControl } from 'src/browser/browser';
 import { Page } from 'puppeteer';
+import { setTimeout } from 'timers';
+import { SandboxExecutor } from './sandbox-executor';
+import { ReportService } from 'src/report/report.service';
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 @Injectable()
 export class TestCasesService {
@@ -14,11 +18,20 @@ export class TestCasesService {
   constructor(
     private readonly loggerService: LoggerService,
     private readonly androidService: AndroidService,
+    private readonly reportService: ReportService,
   ) {
-    this.logger = this.loggerService.createLogger('AppService');
+    this.logger = this.loggerService.createLogger('TestCaseService');
   }
-
-  async runcase(frontCode: string, useBrowser: boolean, clientId: string) {
+  async runcase(clientCode: string, useBrowser: boolean, clientId: string) {
+    const sandBoxExec = new SandboxExecutor(
+      clientId,
+      './workspace/Anonymouse',
+      this.logger,
+      this.reportService,
+    );
+    await sandBoxExec.execute(clientCode);
+  }
+  async runcase2(frontCode: string, useBrowser: boolean, clientId: string) {
     //await this.androidService.screenOn('0A171FDD40063C', 'holding display', '125698', "300 900 300 200")
     let page: Page | null = null;
     let bc: BrowserControl | null = null;
@@ -26,8 +39,7 @@ export class TestCasesService {
       bc = new BrowserControl(this.logger);
       page = await bc.launch();
     }
-    const testLogger = this.loggerService.createLogger('TestCase');
-    testLogger.setClientId(clientId);
+    const testLogger = this.loggerService.createLogger('TestCase', clientId);
     //const testCaseCodeTs = readFileSync('./cases/test-case.ts', 'utf-8');
     const testCaseCodeJsFromdist = readFileSync(
       './dist/cases/test-case.js',
@@ -44,7 +56,7 @@ export class TestCasesService {
     createContext(testCaseSandbox);
     new Script(testCaseJs).runInContext(testCaseSandbox);
     const testCaseExports = testCaseSandbox.module.exports;
-
+    this.logger.debug('file exports' + JSON.stringify(testCaseExports));
     let codeFromFrontend = frontCode.replace(
       /import\s+{([^}]+)}\s+from\s+['"]test-case['"]\s*;/g,
       'const {$1} = require("test-case");',
@@ -61,27 +73,33 @@ export class TestCasesService {
       exports: {},
       module: { exports: {} },
       testLogger,
+      clientId,
       service: this.androidService,
       result: null,
       console,
       require: (name: string) => {
-        if (name === 'test-case') return testCaseExports;
+        if (name === 'test-case') {
+          console.log(testCaseExports);
+          return testCaseExports;
+        }
         throw new Error('Module not found: ' + name);
       },
       page,
+      sleep,
     };
     const context = createContext(sandbox);
+
     new Script(codeJs).runInContext(context, { timeout: 3000 });
     // 5. 执行
     try {
       new Script(
-        'const { main } = require("test-case"); result = main(testLogger,service,page)',
+        'const { main } = require("test-case"); result = main(clientId,testLogger,sleep,service,page)',
       ).runInContext(context, { timeout: 5000 });
       await sandbox.result; // 等待 main(page) 执行完成
     } catch (e) {
       this.logger.error(`Exception in case: ${e}`);
-      this.logger.sendLogTo(`Exception in case: ${e}`);
-      this.logger.sendExitTo();
+      this.logger.sendLogTo(clientId, `Exception in case: ${e}`);
+      this.logger.sendExitTo(clientId);
     } finally {
       //await bc?.closeBrowser();
     }

@@ -2,7 +2,15 @@ import { TestCase, Regist } from 'test-case';
 @Regist()
 class MyTest extends TestCase {
   async run() {
-    await this.goto('https://qa1-prod.gettr-qa.com/login?step=sea_login_with_email')
+    // prepare mobile clear all notifs
+    this.configurePhone('0A171FDD40063C','holding display','125698',"300 900 300 200")
+    await this.clearAllNotifications()
+    await this.home()
+    try{
+      await this.goto('https://qa1-prod.gettr-qa.com/login?step=sea_login_with_email')
+    }catch(err){
+      this.printError(err)
+    }
     // login with password
     const spans = await this.$$('form.form.notranslate div span');
     let result = [];
@@ -17,8 +25,6 @@ class MyTest extends TestCase {
         return;
     }
     await result[0].click()
-    this.print("LOG IN")
-    try{
       await this.type('input#email',"labin_test1")
       await this.type('input#password','!labin_test1')
       const [response] = await Promise.all([
@@ -33,16 +39,19 @@ class MyTest extends TestCase {
      
       const buttons = await this.$$('div#simple-popper button')
       // 0 create post,1 gtok ,2 create live
-      this.print('click create post')
+      this.printDebug('click create post')
       await buttons[0].click();
-      
-      await this.type('div.post-preview-box div.ql-editor',"this is post by puppeteer"+Date.now())
+      const postContent = `this is post by pupe time:${Date.now()} `
+      await this.type('div.post-preview-box div.ql-editor', postContent)
       await this.waitForNetworkIdle()
       await this.click('div.action-bar > button');
-    }catch(error){
-      this.print(error)
-    }
-    
-    this.print('Test executed');
+      
+      await this.delay(5000);
+      await this.screenOn();
+
+      const result = await this.exceptIncludesNotifyText(postContent) 
+      this.print(`except ${result}`)
+      await this.takeSnapshot();
+    this.printInfo('Test executed');
   }
 }

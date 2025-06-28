@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import  { OnMount } from '@monaco-editor/react';
+import { OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
 import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 import FileEditor from '@/components/files/file-editor';
@@ -14,7 +14,7 @@ export default function Page() {
   const [logs, setLogs] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState(false);
-  const [scripts,setScripts] = useState<string>('')
+  const [scripts, setScripts] = useState<string>('');
   useEffect(() => {
     if (running) run();
   }, [running]);
@@ -52,8 +52,9 @@ export default function Page() {
     });
     socket.on('stdout', (msg) => setLogs((prev) => [...prev, msg]));
     socket.on('stderr', (msg) => setLogs((prev) => [...prev, msg]));
-    socket.on('close', (msg) =>{ setLogs((prev) => [...prev, msg])
-      setRunning(false)
+    socket.on('close', (msg) => {
+      setLogs((prev) => [...prev, msg]);
+      setRunning(false);
     });
 
     return () => {
@@ -62,11 +63,11 @@ export default function Page() {
   }, []);
 
   const run = async () => {
-    if(!socket || scripts===''){
-      setLogs(['ERROR: Socket not initialized!'])
+    if (!socket || scripts === '') {
+      setLogs(['ERROR: Socket not initialized!']);
       return;
     }
-    setLogs([ 'RUN Script'])
+    setLogs(['RUN Script']);
 
     socket.emit('run-script', scripts);
   };
@@ -116,6 +117,7 @@ export default function Page() {
       </div>
       <div className="flex-1 pl-4 h-full min-w-0 flex flex-col transition-all duration-300">
         <FileEditor
+          template="#!/bin/bash"
           filePath={currentFile}
           onMount={handleEditorDidMount}
           content={scripts}
@@ -123,7 +125,7 @@ export default function Page() {
         />
         <div className="rounded-lg shadow-sm basis-2/5 flex flex-col min-h-0">
           <div className="flex justify-between items-center m-1 rounded-lg shadow-sm ">
-                        <div>
+            <div>
               <Button
                 variant={'outline'}
                 size={'sm'}

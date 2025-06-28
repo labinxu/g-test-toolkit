@@ -9,9 +9,10 @@ import { LoggerGateway } from './logger.gateway';
 dotenv.config();
 
 const loggerFormat = winston.format.printf(
-  ({ timestamp, level, message, context }) => {
+  ({ timestamp, level, message, context, clientId }) => {
     const tag = context ? `[${context}]` : '';
-    return `${timestamp} ${level} ${tag} ${message}`;
+    const clientTag = clientId ? `[${clientId}]` : '';
+    return `${timestamp} ${level} ${tag} ${clientTag} ${message}`;
   },
 );
 const customLevels = {

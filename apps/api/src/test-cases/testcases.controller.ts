@@ -8,6 +8,7 @@ import {
   Get,
   Res,
   NotFoundException,
+
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -55,18 +56,21 @@ export class TestCasesController {
   @Post('run/script')
   async runScript(@Body() caseDto: TestCaseDto) {
     try {
-      return await this.testCasesService.runcase(
+      this.testCasesService.runcase(
         caseDto.code,
         caseDto.useBrowser,
         caseDto.clientId,
       );
-    } catch (err) {}
+      return { message: 'ok' };
+    } catch (err) {
+      throw new NotFoundException(err);
+    }
   }
 
   @Get('init')
   async init(@Res() res: Response) {
     try {
-      const content = readFileSync('./cases/types/test-case.d.ts', 'utf8');
+      const content = readFileSync('./dist/cases/test-case.d.ts', 'utf8');
       res.type('text/plain').send({ content });
     } catch (err) {
       throw new NotFoundException('test-case.d.ts not found');

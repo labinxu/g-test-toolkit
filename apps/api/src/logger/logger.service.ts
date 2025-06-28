@@ -14,10 +14,11 @@ export class LoggerService {
     private readonly loggerGateway: LoggerGateway,
   ) {}
 
-  createLogger(context: string): CustomLogger {
+  createLogger(context: string, clientId?: string): CustomLogger {
     const customLogger = new CustomLogger(
       this.winstonLogger,
       this.loggerGateway,
+      clientId,
     );
     customLogger.setContext(context);
     return customLogger;

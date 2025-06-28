@@ -1,6 +1,8 @@
 import { Browser } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { CustomLogger } from 'src/logger/logger.custom';
+puppeteer.use(StealthPlugin());
 
 export class BrowserControl {
   private browser: Browser | null;

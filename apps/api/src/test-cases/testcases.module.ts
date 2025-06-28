@@ -9,11 +9,14 @@ import { LoggerModule } from 'src/logger/logger.module';
 import { AndroidService } from 'src/mobile/android/android.service';
 import { AndroidModule } from 'src/mobile/android/android.module';
 import { CommandService } from 'src/command/command.service';
+import { ReportService } from 'src/report/report.service';
+import { ReportModule } from 'src/report/report.module';
 @Module({
   imports: [
     CommandModule,
     LoggerModule,
     AndroidModule,
+    ReportModule,
     MulterModule.register({
       storage: diskStorage({
         destination: './cases',
@@ -22,9 +25,10 @@ import { CommandService } from 'src/command/command.service';
           cb(null, filename);
         },
       }),
-      limits:{ fileSize: 5 * 1024 * 1024 },
-    }),],
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  ],
   controllers: [TestCasesController],
-  providers: [CommandService, TestCasesService,AndroidService],
+  providers: [CommandService, TestCasesService, AndroidService, ReportService],
 })
 export class TestCaseModule {}

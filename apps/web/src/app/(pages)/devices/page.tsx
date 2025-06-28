@@ -18,7 +18,7 @@ export default function Page() {
   const [devices, setDevices] = useState<string>('');
   const [deviceList, setDeviceList] = useState<string[][]>([]);
   const [images, setImages] = useState<Record<string, string>>({});
-  const [selectedDeviceId,setSelectDeviceId] = useState<string>('')
+  const [selectedDeviceId, setSelectDeviceId] = useState<string>('');
   const devicesQuery = useQuery({
     queryKey: ['devices'],
     queryFn: () =>
@@ -32,21 +32,6 @@ export default function Page() {
         }
       }),
   });
-  const onPreview = async (deviceId: string) => {
-    fetch(`/api/android/screen/${deviceId}`, {
-      method: 'GET',
-    })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const objUrl =URL.createObjectURL(blob);
-        setImages((prev) => ({
-          ...prev,
-          [deviceId]: URL.createObjectURL(blob),
-        }));
-        return objUrl;
-      });
-  };
-
   useEffect(() => {
     if (devicesQuery.isPending) return;
     const { devices } = devicesQuery.data;
@@ -59,13 +44,13 @@ export default function Page() {
         .filter((v: string) => v != '')
         .filter((v: string) => v.endsWith('device'));
       let dls = dlist.map((l: string) => l.split('\t'));
-      dls.forEach(dl=>dl.push("Free"))
-      setDeviceList( dls);
+      dls.forEach((dl) => dl.push('Free'));
+      setDeviceList(dls);
     }
   }, [devices]);
   const onSelectedRow = useCallback((data: string[]) => {
     console.log('selected', data);
-    setSelectDeviceId(data[0])
+    setSelectDeviceId(data[0]);
   }, []);
   return (
     <div className="rounded-lg shadow-lg m-4 gap-3 border-2">
@@ -77,7 +62,6 @@ export default function Page() {
           onSelectedRow={onSelectedRow}
         />
       </div>
-
     </div>
   );
 }

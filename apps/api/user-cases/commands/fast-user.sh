@@ -4,6 +4,7 @@ curl https://next-backend-notif.qa1.ue1.oke.gettr-qa.com/api/v1/fast-user \
   --data '{
   "user_id": "labin",
   "options": {
-    "post": true
+    "post": true,
+    "build_cache": true
   }
 }'

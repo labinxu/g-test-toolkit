@@ -2,9 +2,12 @@
   "extends": "@repo/typescript-config/nestjs.json",
   "compilerOptions": {
     "baseUrl": "./",
+    "module": "CommonJS",
     "outDir": "./dist",
-    "esModuleInterop": true,
+    "experimentalDecorators": true,
     "skipLibCheck": true,
+    "allowJs": true,
+
     "types": ["node", "puppeteer"]
   }
 }
