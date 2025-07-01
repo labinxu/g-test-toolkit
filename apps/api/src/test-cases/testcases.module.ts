@@ -11,6 +11,7 @@ import { AndroidModule } from 'src/mobile/android/android.module';
 import { CommandService } from 'src/command/command.service';
 import { ReportService } from 'src/report/report.service';
 import { ReportModule } from 'src/report/report.module';
+import { FilesService } from 'src/files/files.service';
 @Module({
   imports: [
     CommandModule,
@@ -29,6 +30,12 @@ import { ReportModule } from 'src/report/report.module';
     }),
   ],
   controllers: [TestCasesController],
-  providers: [CommandService, TestCasesService, AndroidService, ReportService],
+  providers: [
+    CommandService,
+    FilesService,
+    TestCasesService,
+    AndroidService,
+    ReportService,
+  ],
 })
 export class TestCaseModule {}

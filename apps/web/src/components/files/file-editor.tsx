@@ -6,26 +6,28 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FileText, Save, Loader2 } from 'lucide-react';
 import { OnMount } from '@monaco-editor/react';
-const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+});
 
 export default function FileEditor({
   template,
   filePath,
   onMount,
   content,
-  setContent
+  setContent,
 }: {
-  template:string;
-  onMount:OnMount;
+  template: string;
+  onMount: OnMount;
   filePath: string;
-  content:string;
-  setContent:(text:string)=>void;
+  content: string;
+  setContent: (text: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [changed, setChanged] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [language,setLanguage]=useState<string>('typescript')
+  const [language, setLanguage] = useState<string>('typescript');
   const lastLoadedPath = useRef<string | null>(null);
 
   // Load file content
@@ -34,21 +36,21 @@ export default function FileEditor({
     setLoading(true);
     setError(null);
     fetch(`/api/files?path=${encodeURIComponent(filePath)}`)
-      .then(res => {
+      .then((res) => {
         if (!res.ok) throw new Error('Load file failed');
         return res.json();
       })
-      .then(data => {
-        const {content} = data;
-        if(content.length<3){
-          setContent(template)
-        }else{
-          setContent(content)
+      .then((data) => {
+        const { content } = data;
+        if (content.length < 3) {
+          setContent(template);
+        } else {
+          setContent(content);
         }
         setChanged(false);
         lastLoadedPath.current = filePath;
       })
-      .catch(e => setError(e.message || 'Loading failed'))
+      .catch((e) => setError(e.message || 'Loading failed'))
       .finally(() => setLoading(false));
   }, [filePath]);
 
@@ -74,10 +76,10 @@ export default function FileEditor({
 
   // Ctrl+S/Cmd+S 快捷保存
   useEffect(() => {
-    if(filePath.endsWith('ts')){
-      setLanguage('typescript')
-    }else if(filePath.endsWith('sh')){
-      setLanguage('bash')
+    if (filePath.endsWith('ts')) {
+      setLanguage('typescript');
+    } else if (filePath.endsWith('sh')) {
+      setLanguage('bash');
     }
     function onKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -102,7 +104,10 @@ export default function FileEditor({
   return (
     <div className="m-1 relative flex flex-col h-full w-full rounded-xl shadow-lg bg-white">
       <div className="flex items-center gap-2 pb-2 ml-2">
-        <Badge variant="outline" className="font-mono text-xs flex items-center px-2 py-1">
+        <Badge
+          variant="outline"
+          className="font-mono text-xs flex items-center px-2 py-1"
+        >
           <FileText className="w-4 h-4 mr-1 text-gray-500" />
           {filePath}
         </Badge>
@@ -113,12 +118,14 @@ export default function FileEditor({
           variant={changed ? 'default' : 'outline'}
           size="sm"
         >
-          {saving ? <Loader2 className="animate-spin w-4 h-4" /> : <Save className="w-4 h-4" />}
+          {saving ? (
+            <Loader2 className="animate-spin w-4 h-4" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
           {saving ? 'Saving...' : changed ? 'Save' : 'Saved'}
         </Button>
-        {error && (
-          <span className="ml-4 text-red-500 text-xs">{error}</span>
-        )}
+        {error && <span className="ml-4 text-red-500 text-xs">{error}</span>}
       </div>
       <div className="flex-1 min-h-0">
         {loading ? (
@@ -126,7 +133,7 @@ export default function FileEditor({
         ) : (
           <div className="rounded-xl overflow-hidden h-full bg-white shadow-xl">
             <MonacoEditor
-              height="60vh"
+              height="100%"
               language={language}
               theme="vs"
               value={content}
@@ -136,7 +143,7 @@ export default function FileEditor({
                 readOnly: loading || saving,
               }}
               onMount={onMount}
-              onChange={v => {
+              onChange={(v) => {
                 setContent(v ?? '');
                 setChanged(v !== undefined && v !== content);
               }}

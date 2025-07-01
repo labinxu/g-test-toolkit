@@ -1,12 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { SwaggerModule,DocumentBuilder } from '@nestjs/swagger';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 
 import * as dotenv from 'dotenv';
-dotenv.config()
+dotenv.config();
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableCors(); // 开启 CORS
   const options = new DocumentBuilder()
     .setTitle('G-TOOLKIT API document')
     .setDescription('Doggy api...')
@@ -23,6 +24,5 @@ async function bootstrap() {
     }),
   );
   await app.listen(3001);
-
-  }
+}
 bootstrap();

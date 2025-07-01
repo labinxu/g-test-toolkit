@@ -145,12 +145,16 @@ export class TestCase implements ITestBase {
   async clearAllNotifications() {
     this.logger?.sendDebugTo(this.clientId, 'Clearing all notifications');
     if (!this.androidService) throw new Error('AndroidService not initialized');
-    await this.androidService.clearAllNotif(
-      this.deviceId,
-      this.screenOnKeyWords,
-      this.screenPwd,
-      this.swipeCordForScreenOn,
-    );
+    try {
+      await this.androidService.clearAllNotif(
+        this.deviceId,
+        this.screenOnKeyWords,
+        this.screenPwd,
+        this.swipeCordForScreenOn,
+      );
+    } catch (err) {
+      this.logger.sendErrorTo(this.clientId, `${err}`);
+    }
   }
   async home() {
     this.logger?.sendDebugTo(this.clientId, 'Returning to home');

@@ -1,27 +1,26 @@
 import { __testCaseClasses } from './test-case-decorator';
 import { TestCase } from './test-case-base';
-import { CustomLogger } from 'src/logger/logger.custom';
 import { AndroidService } from 'src/mobile/android/android.service';
 import { Page } from 'puppeteer';
 import { ReportService } from 'src/report/report.service';
+import { LoggerService } from 'src/logger/logger.service';
 
 export async function main(
   clientId: string,
-  logger: CustomLogger,
-  sleep: (ms: number) => Promise<void>,
   workspace: string,
   reportService: ReportService,
+  loggerService: LoggerService,
   service?: AndroidService,
   page?: Page,
 ) {
+  const logger = loggerService.createLogger('main');
   for (const Ctor of __testCaseClasses) {
     const instance = new (Ctor as { new (): TestCase })();
     try {
       instance.setWorkspace(workspace);
-      instance.setLogger(logger);
+      instance.setLoggerService(loggerService);
       instance.setClientId(clientId);
       if (page) instance.setPage(page);
-      instance.setSleep(sleep);
       if (service) instance.setAndroidService(service);
       logger.setContext(Ctor.name);
 

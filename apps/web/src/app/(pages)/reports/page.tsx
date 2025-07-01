@@ -4,7 +4,7 @@ import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 
 export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
-  const [currentDir, setCurrentDir] = useState('./workspace/Anonymouse');
+  const [currentDir, setCurrentDir] = useState('workspace/Anonymouse');
 
   // 判断是否是html文件（简单判断后缀）
   const isHtmlFile =
@@ -15,7 +15,7 @@ export default function Page() {
     : undefined;
 
   return (
-    <div className="flex h-full w-full gap-0 rounded-lg">
+    <div className="flex h-full w-full gap-0 m-4 rounded-lg">
       <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
         <DirectoryTreePanel
           currentDir={currentDir}

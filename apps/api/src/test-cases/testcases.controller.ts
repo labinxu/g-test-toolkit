@@ -8,7 +8,6 @@ import {
   Get,
   Res,
   NotFoundException,
-
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -16,10 +15,14 @@ import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TestCasesService } from './testcases.service';
 import { StartTestCaseDto, TestCaseDto } from './dto/start-testcase-dto';
 import { readFileSync } from 'fs';
+import { FilesService } from 'src/files/files.service';
 
 @Controller('testcase')
 export class TestCasesController {
-  constructor(private readonly testCasesService: TestCasesService) {}
+  constructor(
+    private readonly testCasesService: TestCasesService,
+    private readonly filesService: FilesService,
+  ) {}
 
   @Post('/')
   @ApiConsumes('multipart/form-data')
@@ -70,10 +73,12 @@ export class TestCasesController {
   @Get('init')
   async init(@Res() res: Response) {
     try {
-      const content = readFileSync('./dist/cases/test-case.d.ts', 'utf8');
+      console.log('init call');
+      const functions = this.filesService.makeTypesFile();
+      const content = functions.join('');
       res.type('text/plain').send({ content });
     } catch (err) {
-      throw new NotFoundException('test-case.d.ts not found');
+      throw new NotFoundException('make types file failed');
     }
   }
 }

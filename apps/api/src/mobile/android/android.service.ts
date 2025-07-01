@@ -137,8 +137,9 @@ export class AndroidService {
       const xmlstring = readFileSync(xmlfilepath);
       const parser = new XMLParser({ ignoreAttributes: false });
       this.dumpedObj = parser.parse(xmlstring);
+      return xmlfilepath;
     } catch (err) {
-      throw new NotFoundException('Dump xml Error');
+      throw new Error(`${err}`);
     }
   }
 
@@ -181,11 +182,11 @@ export class AndroidService {
       password,
       swipeData,
     );
-    const dumppath = `/tmp/${deviceId}.xml`;
+    const dumppath = `/tmp`;
     await this.commandService.expandNotifBar(deviceId);
-    await this.dumpxmlTo(deviceId, dumppath);
+    const tmpfile = await this.dumpxmlTo(deviceId, dumppath);
     await this.click(deviceId, attribute, text);
-    await unlink(dumppath);
+    await unlink(tmpfile);
   }
   async snapscreenTo(deviceId: string, filePath: string) {
     await this.commandService.snapshot(deviceId);

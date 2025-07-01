@@ -1,16 +1,18 @@
-import { TestCase, Regist } from 'test-case';
-@Regist()
+import { TestCase, Test } from 'test-case';
+@Test()
 class MyTest extends TestCase {
-  async run() {
+  async test_case1() {
     // prepare mobile clear all notifs
-    this.configurePhone('0A171FDD40063C','holding display','125698',"300 900 300 200")
+
+    this.configureDevice('0A171FDD40063C','holding display','125698',"300 900 300 200")
     await this.clearAllNotifications()
     await this.home()
     try{
-      await this.goto('https://qa1-prod.gettr-qa.com/login?step=sea_login_with_email')
+      await this.goto('https://qa1-prod.gettr-qa.com/login?step=sea_login_with_email',{timeout:50000})
     }catch(err){
       this.printError(err)
     }
+    this.print('main page opened')
     // login with password
     const spans = await this.$$('form.form.notranslate div span');
     let result = [];
@@ -49,9 +51,9 @@ class MyTest extends TestCase {
       await this.delay(5000);
       await this.screenOn();
 
-      const result = await this.exceptIncludesNotifyText(postContent) 
-      this.print(`except ${result}`)
-      await this.takeSnapshot();
+      const exceptRet = await this.exceptIncludesNotifyText(postContent) 
+      this.print(`except ${exceptRet}`)
+      //await this.screenshot();
     this.printInfo('Test executed');
   }
 }

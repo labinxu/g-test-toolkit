@@ -1,12 +1,19 @@
-import { Controller, Get, Query, Put, Body,Post } from '@nestjs/common';
+import { Controller, Get, Query, Put, Body, Post, Res } from '@nestjs/common';
+import { Response } from 'express';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { FilesService } from './files.service';
 
 @Controller('files')
 export class FilesController {
+  constructor(private readonly filesService: FilesService) {}
+
   // 获取目录树
   @Get('tree')
-  async getDirTree(@Query('dir') dir: string = '.', @Query('depth') depth: number = 2) {
+  async getDirTree(
+    @Query('dir') dir: string = '.',
+    @Query('depth') depth: number = 2,
+  ) {
     const baseDir = path.resolve(process.cwd(), dir);
     async function getTree(currentPath: string, depthLeft: number) {
       if (depthLeft < 0) return [];
@@ -41,7 +48,18 @@ export class FilesController {
     const content = await fs.readFile(absPath, 'utf-8');
     return { content };
   }
-
+  @Get('read')
+  async readFile(@Query('path') filePath: string, @Res() res: Response) {
+    const absPath = path.resolve(process.cwd(), filePath);
+    const content = await fs.readFile(absPath, 'utf-8');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(content);
+  }
+  @Get('types')
+  async types(@Res() res: Response) {
+    const functions = this.filesService.makeTypesFile();
+    res.type('text/plain').send({ content: functions.join('\n') });
+  }
   // 保存文件内容
   @Put()
   async saveFile(@Body() body: { path: string; content: string }) {
@@ -63,7 +81,7 @@ export class FilesController {
     await fs.writeFile(absPath, body.content || '', 'utf-8');
     return { success: true };
   }
-   @Post('delete')
+  @Post('delete')
   async deleteFileOrFolder(@Body() body: { path: string }) {
     const absPath = path.resolve(process.cwd(), body.path);
     try {
@@ -75,7 +93,7 @@ export class FilesController {
       }
       return { success: true };
     } catch (error) {
-       let errorMsg = '';
+      let errorMsg = '';
       if (error instanceof Error) {
         errorMsg = error.message;
       } else {

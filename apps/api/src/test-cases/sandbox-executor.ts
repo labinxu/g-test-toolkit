@@ -10,11 +10,13 @@ import { CustomLogger } from 'src/logger/logger.custom';
 import { AndroidService } from 'src/mobile/android/android.service';
 import { ReportService } from 'src/report/report.service';
 import { Page } from 'puppeteer';
+import { LoggerService } from 'src/logger/logger.service';
 
 export class SandboxExecutor {
   private logger: CustomLogger;
   private reportService: ReportService;
   private androidService?: AndroidService;
+  private loggerService: LoggerService;
   private page?: Page;
   private workspace: string;
   private clientId: string;
@@ -22,16 +24,17 @@ export class SandboxExecutor {
   constructor(
     clientId: string,
     workspace: string,
-    logger: CustomLogger,
     reportService: ReportService,
+    loggerService: LoggerService,
     androidService?: AndroidService,
     page?: Page,
   ) {
     this.clientId = clientId;
     this.workspace = workspace;
-    this.logger = logger;
+    this.logger = loggerService.createLogger('SandboxExecutor');
     this.reportService = reportService;
     this.androidService = androidService;
+    this.loggerService = loggerService;
     this.page = page;
   }
 
@@ -102,10 +105,9 @@ export class SandboxExecutor {
       // Run the registered test cases using the existing main function
       await main(
         this.clientId,
-        this.logger,
-        (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
         this.workspace,
         this.reportService,
+        this.loggerService,
         this.androidService,
         this.page,
       );
