@@ -107,7 +107,7 @@ export default function Page() {
   };
 
   return (
-    <div className="flex h-full w-full gap-0 m-4 rounded-lg">
+    <div className="flex h-full w-full gap-0  rounded-lg">
       <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
         <DirectoryTreePanel
           currentDir={currentDir}
@@ -124,7 +124,7 @@ export default function Page() {
           setContent={setScripts}
         />
         <div className="rounded-lg shadow-sm basis-2/5 flex flex-col min-h-0">
-          <div className="flex justify-between items-center m-1 rounded-lg shadow-sm ">
+          <div className="flex justify-between items-center rounded-lg shadow-sm ">
             <div>
               <Button
                 variant={'outline'}
@@ -137,14 +137,14 @@ export default function Page() {
                 {!running ? 'Execute' : 'Running'}
               </Button>
             </div>
-            <div className="flex flex-row m-1 gap-3">
+            <div className="flex flex-row gap-3">
               <strong>Server Status:</strong>{' '}
               <span style={{ color: connected ? 'green' : 'red' }}>
                 {connected ? 'Connected' : 'Disconnected'}
               </span>
             </div>
           </div>
-          <div className="flex flex-col flex-1 min-h-0 m-1 rounded-lg shadow-sm ">
+          <div className="flex flex-col flex-1 min-h-0 rounded-lg shadow-sm ">
             <span className="font-medium mb-1">Output:</span>
             <div
               id="console"

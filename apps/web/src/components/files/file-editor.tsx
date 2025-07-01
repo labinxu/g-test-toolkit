@@ -94,7 +94,7 @@ export default function FileEditor({
 
   if (!filePath) {
     return (
-      <div className="m-1 flex-1 flex items-center justify-center text-gray-400 text-lg rounded-xl shadow-lg bg-white">
+      <div className="flex-1 flex items-center justify-center text-gray-400 text-lg rounded-xl shadow-lg bg-white">
         <FileText className="w-6 h-6 mr-2" />
         Select a file to edit
       </div>
@@ -102,7 +102,7 @@ export default function FileEditor({
   }
 
   return (
-    <div className="m-1 relative flex flex-col h-full w-full rounded-xl shadow-lg bg-white">
+    <div className="relative flex flex-col h-full w-full rounded-xl shadow-lg bg-white">
       <div className="flex items-center gap-2 pb-2 ml-2">
         <Badge
           variant="outline"

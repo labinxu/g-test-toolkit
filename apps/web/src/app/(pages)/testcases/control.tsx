@@ -25,8 +25,8 @@ export function Control({
   run: () => Promise<void>;
 }) {
   return (
-    <div className="flex justify-between items-center m-1 rounded-lg shadow-sm ">
-      <div className="flex items-center gap-2 m-1">
+    <div className="flex justify-between items-center rounded-lg shadow-sm ">
+      <div className="flex items-center gap-2 ">
         <Label htmlFor="run-in-browser" className="mr-2">
           BROWSER
         </Label>
@@ -36,7 +36,7 @@ export function Control({
           onCheckedChange={setUseBrowser}
         />
       </div>
-      <div className="flex items-center gap-2 m-1">
+      <div className="flex items-center gap-2 ">
         <Label htmlFor="run-in-browser" className="mr-2">
           MOBILE
         </Label>
@@ -61,7 +61,7 @@ export function Control({
           </Button>
         ) : null}
       </div>
-      <div className="flex flex-row m-1 gap-3">
+      <div className="flex flex-row gap-3">
         <strong>Server Status:</strong>{' '}
         <span style={{ color: connected ? 'green' : 'red' }}>
           {connected ? 'Connected' : 'Disconnected'}

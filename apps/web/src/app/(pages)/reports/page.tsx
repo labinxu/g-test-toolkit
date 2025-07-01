@@ -15,7 +15,7 @@ export default function Page() {
     : undefined;
 
   return (
-    <div className="flex h-full w-full gap-0 m-4 rounded-lg">
+    <div className="flex h-full w-full gap-0  rounded-lg">
       <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
         <DirectoryTreePanel
           currentDir={currentDir}
