@@ -52,6 +52,10 @@ export function getMenuList(pathname: string): Group[] {
               href: '/testcases',
               label: 'TestCases',
             },
+            {
+              href: '/reports',
+              label: 'Report',
+            },
           ],
         },
         {
@@ -82,12 +86,6 @@ export function getMenuList(pathname: string): Group[] {
           href: '/devices',
           label: 'Devices',
           icon: TabletSmartphone,
-        },
-
-        {
-          href: '/users',
-          label: 'Users',
-          icon: Users,
         },
         {
           href: '/account',

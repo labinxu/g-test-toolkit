@@ -16,7 +16,11 @@ export function OutputPanel({
   const panelHeight = 320;
 
   return (
-    <div className="w-full flex flex-col flex-none">
+    <div
+      className="w-full flex flex-col flex-none"
+      onMouseEnter={() => setOpen(true)}
+      // onMouseLeave={() => setOpen(false)}
+    >
       <div className="px-3 py-2 border-t border-b bg-gray-100 font-medium flex items-center justify-between">
         <span>{title}</span>
         <button

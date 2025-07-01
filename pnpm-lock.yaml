@@ -75,6 +75,9 @@ importers:
       puppeteer-extra-plugin-stealth:
         specifier: ^2.11.2
         version: 2.11.2(puppeteer-extra@3.3.6)
+      puppeteer-extra-plugin-user-preferences:
+        specifier: ^2.4.1
+        version: 2.4.1(puppeteer-extra@3.3.6)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2

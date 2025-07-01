@@ -4,12 +4,13 @@ import {
   main,
   TestCase,
   Test,
+  WithBrowser,
+  WithHeadless,
   __testCaseClasses,
 } from './classes/test-case-main';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { AndroidService } from 'src/mobile/android/android.service';
 import { ReportService } from 'src/report/report.service';
-import { Page } from 'puppeteer';
 import { LoggerService } from 'src/logger/logger.service';
 
 export class SandboxExecutor {
@@ -17,7 +18,6 @@ export class SandboxExecutor {
   private reportService: ReportService;
   private androidService?: AndroidService;
   private loggerService: LoggerService;
-  private page?: Page;
   private workspace: string;
   private clientId: string;
 
@@ -27,7 +27,6 @@ export class SandboxExecutor {
     reportService: ReportService,
     loggerService: LoggerService,
     androidService?: AndroidService,
-    page?: Page,
   ) {
     this.clientId = clientId;
     this.workspace = workspace;
@@ -35,7 +34,6 @@ export class SandboxExecutor {
     this.reportService = reportService;
     this.androidService = androidService;
     this.loggerService = loggerService;
-    this.page = page;
   }
 
   private transpileTypeScript(code: string): string {
@@ -59,7 +57,6 @@ export class SandboxExecutor {
   async execute(clientCode: string): Promise<void> {
     // Clear previous test case classes to avoid conflicts
     __testCaseClasses.length = 0;
-
     // Transpile TypeScript to JavaScript
     let jsCode: string;
     try {
@@ -77,13 +74,15 @@ export class SandboxExecutor {
       exports: module.exports,
       TestCase,
       Test,
+      WithBrowser,
+      WithHeadless,
       console: {
         log: (msg: string) => this.logger.info(msg),
         error: (msg: string) => this.logger.error(msg),
       },
       require: (moduleName: string) => {
         if (moduleName === 'test-case') {
-          return { TestCase, Test };
+          return { TestCase, Test, WithBrowser, WithHeadless };
         }
         throw new Error(`Module ${moduleName} is not available in sandbox`);
       },
@@ -101,7 +100,6 @@ export class SandboxExecutor {
       `;
       const script = new vm.Script(wrappedCode);
       await script.runInContext(context);
-
       // Run the registered test cases using the existing main function
       await main(
         this.clientId,
@@ -109,7 +107,6 @@ export class SandboxExecutor {
         this.reportService,
         this.loggerService,
         this.androidService,
-        this.page,
       );
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

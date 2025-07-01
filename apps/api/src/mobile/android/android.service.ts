@@ -5,7 +5,6 @@ import { LoggerService } from 'src/logger/logger.service';
 import { readFileSync } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
 import { Response } from 'express';
-import { getDefaultAutoSelectFamilyAttemptTimeout } from 'net';
 import { unlink } from 'fs/promises';
 
 @Injectable()
@@ -146,7 +145,7 @@ export class AndroidService {
   async click(deviceId: string, attribute: string, text: string) {
     const node = this.findNode(this.dumpedObj.hierarchy.node, attribute, text);
     if (!node) {
-      this.logger.error(`${attribute} ${text} not found`);
+      this.logger.info(`${attribute} ${text} not found`);
       return;
     }
     const match = node['@_bounds'].match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);

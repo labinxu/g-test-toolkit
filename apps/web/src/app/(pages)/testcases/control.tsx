@@ -26,27 +26,6 @@ export function Control({
 }) {
   return (
     <div className="flex justify-between items-center rounded-lg shadow-sm ">
-      <div className="flex items-center gap-2 ">
-        <Label htmlFor="run-in-browser" className="mr-2">
-          BROWSER
-        </Label>
-        <Switch
-          id="run-in-browser"
-          checked={useBrowser}
-          onCheckedChange={setUseBrowser}
-        />
-      </div>
-      <div className="flex items-center gap-2 ">
-        <Label htmlFor="run-in-browser" className="mr-2">
-          MOBILE
-        </Label>
-        <Switch
-          id="use-mobile"
-          checked={useMobile}
-          onCheckedChange={setUseMobile}
-        />
-      </div>
-
       <div>
         {currentFile ? (
           <Button
@@ -61,7 +40,7 @@ export function Control({
           </Button>
         ) : null}
       </div>
-      <div className="flex flex-row gap-3">
+      <div className="flex flex-row gap-3 pr-2">
         <strong>Server Status:</strong>{' '}
         <span style={{ color: connected ? 'green' : 'red' }}>
           {connected ? 'Connected' : 'Disconnected'}

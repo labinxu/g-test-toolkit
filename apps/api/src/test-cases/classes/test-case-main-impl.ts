@@ -4,6 +4,7 @@ import { AndroidService } from 'src/mobile/android/android.service';
 import { Page } from 'puppeteer';
 import { ReportService } from 'src/report/report.service';
 import { LoggerService } from 'src/logger/logger.service';
+import { BrowserControl } from 'src/browser/browser';
 
 export async function main(
   clientId: string,
@@ -11,10 +12,18 @@ export async function main(
   reportService: ReportService,
   loggerService: LoggerService,
   service?: AndroidService,
-  page?: Page,
 ) {
   const logger = loggerService.createLogger('main');
   for (const Ctor of __testCaseClasses) {
+    const needBrowser = (Ctor as any).__useBrowser;
+    const headless = (Ctor as any).__headless;
+    let page: Page | null = null;
+    let bc: BrowserControl | null = null;
+    if (needBrowser) {
+      bc = new BrowserControl(logger);
+      page = await bc.launch({ headless });
+    }
+
     const instance = new (Ctor as { new (): TestCase })();
     try {
       instance.setWorkspace(workspace);
@@ -53,6 +62,8 @@ export async function main(
       logger.error(
         `Test ${Ctor.name} failed: ${err instanceof Error ? err.message : String(err)}`,
       );
+    } finally {
+      //bc?.closeBrowser();
     }
     reportService.generate(workspace, Ctor.name, instance.getReportData());
   }

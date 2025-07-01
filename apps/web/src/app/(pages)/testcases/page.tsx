@@ -99,7 +99,8 @@ export default function Page() {
         } else if (
           log.includes('success') ||
           log.includes('Success') ||
-          log.includes('finished')
+          log.includes('finished') ||
+          log.includes('passed')
         ) {
           color = 'green';
         }

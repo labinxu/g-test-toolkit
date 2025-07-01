@@ -21,6 +21,8 @@ export class FilesService {
 
     const output: string[] = [
       'export declare function Test(): ClassDecorator;',
+      'export declare function WithBrowser(): ClassDecorator;',
+      'export declare function WithHeadless(): ClassDecorator;',
       'export declare class TestCase implements ITestBase {',
     ];
     for (const file of files) {
