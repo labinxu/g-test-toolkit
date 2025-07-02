@@ -5,7 +5,6 @@ import {
   TestCase,
   Test,
   WithBrowser,
-  WithHeadless,
   __testCaseClasses,
 } from './classes/test-case-main';
 import { CustomLogger } from 'src/logger/logger.custom';
@@ -54,6 +53,61 @@ export class SandboxExecutor {
     }
   }
 
+  async executeWithBundle(clientCode: string): Promise<void> {
+    // Clear previous test case classes to avoid conflicts
+    __testCaseClasses.length = 0;
+    // Transpile TypeScript to JavaScript
+    this.logger.debug('executeWithBundle');
+    // Create a mock module and exports object for CommonJS compatibility
+    const module = { exports: {} };
+    const sandbox = {
+      module,
+      exports: module.exports,
+      TestCase,
+      Test,
+      WithBrowser,
+      console: {
+        log: (msg: string) => this.logger.info(msg),
+        error: (msg: string) => this.logger.error(msg),
+      },
+      require: (moduleName: string) => {
+        if (moduleName === 'test-case') {
+          return { TestCase, Test, WithBrowser };
+        }
+        throw new Error(`Module ${moduleName} is not available in sandbox`);
+      },
+    };
+
+    // Create a VM context
+    const context = vm.createContext(sandbox);
+    this.logger.debug('executeWithBundle Create a VM context');
+    try {
+      // Wrap the transpiled code to ensure CommonJS exports work
+      const wrappedCode = `
+        (function(module, exports, require) {
+          ${clientCode}
+        })(module, exports, require);
+      `;
+      const script = new vm.Script(wrappedCode);
+      await script.runInContext(context);
+      // Run the registered test cases using the existing main function
+      await main(
+        this.clientId,
+        this.workspace,
+        this.reportService,
+        this.loggerService,
+        this.androidService,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      this.logger.sendErrorTo(
+        this.clientId,
+        `Sandbox execution failed: ${errorMsg}`,
+      );
+      throw err;
+    }
+  }
+
   async execute(clientCode: string): Promise<void> {
     // Clear previous test case classes to avoid conflicts
     __testCaseClasses.length = 0;
@@ -75,14 +129,13 @@ export class SandboxExecutor {
       TestCase,
       Test,
       WithBrowser,
-      WithHeadless,
       console: {
         log: (msg: string) => this.logger.info(msg),
         error: (msg: string) => this.logger.error(msg),
       },
       require: (moduleName: string) => {
         if (moduleName === 'test-case') {
-          return { TestCase, Test, WithBrowser, WithHeadless };
+          return { TestCase, Test, WithBrowser };
         }
         throw new Error(`Module ${moduleName} is not available in sandbox`);
       },

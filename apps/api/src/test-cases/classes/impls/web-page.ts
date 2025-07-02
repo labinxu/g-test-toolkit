@@ -24,7 +24,21 @@ export class WebPage {
     this.logger = logger;
   }
   async handleException() {
-    await this.page.screenshot({ path: '/tmp/exception.png' });
+    await this.page.screenshot({ path: '/tmp/WebPage_exception.png' });
+  }
+  async centerSelector(selector: string) {
+    const element = await this.$(selector);
+    if (element) {
+      await element.evaluate((el) =>
+        el.scrollIntoView({
+          behavior: 'auto',
+          block: 'center',
+          inline: 'center',
+        }),
+      );
+    } else {
+      this.logger.sendErrorTo(this.clientId, `${selector} not found!`);
+    }
   }
   async screenshot(options?: Readonly<ScreenshotOptions>): Promise<Uint8Array> {
     try {
@@ -48,9 +62,12 @@ export class WebPage {
     try {
       if (!this.page) throw new Error('Page not initialized');
       this.logger.debug(`goto ${url}`);
-      return await this.page.goto(url, { waitUntil: 'domcontentloaded' });
+      return await this.page.goto(url, {
+        waitUntil: 'networkidle2',
+        timeout: 30000,
+      });
     } catch (err) {
-      this.logger.sendErrorTo(this.clientId, JSON.stringify(err));
+      this.logger.sendErrorTo(this.clientId, `goto ${err}`);
       await this.handleException();
       throw err;
     }
@@ -100,14 +117,14 @@ export class WebPage {
       this.logger.debug(`waitForSelector ${selector}`);
       return await this.page.waitForSelector(selector, options);
     } catch (err) {
-      this.logger.sendErrorTo(this.clientId, `${err}`);
+      this.logger.sendErrorTo(this.clientId, `waitForSelector: ${err}`);
       throw err;
     }
   }
   async reload(options?: WaitForOptions): Promise<HTTPResponse | null> {
     try {
       this.logger.debug('page reload');
-      return await this.page.reload({ waitUntil: 'networkidle2' });
+      return await this.page.reload(options);
     } catch (err) {
       this.logger.sendErrorTo(this.clientId, `${err}`);
       throw err;
@@ -115,21 +132,21 @@ export class WebPage {
   }
   async waitForNetworkIdle(options?: WaitForNetworkIdleOptions): Promise<void> {
     try {
-      this.logger.debug(`waitForNetworkIdle`);
       await this.page.waitForNetworkIdle(options);
     } catch (error) {
-      this.logger.sendErrorTo(this.clientId, JSON.stringify(error));
+      this.logger.sendErrorTo(this.clientId, `waitForNetworkIdle:${error}`);
     }
   }
-  async click(
-    selector: string,
-    options?: Readonly<ClickOptions>,
-  ): Promise<void> {
+  async click(selector: string): Promise<HTTPResponse> {
     try {
-      this.logger.debug(`click ${selector}`);
-      await this.page.click(selector, options);
+      const [response] = await Promise.all([
+        this.page.waitForNavigation(), // The promise resolves after navigation has finished
+        this.page.click(selector), // Clicking the link will indirectly cause a navigation
+      ]);
+      return response;
     } catch (err) {
-      this.logger.sendErrorTo(this.clientId, JSON.stringify(err));
+      this.logger.sendErrorTo(this.clientId, `click: ${err}`);
+      throw err;
     }
   }
 }

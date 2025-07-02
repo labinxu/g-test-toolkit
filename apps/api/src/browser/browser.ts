@@ -8,7 +8,7 @@ puppeteer.use(
   UserPreferencesPlugin({
     userPrefs: {
       // 关闭图片自动加载
-      'profile.default_content_setting_values.images': 2,
+      // 'profile.default_content_setting_values.images': 2,
       // 设置默认下载目录
       //'download.default_directory': '/tmp/my-downloads',
       // 设置浏览器语言
@@ -26,7 +26,12 @@ export class BrowserControl {
   async launch({ headless = false }: { headless: boolean }) {
     this.browser = await puppeteer.launch({
       headless: headless,
-      //args: ['--window-size=800,600'],
+      devtools: true,
+      args: [
+        //'--window-size=800,600',
+        '--no-sandbox',
+        '--disable-features=BlockThirdPartyCookies',
+      ],
       // args: [
       //   '--no-sandbox',
       //   '--disable-gpu',
@@ -36,6 +41,11 @@ export class BrowserControl {
       // ],
     });
     const page = await this.browser.newPage();
+    await page.setViewport({
+      width: 1920, // 宽度，例如 1920px
+      height: 1080, // 高度，例如 1080px
+      deviceScaleFactor: 1, // 缩放比例，1 为正常比例
+    });
     // page.setViewport({ width: 800, height: 600 });
     return page;
   }

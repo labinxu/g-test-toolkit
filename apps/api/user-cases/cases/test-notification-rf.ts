@@ -1,7 +1,7 @@
 import { TestCase, Test,WithBrowser} from 'test-case';
 @Test()
-@WithBrowser({withHeadless:false})
-class MyTest extends TestCase {
+@WithBrowser({headless:false})
+class Notif extends TestCase {
   async test_case1() {
     // prepare mobile clear all notifs
 

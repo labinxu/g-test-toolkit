@@ -19,7 +19,7 @@ export class ReportService {
     this.logger.debug(`generate report at ${workspace}`);
     const now = new Date();
     const reportFile = `${workspace}/${testName}.html`;
-    const hasError = data.logs.some((log: string) =>
+    const hasError = data.logs?.some((log: string) =>
       log.toLowerCase().includes('error'),
     );
     const status = hasError ? 'Failed' : 'Passed';
@@ -52,11 +52,11 @@ export class ReportService {
   </div>
   <div class="log-section">
     <h2>Logs</h2>
-    ${data.logs.map((log: string) => `<div class="log-entry">${log}</div>`).join('')}
+    ${data.logs?.map((log: string) => `<div class="log-entry">${log}</div>`).join('')}
   </div>
   <div class="details-section">
     <h2>Test Details</h2>
-    ${data.details.map((detail: string) => `<pre class="details-entry">${detail}</pre>`).join('')}
+    ${data.details?.map((detail: string) => `<pre class="details-entry">${detail}</pre>`).join('')}
   </div>
 </body>
 </html>`;

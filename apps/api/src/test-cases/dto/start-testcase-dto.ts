@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class StartTestCaseDto {
@@ -18,10 +18,6 @@ export class TestCaseDto {
   @IsString()
   @IsNotEmpty({ message: 'Case name cannot be empty' })
   code: string;
-
-  @ApiProperty({ description: 'browser use', example: 'true' })
-  @IsBoolean()
-  useBrowser: boolean;
 
   @ApiProperty({ description: 'clientId', example: '6gdOX1bg-aRGgwvEAAAB"}' })
   @IsString()

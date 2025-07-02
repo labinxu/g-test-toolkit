@@ -1,26 +1,16 @@
 'use client';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 
 export function Control({
   currentFile,
-  useBrowser,
-  useMobile,
   running,
   connected,
-  setUseBrowser,
-  setUseMobile,
   setRunning,
   run,
 }: {
   currentFile: string;
-  useBrowser: boolean;
-  useMobile: boolean;
   running: boolean;
   connected: boolean;
-  setUseBrowser: (checked: boolean) => void;
-  setUseMobile: (checked: boolean) => void;
   setRunning: (run: boolean) => void;
   run: () => Promise<void>;
 }) {

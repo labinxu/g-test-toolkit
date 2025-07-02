@@ -17,6 +17,7 @@ export async function main(
   for (const Ctor of __testCaseClasses) {
     const needBrowser = (Ctor as any).__useBrowser;
     const headless = (Ctor as any).__headless;
+    const debug = (Ctor as any).__debug;
     let page: Page | null = null;
     let bc: BrowserControl | null = null;
     if (needBrowser) {
@@ -49,21 +50,21 @@ export async function main(
         } catch (err) {
           logger.sendErrorTo(
             clientId,
-            `${Ctor.name}.${method} failed: ${err instanceof Error ? err.message : String(err)}`,
+            `${Ctor.name}.${method} Failed: ${err instanceof Error ? err.message : String(err)}`,
           );
-          continue;
         }
-        logger.info(`Test case ${method} completed successfully`);
+        logger.info(`Test case ${method} completed`);
       }
       await instance.tearDown();
-      logger.info(`Test ${Ctor.name} completed successfully`);
+      logger.info(`Test ${Ctor.name} completed`);
     } catch (err) {
       logger.sendExitTo(clientId);
-      logger.error(
+      logger.sendErrorTo(
+        clientId,
         `Test ${Ctor.name} failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     } finally {
-      //bc?.closeBrowser();
+      !debug && bc?.closeBrowser();
     }
     reportService.generate(workspace, Ctor.name, instance.getReportData());
   }

@@ -8,7 +8,10 @@ import {
   Get,
   Res,
   NotFoundException,
+  Query,
 } from '@nestjs/common';
+import { statSync } from 'fs';
+import * as path from 'path';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
@@ -59,12 +62,30 @@ export class TestCasesController {
   @Post('run/script')
   async runScript(@Body() caseDto: TestCaseDto) {
     try {
-      this.testCasesService.runcase(
-        caseDto.code,
-        caseDto.useBrowser,
-        caseDto.clientId,
-      );
+      this.testCasesService.runcase(caseDto.code, caseDto.clientId);
       return { message: 'ok' };
+    } catch (err) {
+      throw new NotFoundException(err);
+    }
+  }
+  @Get('execute')
+  async execute(
+    @Query('scriptpath') scriptpath: string,
+    @Query('clientId') clientId: string,
+  ) {
+    try {
+      const absPath = path.resolve(process.cwd(), 'user-cases', scriptpath);
+      const stat = statSync(absPath);
+      let message = '';
+      if (stat.isFile()) {
+        this.testCasesService.executeFile(absPath, clientId);
+        message = `execute file ${absPath}`;
+      } else if (stat.isDirectory()) {
+        message = `execute dir ${absPath}`;
+        this.testCasesService.executeDir(absPath, clientId);
+      }
+      //this.testCasesService.runDir(scriptpath);
+      return { message, clientId };
     } catch (err) {
       throw new NotFoundException(err);
     }

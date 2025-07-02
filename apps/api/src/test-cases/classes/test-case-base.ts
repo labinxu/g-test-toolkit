@@ -60,7 +60,7 @@ export class TestCase implements ITestBase {
     const logger = this.loggerService.createLogger('WebPage');
     this.p = new WebPage(this.clientId, page, logger);
     // load the webpage member functions.
-    for (const key of Object.getOwnPropertyNames(Page.prototype)) {
+    for (const key of Object.getOwnPropertyNames(WebPage.prototype)) {
       if (key !== 'constructor' && typeof this.p[key] === 'function') {
         this[key] = this.p[key].bind(this.p);
       }
@@ -104,7 +104,7 @@ export class TestCase implements ITestBase {
   printWarn(message: string) {
     this.logger?.sendWarnTo(this.clientId, message);
   }
-  async exceptEqual(except: any, actual: any) {
+  exceptEqual(except: any, actual: any) {
     this.exceptCounter += 1;
     if (except === actual) {
       this.details.push(
@@ -117,6 +117,20 @@ export class TestCase implements ITestBase {
       throw new Error(`Error: Expected ${except}, got ${actual}`);
     }
   }
+  exceptNotNull(except: any) {
+    this.exceptCounter += 1;
+    if (except) {
+      this.details.push(
+        `Input: ${except} \nExpected: not null \nActual: not null\nResult: Passed`,
+      );
+    } else {
+      this.details.push(
+        `Input: ${except} \nExpected: not null \nActual: is null \nResult: Failed`,
+      );
+      throw new Error(`Error: Expected ${except} is null `);
+    }
+  }
+
   configureDevice(
     sn: string,
     keywords: string,

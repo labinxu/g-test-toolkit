@@ -9,10 +9,11 @@ import { Control } from './control';
 import { OutputPanel } from '@/components/output-panel';
 import { useSocket } from './socket-content';
 
-const INITIAL_CODE = `import { TestCase, Regist } from 'test-case';
-@Regist()
+const INITIAL_CODE = `import { TestCase, Test, WithBrowser} from 'test-case';
+@Test()
+@WithBrowser({headless:false})
 class MyTest extends TestCase {
-  async run() {
+  async test_demo() {
     this.print('Test executed');
   }
 }
@@ -24,8 +25,6 @@ export default function Page() {
   const [code, setCode] = useState<string>(INITIAL_CODE);
   const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [testCase, setTestCase] = useState<string>('');
-  const [useBrowser, setUseBrowser] = useState(true);
-  const [useMobile, setUseMobile] = useState(true);
   const { logs, connected, clientId, clearLogs, running, setRunning } =
     useSocket();
   const monacoRef = useRef<Monaco>(null);
@@ -66,7 +65,7 @@ export default function Page() {
     await fetch('/api/testcase/run/script', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, useBrowser, clientId: clientId }),
+      body: JSON.stringify({ code, clientId: clientId }),
     });
   };
   const handleEditorDidMount: OnMount = useCallback(
@@ -137,13 +136,9 @@ export default function Page() {
           </div>
           <Control
             currentFile={currentFile}
-            useBrowser={useBrowser}
-            useMobile={useMobile}
             running={running}
             connected={connected}
             setRunning={setRunning}
-            setUseBrowser={setUseBrowser}
-            setUseMobile={setUseMobile}
             run={run}
           />
           <OutputPanel renderLogs={renderLogs} />
