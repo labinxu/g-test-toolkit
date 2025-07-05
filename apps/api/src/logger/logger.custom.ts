@@ -26,7 +26,7 @@ export class CustomLogger {
     this.clientId = clientId;
   }
 
-  private format(level: string, message: string): string {
+  format(level: string, message: string): string {
     const timestamp = new Date().toISOString();
     const tag = this.context ? `[${this.context}]` : '';
     return `${timestamp} ${level} ${tag} ${message}`;

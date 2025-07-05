@@ -69,12 +69,20 @@ export async function main(
           typeof (instance as any)[key] === 'function',
       );
       for (const method of withBrowserMethods) {
-        const tempins = instance.clone();
-        const brc = new BrowserControl(logger);
-        page = await brc.launch({ headless });
-        const ret = (tempins as any)[method](page);
-        browserPromises.push(ret);
-        bcs.push(brc);
+        try {
+          const tempins = instance.clone();
+          const brc = new BrowserControl(logger);
+          page = await brc.launch({ headless });
+          const ret = (tempins as any)[method](page).catch((err: Error) => {
+            logger.sendErrorTo(clientId, `${err}`);
+            return { success: false, error: `${err}` }; // 返回错误结果
+          });
+          browserPromises.push(ret);
+          bcs.push(brc);
+        } catch (err) {
+          console.log('=======', err);
+          logger.sendErrorTo(clientId, `${err}`);
+        }
       }
 
       const testMethods = Object.getOwnPropertyNames(
@@ -97,12 +105,9 @@ export async function main(
           );
         } finally {
           logger.info(`Test case ${method} completed`);
-
           continue;
         }
       }
-      await instance.tearDown();
-      logger.info(`Test ${Ctor.name} completed`);
     } catch (err) {
       logger.sendExitTo(clientId);
       logger.error(`${err instanceof Error}?${(err as Error).stack}:${err}`);
@@ -111,13 +116,16 @@ export async function main(
         `Test ${Ctor.name} failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     } finally {
+      await Promise.allSettled(browserPromises);
       if (!debug) {
         await bc?.closeBrowser();
-        await Promise.all(browserPromises);
-        await Promise.all(bcs.map((bc) => bc.closeBrowser()));
+        await Promise.allSettled(bcs.map((bc) => bc.closeBrowser()));
+        await instance.tearDown();
+        logger.sendInfoTo(clientId, `Test ${Ctor.name} completed`);
       }
     }
     reportService.generate(workspace, Ctor.name, instance.getReportData());
   }
+  logger.sendInfoTo(clientId, 'All TestCase Completed!');
   logger.sendExitTo(clientId);
 }

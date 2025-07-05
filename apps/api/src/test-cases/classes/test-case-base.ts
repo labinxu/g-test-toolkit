@@ -7,7 +7,6 @@ import { LoggerService } from 'src/logger/logger.service';
 import { AndroidDevice } from './impls/android-device';
 
 export class TestCase implements ITestBase {
-  protected details: string[] = [];
   protected p: WebPage | null = null;
   protected androidDevice: AndroidDevice | null = null;
   protected deviceId = '';
@@ -16,13 +15,14 @@ export class TestCase implements ITestBase {
   protected swipeCordForScreenOn = '';
   protected androidService: AndroidService | null = null;
   protected reportData: Record<string, any> = {};
-  protected exceptCounter = 0;
   protected logger: CustomLogger | null = null;
   private sharedState: {
     clientId?: string;
     workspace?: string;
     loggerService?: LoggerService;
     logs?: string[];
+    details?: string[];
+    exceptCounter?: number;
   };
   constructor() {
     this.sharedState = {
@@ -30,7 +30,15 @@ export class TestCase implements ITestBase {
       workspace: '',
       logs: [],
       loggerService: null,
+      details: [],
+      exceptCounter: 0,
     };
+  }
+  get exceptCounter() {
+    return this.sharedState.exceptCounter;
+  }
+  get details() {
+    return this.sharedState.details;
   }
   setName(name: string) {
     this.reportData['caseName'] = name;
@@ -46,7 +54,6 @@ export class TestCase implements ITestBase {
     return this.sharedState.workspace;
   }
   get clientId() {
-    console.log('get client Id', this.sharedState.clientId);
     return this.sharedState.clientId;
   }
   setLoggerService(loggerService: LoggerService) {
@@ -115,43 +122,48 @@ export class TestCase implements ITestBase {
     return this.p;
   }
   print(msg: string) {
+    this.logs.push(this.logger?.format('', msg));
     this.logger?.sendLogTo(this.clientId, msg);
   }
   printDebug(message: string) {
+    this.logs.push(this.logger?.format('debug', message));
     this.logger?.sendDebugTo(this.clientId, message);
   }
   printInfo(message: string) {
+    this.logs.push(this.logger?.format('', message));
     this.logger?.sendInfoTo(this.clientId, message);
     this.logger?.info(message);
   }
   printError(message: string) {
+    this.logs.push(this.logger?.format('error', message));
     this.logger?.sendErrorTo(this.clientId, message);
   }
   printWarn(message: string) {
+    this.logs.push(this.logger?.format('warn', message));
     this.logger?.sendWarnTo(this.clientId, message);
   }
-  exceptEqual(except: any, actual: any) {
-    this.exceptCounter += 1;
+  exceptEqual(except: any, actual: any, description?: string) {
+    this.sharedState.exceptCounter += 1;
     if (except === actual) {
       this.details.push(
-        `Input: ${except} === ${actual}\nExpected: ${except}\nActual: ${actual}\nResult: Passed`,
+        `Input: ${except} === ${actual}\nExpected: ${except}\nActual: ${actual}\nResult: Passed\n${description}`,
       );
     } else {
       this.details.push(
-        `Input: ${except} === ${actual}\nExpected: ${except}\nActual: ${actual}\nResult: Failed`,
+        `Input: ${except} === ${actual}\nExpected: ${except}\nActual: ${actual}\nResult: Failed\n${description}`,
       );
       throw new Error(`Error: Expected ${except}, got ${actual}`);
     }
   }
-  exceptNotNull(except: any) {
-    this.exceptCounter += 1;
+  exceptNotNull(except: any, description?: string) {
+    this.sharedState.exceptCounter += 1;
     if (except) {
       this.details.push(
-        `Input: ${except} \nExpected: not null \nActual: not null\nResult: Passed`,
+        `Input: ${except} \nExpected: not null \nActual: not null\nResult: Passed\n${description}`,
       );
     } else {
       this.details.push(
-        `Input: ${except} \nExpected: not null \nActual: is null \nResult: Failed`,
+        `Input: ${except} \nExpected: not null \nActual: is null \nResult: Failed\n${description}`,
       );
       throw new Error(`Error: Expected ${except} is null `);
     }

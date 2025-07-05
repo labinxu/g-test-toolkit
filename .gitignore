@@ -20,7 +20,8 @@ test-results/
 playwright/.cache/
 playwright-report/
 
-
+apps/api/user-cases
+apps/api/workspace
 # Turbo
 .turbo
 

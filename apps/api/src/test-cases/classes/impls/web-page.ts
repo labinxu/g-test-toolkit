@@ -9,7 +9,6 @@ import {
   NodeFor,
   QueryOptions,
   WaitForNetworkIdleOptions,
-  ClickOptions,
   ScreenshotOptions,
   WaitForOptions,
 } from 'puppeteer';
@@ -24,7 +23,9 @@ export class WebPage {
     this.logger = logger;
   }
   async handleException() {
-    await this.page.screenshot({ path: '/tmp/WebPage_exception.png' });
+    const path = `/tmp/web-page-exception-${Date.now()}.png`;
+    //await this.page.screenshot({ path });
+    this.logger.sendInfoTo(this.clientId, `Write page screen to ${path}`);
   }
   async centerSelector(selector: string) {
     const element = await this.$(selector);
@@ -64,10 +65,9 @@ export class WebPage {
       this.logger.debug(`goto ${url}`);
       return await this.page.goto(url, {
         waitUntil: 'networkidle2',
-        timeout: 30000,
       });
     } catch (err) {
-      this.logger.sendErrorTo(this.clientId, `goto ${err}`);
+      this.logger.sendErrorTo(this.clientId, `goto ${url} ${err}`);
       await this.handleException();
       throw err;
     }
