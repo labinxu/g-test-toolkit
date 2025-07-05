@@ -5,7 +5,7 @@ class Notif extends TestCase {
   async test_case1() {
     // prepare mobile clear all notifs
 
-    this.configureDevice('0A171FDD40063C','holding display','125698',"300 900 300 200")
+    await this.configureDevice('0A171FDD40063C','holding display','125698',"300 900 300 200")
     await this.clearAllNotifications()
     await this.home()
     try{

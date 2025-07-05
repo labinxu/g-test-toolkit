@@ -4,10 +4,8 @@ import { AndroidService } from 'src/mobile/android/android.service';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { SandboxExecutor } from './sandbox-executor';
 import { ReportService } from 'src/report/report.service';
-import * as esbuild from 'esbuild';
 import * as path from 'path';
 import { readFileSync, readdirSync } from 'fs';
-import { FilesService } from 'src/files/files.service';
 import { Project, SyntaxKind } from 'ts-morph';
 @Injectable()
 export class TestCasesService {
@@ -16,7 +14,6 @@ export class TestCasesService {
     private readonly loggerService: LoggerService,
     private readonly androidService: AndroidService,
     private readonly reportService: ReportService,
-    private readonly filesService: FilesService,
   ) {
     this.logger = this.loggerService.createLogger('TestCaseService');
   }
@@ -33,8 +30,10 @@ export class TestCasesService {
     try {
       await sandBoxExec.execute(clientCode);
     } catch (err) {
-      this.logger.error(`Exception in case: ${err}`);
-      this.logger.sendLogTo(clientId, `Exception in case: ${err}`);
+      this.logger.sendErrorTo(
+        clientId,
+        `Exception in case: ${err instanceof Error}?${(err as Error).stack}`,
+      );
       this.logger.sendExitTo(clientId);
     }
   }
@@ -51,7 +50,7 @@ export class TestCasesService {
     try {
       await sandBoxExec.executeWithBundle(clientCode);
     } catch (err) {
-      this.logger.error(`Exception in case: ${err}`);
+      this.logger.sendErrorTo(clientId, `Exception in case: ${err}`);
       this.logger.sendLogTo(clientId, `Exception in case: ${err}`);
       this.logger.sendExitTo(clientId);
     }
@@ -60,10 +59,8 @@ export class TestCasesService {
     const files = readdirSync(dir).filter((f) => /\.(ts|js)$/.test(f));
     console.log(JSON.stringify(files));
     for (const f of files) {
-  console.log(path.join(dir, f));
-  await this.executeFile(path.join(dir, f), clientId);
-}
-
+      await this.executeFile(path.resolve(dir, f), clientId);
+    }
   }
   async executeFile(path: string, clientId: string) {
     try {

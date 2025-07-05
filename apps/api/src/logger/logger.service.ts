@@ -15,12 +15,20 @@ export class LoggerService {
   ) {}
 
   createLogger(context: string, clientId?: string): CustomLogger {
-    const customLogger = new CustomLogger(
-      this.winstonLogger,
-      this.loggerGateway,
-      clientId,
-    );
-    customLogger.setContext(context);
-    return customLogger;
+    try {
+      const customLogger = new CustomLogger(
+        this.winstonLogger,
+        this.loggerGateway,
+        clientId,
+      );
+      customLogger.setContext(context);
+      return customLogger;
+    } catch (err) {
+      if (err instanceof Error) {
+        console.error(err.stack);
+      } else {
+        console.error(err);
+      }
+    }
   }
 }

@@ -1,40 +1,82 @@
-import { __testCaseClasses } from './test-case-decorator';
+import {
+  __testCaseClasses,
+  __useBrowserStaticMethods,
+} from './test-case-decorator';
 import { TestCase } from './test-case-base';
 import { AndroidService } from 'src/mobile/android/android.service';
 import { Page } from 'puppeteer';
 import { ReportService } from 'src/report/report.service';
 import { LoggerService } from 'src/logger/logger.service';
 import { BrowserControl } from 'src/browser/browser';
+function initTestCaseInstance(
+  instance: TestCase,
+  workspace: string,
+  page: Page,
+  loggerService: LoggerService,
+  androidService: AndroidService,
+  clientId: string,
+) {
+  instance.setWorkspace(workspace);
+  instance.setClientId(clientId);
+  instance.setLoggerService(loggerService);
+  if (androidService) instance.setAndroidService(androidService);
+  if (page) instance.setPage(page);
+  return instance;
+}
 
 export async function main(
   clientId: string,
   workspace: string,
   reportService: ReportService,
   loggerService: LoggerService,
-  service?: AndroidService,
+  androidService?: AndroidService,
 ) {
   const logger = loggerService.createLogger('main');
   for (const Ctor of __testCaseClasses) {
     const needBrowser = (Ctor as any).__useBrowser;
+    console.log('needBrowser', needBrowser);
     const headless = (Ctor as any).__headless;
     const debug = (Ctor as any).__debug;
+
     let page: Page | null = null;
     let bc: BrowserControl | null = null;
+    let bcs: BrowserControl[] = [];
+    const browserPromises: Promise<void>[] = [];
+
     if (needBrowser) {
       bc = new BrowserControl(logger);
       page = await bc.launch({ headless });
     }
 
-    const instance = new (Ctor as { new (): TestCase })();
+    let instance = new (Ctor as { new (): TestCase })();
     try {
-      instance.setWorkspace(workspace);
-      instance.setLoggerService(loggerService);
-      instance.setClientId(clientId);
-      if (page) instance.setPage(page);
-      if (service) instance.setAndroidService(service);
+      instance = initTestCaseInstance(
+        instance,
+        workspace,
+        page,
+        loggerService,
+        androidService,
+        clientId,
+      );
       logger.setContext(Ctor.name);
 
       await instance.tearUp();
+      const withBrowserMethods = Object.getOwnPropertyNames(
+        Object.getPrototypeOf(instance),
+      ).filter(
+        (key) =>
+          key.startsWith('browser') &&
+          typeof (instance as any)[key] === 'function',
+      );
+      for (const method of withBrowserMethods) {
+        const tempins = instance.clone();
+        const brc = new BrowserControl(logger);
+        page = await brc.launch({ headless });
+        const ret = (tempins as any)[method](page);
+        browserPromises.push(ret);
+        bcs.push(brc);
+      }
+
       const testMethods = Object.getOwnPropertyNames(
         Object.getPrototypeOf(instance),
       ).filter(
@@ -48,23 +90,32 @@ export async function main(
           await (instance as any)[method]();
           logger.sendInfoTo(clientId, `${Ctor.name}.${method} passed`);
         } catch (err) {
+          console.error(`${String(err)}`);
           logger.sendErrorTo(
             clientId,
             `${Ctor.name}.${method} Failed: ${err instanceof Error ? err.message : String(err)}`,
           );
+        } finally {
+          logger.info(`Test case ${method} completed`);
+
+          continue;
         }
-        logger.info(`Test case ${method} completed`);
       }
       await instance.tearDown();
       logger.info(`Test ${Ctor.name} completed`);
     } catch (err) {
       logger.sendExitTo(clientId);
+      logger.error(`${err instanceof Error}?${(err as Error).stack}:${err}`);
       logger.sendErrorTo(
         clientId,
         `Test ${Ctor.name} failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     } finally {
-      !debug && bc?.closeBrowser();
+      if (!debug) {
+        await bc?.closeBrowser();
+        await Promise.all(browserPromises);
+        await Promise.all(bcs.map((bc) => bc.closeBrowser()));
+      }
     }
     reportService.generate(workspace, Ctor.name, instance.getReportData());
   }

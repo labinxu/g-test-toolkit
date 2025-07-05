@@ -1,13 +1,24 @@
 {
   "extends": "@repo/typescript-config/nestjs.json",
   "compilerOptions": {
+    "target": "es2020",
     "baseUrl": "./",
     "module": "CommonJS",
     "outDir": "./dist",
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "allowJs": true,
-
-    "types": ["node", "puppeteer"]
-  }
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "types": ["node", "puppeteer"],
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "moduleResolution": "commonjs",
+    "strict": true,
+    "useDefineForClassFields": true,
+    "strictPropertyInitialization": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "user-cases"]
 }

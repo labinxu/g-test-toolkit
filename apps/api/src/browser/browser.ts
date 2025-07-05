@@ -3,6 +3,7 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { CustomLogger } from 'src/logger/logger.custom';
 import UserPreferencesPlugin from 'puppeteer-extra-plugin-user-preferences';
+export { Browser };
 puppeteer.use(StealthPlugin());
 puppeteer.use(
   UserPreferencesPlugin({

@@ -20,8 +20,16 @@ export class AndroidDevice {
     this.clientId = clientId;
     this.logger = logger;
     this.androidService = androidService;
+    this.androidService.getDevices();
   }
-  setDeviceId(id: string) {
+
+  async setDeviceId(id: string) {
+    const { devices } = await this.androidService.getDevices();
+    if (devices.search(id) === -1) {
+      throw new Error(`device ${id} not ready`);
+    }
+    this.logger.sendDebugTo(this.clientId, devices);
+
     this.deviceId = id;
   }
   setScreenPassword(pwd: string) {

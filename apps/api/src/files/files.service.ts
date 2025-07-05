@@ -12,33 +12,35 @@ const methodRegex =
 export class FilesService {
   private logger: CustomLogger;
   constructor(private readonly loggerService: LoggerService) {
-    this.logger = loggerService.createLogger('FileService');
+    this.logger = this.loggerService.createLogger('FileService');
   }
   makeTypesFile(oFile: string = null): string[] {
-    this.logger.debug('make types file');
-    if (existsSync(oFile)) {
-      const content = readFileSync(oFile);
-      return content.toString().split('\n');
-    }
+    this.logger.debug(`'make types file' output:${oFile}`);
+    // if (oFile && existsSync(oFile)) {
+    //   const content = readFileSync(oFile);
+    //   return content.toString().split('\n');
+    // }
     const files = [
-      'dist/src/test-cases/classes/impls/android-device.d.ts',
-      'dist/src/test-cases/classes/impls/web-page.d.ts',
-      'dist/src/test-cases/classes/test-case-base.d.ts',
+      'dist/test-cases/classes/impls/android-device.d.ts',
+      'dist/test-cases/classes/impls/web-page.d.ts',
+      'dist/test-cases/classes/test-case-base.d.ts',
     ];
 
     const output: string[] = [
       'export declare function Test(): ClassDecorator;',
-      'export declare function WithBrowser(): ClassDecorator;',
+      'export declare function withBrowser(): ClassDecorator;',
       'export declare function WithHeadless(): ClassDecorator;',
+      'export declare function useBrowser(): ClassDecorator;',
       'export declare class TestCase implements ITestBase {',
     ];
     for (const file of files) {
       output.push(...this.extractMethodsFromFile(file));
     }
     output.push('}');
-    if (oFile) {
-      writeFileSync(oFile, output.join('\n'), 'utf8');
-    }
+    //console.log(output);
+    // if (oFile) {
+    //   writeFileSync(oFile, output.join('\n'), 'utf8');
+    // }
     return output;
   }
   extractMethodsFromFile(filePath: string): string[] {

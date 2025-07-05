@@ -4,13 +4,14 @@ import {
   main,
   TestCase,
   Test,
-  WithBrowser,
+  withBrowser,
   __testCaseClasses,
 } from './classes/test-case-main';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { AndroidService } from 'src/mobile/android/android.service';
 import { ReportService } from 'src/report/report.service';
 import { LoggerService } from 'src/logger/logger.service';
+import { useBrowser } from './classes/test-case-decorator';
 
 export class SandboxExecutor {
   private logger: CustomLogger;
@@ -65,14 +66,14 @@ export class SandboxExecutor {
       exports: module.exports,
       TestCase,
       Test,
-      WithBrowser,
+      withBrowser,
       console: {
         log: (msg: string) => this.logger.info(msg),
         error: (msg: string) => this.logger.error(msg),
       },
       require: (moduleName: string) => {
         if (moduleName === 'test-case') {
-          return { TestCase, Test, WithBrowser };
+          return { TestCase, Test, withBrowser, useBrowser };
         }
         throw new Error(`Module ${moduleName} is not available in sandbox`);
       },
@@ -128,14 +129,14 @@ export class SandboxExecutor {
       exports: module.exports,
       TestCase,
       Test,
-      WithBrowser,
+      withBrowser,
       console: {
         log: (msg: string) => this.logger.info(msg),
         error: (msg: string) => this.logger.error(msg),
       },
       require: (moduleName: string) => {
         if (moduleName === 'test-case') {
-          return { TestCase, Test, WithBrowser };
+          return { TestCase, Test, withBrowser, useBrowser };
         }
         throw new Error(`Module ${moduleName} is not available in sandbox`);
       },

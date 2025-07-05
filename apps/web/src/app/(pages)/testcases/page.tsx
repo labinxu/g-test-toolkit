@@ -31,6 +31,11 @@ export default function Page() {
 
   const testcaseQuery = useQuery({
     queryKey: ['init'],
+    staleTime: Infinity,
+    cacheTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     queryFn: () =>
       fetch(`/api/testcase/init`, {
         method: 'GET',
