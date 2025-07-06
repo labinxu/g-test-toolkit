@@ -11,13 +11,14 @@ import {
   Query,
 } from '@nestjs/common';
 import { statSync } from 'fs';
+import { readdir, readFile } from 'fs/promises';
 import * as path from 'path';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TestCasesService } from './testcases.service';
 import { StartTestCaseDto, TestCaseDto } from './dto/start-testcase-dto';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { FilesService } from 'src/files/files.service';
 
 @Controller('testcase')
@@ -82,7 +83,42 @@ export class TestCasesController {
         message = `execute file ${absPath}`;
       } else if (stat.isDirectory()) {
         message = `execute dir ${absPath}`;
+        const files = readdirSync(absPath).filter((f) => /\.(ts|js)$/.test(f));
         this.testCasesService.executeDir(absPath, clientId);
+      }
+      //this.testCasesService.runDir(scriptpath);
+      return { message, clientId };
+    } catch (err) {
+      throw new NotFoundException(err);
+    }
+  }
+  @Get('bundle')
+  async executeBundle(
+    @Query('scriptpath') scriptpath: string,
+    @Query('clientId') clientId: string,
+  ) {
+    try {
+      const absPath = path.resolve(process.cwd(), 'user-cases', scriptpath);
+      console.log(`===== executeBundle ${absPath}`);
+      const stat = statSync(absPath);
+      let message = '';
+      if (stat.isFile()) {
+        this.testCasesService.executeFile(absPath, clientId);
+        message = `execute file ${absPath}`;
+      } else if (stat.isDirectory()) {
+        message = `execute dir ${absPath}`;
+
+        const filesContent: { [filename: string]: string } = {};
+        const files = await readdir(absPath);
+        await Promise.all(
+          files.map(async (file) => {
+            const fullPath = path.join(absPath, file);
+            console.log(fullPath);
+            filesContent[fullPath] = await readFile(fullPath, 'utf-8');
+          }),
+        );
+
+        this.testCasesService.executeTestFiles(filesContent, clientId);
       }
       //this.testCasesService.runDir(scriptpath);
       return { message, clientId };

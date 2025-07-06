@@ -39,7 +39,7 @@ export class CommandService {
   }
   async dumpxml(deviceId: string) {
     const dumpcommand = `adb -s ${deviceId} shell uiautomator dump`;
-    await this.runCommand(dumpcommand);
+    return await this.runCommand(dumpcommand);
   }
   async pullDumpedXml(deviceId: string, outPath: string) {
     const pullcommand = `adb -s ${deviceId} pull /sdcard/window_dump.xml ${outPath}`;

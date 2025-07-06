@@ -1,6 +1,6 @@
-import { TestCase, Test,WithBrowser} from 'test-case';
+import { TestCase, Test,withBrowser} from 'test-case';
 @Test()
-@WithBrowser({headless:false})
+@withBrowser({headless:false,debug:true})
 class Notif extends TestCase {
   async test_case1() {
     // prepare mobile clear all notifs
@@ -13,6 +13,7 @@ class Notif extends TestCase {
       await this.waitForNetworkIdle()
     }catch(err){
       this.printError(err)
+      return
     }
     // login with password
     const spans = await this.$$('form.form.notranslate div span');
@@ -30,16 +31,15 @@ class Notif extends TestCase {
     await result[0].click()
       await this.type('input#email',"labin_test1")
       await this.type('input#password','!labin_test1')
-      const [response] = await Promise.all([
-            this.waitForNetworkIdle(), // The promise resolves after navigation has finished
-            this.click('button[type="submit"]'), // Clicking the link will indirectly cause a navigation
-      ]);
+      // const [response] = await Promise.all([
+      //       this.waitForNetworkIdle(), // The promise resolves after navigation has finished
+      await this.click('button[type="submit"]'), // Clicking the link will indirectly cause a navigation
+      // ]);
       this.print('after submit')
       //await this.reload();
-      await this.waitForSelector('button[type="button"]')
-      const createBt= await this.$$('button[type="button"]')
+      const createBt= await this.$$('button')
       
-      await createBt[0].click()
+      await createBt[3].click()
       await this.waitForSelector('div#simple-popper button')
      
       const buttons = await this.$$('div#simple-popper button')
@@ -56,6 +56,5 @@ class Notif extends TestCase {
       await this.screenOn();
       await this.exceptIncludesNotifyText(postContent)
       //await this.screenshot();
-    this.printInfo('Test executed');
   }
 }

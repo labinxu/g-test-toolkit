@@ -132,18 +132,19 @@ export class WebPage {
   }
   async waitForNetworkIdle(options?: WaitForNetworkIdleOptions): Promise<void> {
     try {
-      await this.page.waitForNetworkIdle(options);
+      await this.page.waitForNetworkIdle();
     } catch (error) {
       this.logger.sendErrorTo(this.clientId, `waitForNetworkIdle:${error}`);
     }
   }
-  async click(selector: string): Promise<HTTPResponse> {
+  async click(selector: string) {
     try {
-      const [response] = await Promise.all([
-        this.page.waitForNavigation(), // The promise resolves after navigation has finished
-        this.page.click(selector), // Clicking the link will indirectly cause a navigation
-      ]);
-      return response;
+      return await this.page.click(selector);
+      // const [response] = await Promise.all([
+      //   this.page.waitForNavigation({ waitUntil: 'networkidle2' }), // The promise resolves after navigation has finished
+      //   this.page.click(selector), // Clicking the link will indirectly cause a navigation
+      // ]);
+      // return response;
     } catch (err) {
       this.logger.sendErrorTo(this.clientId, `click: ${err}`);
       throw err;

@@ -20,7 +20,6 @@ export class AndroidDevice {
     this.clientId = clientId;
     this.logger = logger;
     this.androidService = androidService;
-    this.androidService.getDevices();
   }
 
   async setDeviceId(id: string) {
@@ -28,9 +27,8 @@ export class AndroidDevice {
     if (devices.search(id) === -1) {
       throw new Error(`device ${id} not ready`);
     }
-    this.logger.sendDebugTo(this.clientId, devices);
-
     this.deviceId = id;
+    this.logger.sendDebugTo(this.clientId, devices);
   }
   setScreenPassword(pwd: string) {
     this.screenPwd = pwd;
@@ -92,8 +90,14 @@ export class AndroidDevice {
     }
     this.details.push(`Expected: ${exceptText}\nActual: Found\nResult: Passed`);
   }
+  async expandNotifBar() {
+    await this.androidService.expandNotifBar(this.deviceId);
+  }
   async clearAllNotifications() {
-    this.logger?.sendDebugTo(this.clientId, 'Clearing all notifications');
+    this.logger?.sendDebugTo(
+      this.clientId,
+      ` Clearing all notifications deviceID:${this.deviceId}`,
+    );
     if (!this.androidService) throw new Error('AndroidService not initialized');
     await this.androidService.clearAllNotif(
       this.deviceId,

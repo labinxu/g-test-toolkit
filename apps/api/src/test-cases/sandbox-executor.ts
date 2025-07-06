@@ -67,6 +67,7 @@ export class SandboxExecutor {
       TestCase,
       Test,
       withBrowser,
+      useBrowser,
       console: {
         log: (msg: string) => this.logger.info(msg),
         error: (msg: string) => this.logger.error(msg),

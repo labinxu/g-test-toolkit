@@ -100,22 +100,8 @@ export class TestCase implements ITestBase {
     }
   }
   setAndroidService(service: AndroidService) {
+    this.logger.sendDebugTo(this.clientId, 'init android service');
     this.androidService = service;
-    this.androidDevice = new AndroidDevice(
-      this.clientId,
-      this.androidService,
-      this.loggerService.createLogger('AndroidDevice'),
-    );
-
-    // load the webpage member functions.
-    for (const key of Object.getOwnPropertyNames(AndroidDevice.prototype)) {
-      if (
-        key !== 'constructor' &&
-        typeof this.androidDevice[key] === 'function'
-      ) {
-        this[key] = this.androidDevice[key].bind(this.androidDevice);
-      }
-    }
   }
 
   page() {
@@ -176,8 +162,11 @@ export class TestCase implements ITestBase {
     swipeCord: string,
   ) {
     if (!this.androidDevice) {
-      this.logger.sendErrorTo(this.clientId, 'Device not initialized');
-      return;
+      this.androidDevice = new AndroidDevice(
+        this.clientId,
+        this.androidService,
+        this.loggerService.createLogger(`AndroidDevice[${sn}]`),
+      );
     }
     try {
       this.logger.sendDebugTo(this.clientId, `config device ${sn}`);
@@ -185,8 +174,18 @@ export class TestCase implements ITestBase {
       this.androidDevice.setPowerCheckWords(keywords);
       this.androidDevice.setScreenPassword(password);
       this.androidDevice.setUnlockSwipeCord(swipeCord);
+      // load the webpage member functions.
+      for (const key of Object.getOwnPropertyNames(AndroidDevice.prototype)) {
+        if (
+          key !== 'constructor' &&
+          typeof this.androidDevice[key] === 'function'
+        ) {
+          this[key] = this.androidDevice[key].bind(this.androidDevice);
+        }
+      }
     } catch (err) {
       this.logger.sendErrorTo(this.clientId, `${err}`);
+      throw new Error(`${err}`);
     }
   }
   async delay(ms: number) {

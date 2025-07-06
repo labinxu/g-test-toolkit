@@ -130,7 +130,9 @@ export class AndroidService {
       if (!/^[a-zA-Z0-9_-]+$/.test(deviceId)) {
         throw new Error('Invalid device ID');
       }
-      await this.commandService.dumpxml(deviceId);
+      const { stdout, stderr } = await this.commandService.dumpxml(deviceId);
+      this.logger.debug(stderr.toString());
+      this.logger.debug(stdout.toString());
       const xmlfilepath = `${workspace}/window_dump-${deviceId}.xml`;
       await this.commandService.pullDumpedXml(deviceId, xmlfilepath);
       const xmlstring = readFileSync(xmlfilepath);
@@ -148,6 +150,7 @@ export class AndroidService {
       this.logger.info(`${attribute} ${text} not found`);
       return;
     }
+    this.logger.info(JSON.stringify(node));
     const match = node['@_bounds'].match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
     if (match) {
       const x1 = parseInt(match[1]);
@@ -167,6 +170,9 @@ export class AndroidService {
   ): Promise<boolean> {
     return await this.commandService.dumpNotifWithText(deviceId, searchString);
   }
+  async expandNotifBar(deviceId: string) {
+    await this.commandService.expandNotifBar(deviceId);
+  }
   async clearAllNotif(
     deviceId: string,
     keywords = 'holding display',
@@ -181,11 +187,11 @@ export class AndroidService {
       password,
       swipeData,
     );
-    const dumppath = `/tmp`;
+    const dumppath = `.`;
     await this.commandService.expandNotifBar(deviceId);
     const tmpfile = await this.dumpxmlTo(deviceId, dumppath);
     await this.click(deviceId, attribute, text);
-    await unlink(tmpfile);
+    // await unlink(tmpfile);
   }
   async snapscreenTo(deviceId: string, filePath: string) {
     await this.commandService.snapshot(deviceId);

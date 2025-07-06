@@ -75,12 +75,11 @@ export async function main(
           page = await brc.launch({ headless });
           const ret = (tempins as any)[method](page).catch((err: Error) => {
             logger.sendErrorTo(clientId, `${err}`);
-            return { success: false, error: `${err}` }; // 返回错误结果
+            return { success: false, error: `${err}` };
           });
           browserPromises.push(ret);
           bcs.push(brc);
         } catch (err) {
-          console.log('=======', err);
           logger.sendErrorTo(clientId, `${err}`);
         }
       }
@@ -104,8 +103,7 @@ export async function main(
             `${Ctor.name}.${method} Failed: ${err instanceof Error ? err.message : String(err)}`,
           );
         } finally {
-          logger.info(`Test case ${method} completed`);
-          continue;
+          logger.info(`${Ctor.name}.${method} completed`);
         }
       }
     } catch (err) {
@@ -121,8 +119,8 @@ export async function main(
         await bc?.closeBrowser();
         await Promise.allSettled(bcs.map((bc) => bc.closeBrowser()));
         await instance.tearDown();
-        logger.sendInfoTo(clientId, `Test ${Ctor.name} completed`);
       }
+      logger.sendInfoTo(clientId, `TestCase ${Ctor.name} completed`);
     }
     reportService.generate(workspace, Ctor.name, instance.getReportData());
   }

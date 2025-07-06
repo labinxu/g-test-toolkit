@@ -25,8 +25,8 @@ export function useBrowser() {
 }
 
 export function withBrowser(options: {
-  headless: boolean;
-  debug: boolean;
+  headless?: boolean;
+  debug?: boolean;
 }): ClassDecorator {
   return function (constructor: Function) {
     if (!options) {
