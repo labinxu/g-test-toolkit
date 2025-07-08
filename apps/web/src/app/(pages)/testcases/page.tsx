@@ -3,11 +3,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
 import DirectoryTreePanel from '@/components/files/directory-tree-panel';
-import FileEditor from '@/components/files/file-editor';
-import { useQuery } from '@tanstack/react-query';
+import { ScriptEditor } from './script-editor';
 import { Control } from './control';
 import { OutputPanel } from '@/components/output-panel';
 import { useSocket } from './socket-content';
+import { useSession } from '@/app/context/session-context';
 
 const INITIAL_CODE = `import { TestCase, Test, WithBrowser} from 'test-case';
 @Test()
@@ -22,36 +22,25 @@ const headers = { 'Content-Type': 'application/json' };
 export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
   const [currentDir, setCurrentDir] = useState('./user-cases/cases');
-  const [code, setCode] = useState<string>(INITIAL_CODE);
   const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [testCase, setTestCase] = useState<string>('');
   const { logs, connected, clientId, clearLogs, running, setRunning } =
     useSocket();
+  const { isAuthenticated, accessToken } = useSession();
   const monacoRef = useRef<Monaco>(null);
-
-  const testcaseQuery = useQuery({
-    queryKey: ['init'],
-    staleTime: Infinity,
-    cacheTime: Infinity,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    queryFn: () =>
-      fetch(`/api/testcase/init`, {
-        method: 'GET',
-        headers: { ...headers },
-      }).then((res) => {
-        if (res.ok) {
-          return res.json();
-        }
-      }),
-  });
-
   useEffect(() => {
-    if (testcaseQuery.isPending) return;
-    const { content } = testcaseQuery.data;
-    setTestCase(content);
-  }, [testcaseQuery]);
+    if (!isAuthenticated) {
+      return;
+    }
+    fetch(`/api/files/testmodule`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: 'include',
+    })
+      .then((res) => res.json())
+      .then((content: any) => {
+        setTestCase(content['content']);
+      });
+  }, [accessToken, isAuthenticated]);
 
   useEffect(() => {
     if (testCase !== '' && monacoRef.current) {
@@ -64,15 +53,18 @@ export default function Page() {
       setMonacoInited(false);
     };
   }, [testCase, monacoInited]);
-
-  const run = async () => {
+  const run = useCallback(async () => {
+    console.log('run current file', currentFile);
     clearLogs();
-    await fetch('/api/testcase/run/script', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, clientId: clientId }),
-    });
-  };
+    await fetch(
+      `/api/testcase/execute?scriptpath=${encodeURIComponent(currentFile)}&clientId=${clientId}`,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+  }, [currentFile, clientId]);
+
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {
       if (!monaco || !editor) return;
@@ -131,12 +123,9 @@ export default function Page() {
       <div className="flex-1 pl-4 h-full min-w-0 flex flex-col transition-all duration-300 min-h-0">
         <div className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 min-h-0">
-            <FileEditor
-              template={INITIAL_CODE}
+            <ScriptEditor
               filePath={currentFile}
               onMount={handleEditorDidMount}
-              content={code}
-              setContent={setCode}
             />
           </div>
           <Control

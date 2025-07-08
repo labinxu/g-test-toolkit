@@ -4,7 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Plus } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { useSession } from '@/app/context/session-context';
 
 export default function NewFileOrFolder({
   parentDir,
@@ -16,6 +22,7 @@ export default function NewFileOrFolder({
   const [isFolder, setIsFolder] = useState(false);
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
+  const { isAuthenticated, accessToken } = useSession();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,13 +30,19 @@ export default function NewFileOrFolder({
     if (isFolder) {
       await fetch('/api/files/mkdir', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ dir: `${parentDir}/${name}` }),
       });
     } else {
       await fetch('/api/files/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ path: `${parentDir}/${name}`, content }),
       });
     }

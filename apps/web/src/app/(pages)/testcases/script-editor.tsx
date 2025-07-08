@@ -6,22 +6,18 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FileText, Save, Loader2 } from 'lucide-react';
 import { OnMount } from '@monaco-editor/react';
+import { useSession } from '@/app/context/session-context';
+import { useQuery } from '@tanstack/react-query';
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
 });
 
-export default function FileEditor({
-  template,
+export function ScriptEditor({
   filePath,
   onMount,
-  content,
-  setContent,
 }: {
-  template: string;
   onMount: OnMount;
   filePath: string;
-  content: string;
-  setContent: (text: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -29,30 +25,68 @@ export default function FileEditor({
   const [error, setError] = useState<string | null>(null);
   const [language, setLanguage] = useState<string>('typescript');
   const lastLoadedPath = useRef<string | null>(null);
+  const [content, setContent] = useState('');
+  const { isAuthenticated, accessToken } = useSession();
+
+  // const fileQuery = useQuery({
+  //   queryKey: [filePath, isAuthenticated, accessToken],
+  //   staleTime: Infinity,
+  //   refetchOnMount: false,
+  //   refetchOnWindowFocus: false,
+  //   refetchOnReconnect: false,
+  //   enabled: isAuthenticated && filePath != '',
+  //   queryFn: () =>
+  //     fetch(`/api/files/script?path=${encodeURIComponent(filePath)}`, {
+  //       method: 'get',
+  //       headers: { Authorization: `Bearer ${accessToken}` },
+  //       credentials: 'include',
+  //     }).then((res) => res.text()),
+  // });
+  // useEffect(() => {
+  //   if (fileQuery.isPending) return;
+  //   if (!fileQuery.data) return;
+  //   const content = fileQuery.data;
+  //   setContent(content);
+  //   setChanged(false);
+  //   lastLoadedPath.current = filePath;
+  // }, [fileQuery]);
 
   // Load file content
   useEffect(() => {
-    if (!filePath) return;
+    if (!filePath || !isAuthenticated) return;
     setLoading(true);
     setError(null);
-    fetch(`/api/files?path=${encodeURIComponent(filePath)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Load file failed');
-        return res.json();
-      })
+    fetch(`/api/files/script?path=${encodeURIComponent(filePath)}`, {
+      method: 'get',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: 'include',
+    })
+      .then((res) => res.text())
       .then((data) => {
-        const { content } = data;
-        if (content.length < 3) {
-          setContent(template);
-        } else {
-          setContent(content);
-        }
+        setContent(data);
         setChanged(false);
         lastLoadedPath.current = filePath;
       })
       .catch((e) => setError(e.message || 'Loading failed'))
       .finally(() => setLoading(false));
-  }, [filePath]);
+
+    //   fetch(`/api/files/script?path=${encodeURIComponent(filePath)}`, {
+    //     method: 'GET',
+    //     headers: { Autorization: `Bearer ${accessToken}` },
+    //     credentials: 'include',
+    //   })
+    //     .then((res) => {
+    //       if (!res.ok) throw new Error('Load file failed');
+    //       return res.text();
+    //     })
+    //     .then((data) => {
+    //       setContent(data);
+    //       setChanged(false);
+    //       lastLoadedPath.current = filePath;
+    //     })
+    //     .catch((e) => setError(e.message || 'Loading failed'))
+    //     .finally(() => setLoading(false));
+  }, [filePath, isAuthenticated, accessToken]);
 
   // Save file
   async function save() {
@@ -62,7 +96,10 @@ export default function FileEditor({
     try {
       const res = await fetch('/api/files', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ path: filePath, content }),
       });
       if (!res.ok) throw new Error('保存失败');

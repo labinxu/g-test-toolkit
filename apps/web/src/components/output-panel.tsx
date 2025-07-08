@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-
+import { Button } from './ui/button';
+import { ChevronsUpDown } from 'lucide-react';
 interface OutputPanelProps {
   renderLogs: () => React.ReactNode;
   title?: string;
@@ -18,17 +19,18 @@ export function OutputPanel({
   return (
     <div
       className="w-full flex flex-col flex-none"
-      onMouseEnter={() => setOpen(true)}
+      // onMouseEnter={() => setOpen(true)}
       // onMouseLeave={() => setOpen(false)}
     >
-      <div className="px-3 py-2 border-t border-b bg-gray-100 font-medium flex items-center justify-between">
-        <span>{title}</span>
-        <button
-          className="ml-2 px-2 py-1 text-xs border rounded hover:bg-gray-200"
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? '▲' : '▼'}
-        </button>
+      <div className="px-3 py-2 border-t border-b bg-gray-100 font-medium flex items-center">
+        <div>
+          <span>{title}</span>
+        </div>
+        <div className="flex justify-center items-center w-full">
+          <Button variant={'secondary'} onClick={() => setOpen((v) => !v)}>
+            <ChevronsUpDown />
+          </Button>
+        </div>
       </div>
       <div
         className="overflow-hidden transition-[max-height] duration-300"

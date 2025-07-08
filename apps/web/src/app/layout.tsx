@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import AdminPanelLayout from '@/components/admin-panel/admin-panel-layout';
 import './globals.css';
 
 const geistSans = Geist({
@@ -25,9 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen  flex-1 `}
       >
-        <AdminPanelLayout>{children}</AdminPanelLayout>
+        {children}
       </body>
     </html>
   );

@@ -140,8 +140,8 @@ export class WebPage {
   async click(selector: string) {
     try {
       return await this.page.click(selector);
-      // const [response] = await Promise.all([
-      //   this.page.waitForNavigation({ waitUntil: 'networkidle2' }), // The promise resolves after navigation has finished
+      // const response = await Promise.all([
+      //   //this.page.waitForNavigation({ waitUntil: 'networkidle2' }), // The promise resolves after navigation has finished
       //   this.page.click(selector), // Clicking the link will indirectly cause a navigation
       // ]);
       // return response;

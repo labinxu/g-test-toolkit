@@ -1,13 +1,5 @@
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
 import Cookies from 'js-cookie';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
-export const refreshToken = async (): Promise<string> => {
+export const RefreshToken = async (): Promise<string> => {
   const refreshToken = Cookies.get('refreshToken');
   if (!refreshToken) {
     throw new Error('No refresh token available');

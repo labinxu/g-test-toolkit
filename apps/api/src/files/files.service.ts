@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
-import * as esbuild from 'esbuild';
 import * as path from 'path';
-import { readFileSync, readdirSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, readdirSync, writeFileSync } from 'fs';
+import { Project } from 'ts-morph';
+import { SyntaxKind } from 'typescript';
 
 // 匹配函数声明（不包含 constructor）
 const methodRegex =
@@ -14,7 +15,7 @@ export class FilesService {
   constructor(private readonly loggerService: LoggerService) {
     this.logger = this.loggerService.createLogger('FileService');
   }
-  makeTypesFile(oFile: string = null): string[] {
+  makeTypesFile(oFile: string = null) {
     this.logger.debug(`'make types file' output:${oFile}`);
     // if (oFile && existsSync(oFile)) {
     //   const content = readFileSync(oFile);
@@ -25,23 +26,63 @@ export class FilesService {
       'dist/test-cases/classes/impls/web-page.d.ts',
       'dist/test-cases/classes/test-case-base.d.ts',
     ];
-
-    const output: string[] = [
+    const project = new Project();
+    const sourceFiles = files.map((path) => project.addSourceFileAtPath(path));
+    const methodDeclarations: string[] = [
       'export declare function Test(): ClassDecorator;',
       'export declare function withBrowser(): ClassDecorator;',
       'export declare function WithHeadless(): ClassDecorator;',
       'export declare function useBrowser(): ClassDecorator;',
       'export declare class TestCase implements ITestBase {',
     ];
-    for (const file of files) {
-      output.push(...this.extractMethodsFromFile(file));
+
+    for (const sourceFile of sourceFiles) {
+      const classes = sourceFile.getClasses();
+      for (const cls of classes) {
+        const className = cls.getName() || 'UnnamedClass';
+        // 提取类的成员函数声明
+        const methods = cls
+          .getMethods()
+          .filter((method) => method.getKind() != SyntaxKind.Constructor)
+          .map((method) => {
+            return `${method.getText()};`;
+          });
+        // 添加类名作为注释
+        if (methods.length > 0) {
+          methodDeclarations.push(
+            `// Methods from ${className}`,
+            ...methods,
+            '',
+          );
+        }
+      }
     }
-    output.push('}');
-    //console.log(output);
-    // if (oFile) {
-    //   writeFileSync(oFile, output.join('\n'), 'utf8');
+    const outputContent = `// Extracted method declarations from multiple .d.ts files\n${methodDeclarations.join('\n')}\n}`;
+    return outputContent;
+    // // 创建新的 .d.ts 文件并写入提取的函数声明
+    // const outputFile = project.createSourceFile(
+    //   'extracted-methods.d.ts',
+    //   outputContent,
+    //   { overwrite: true },
+    // );
+
+    // // 保存文件
+    // outputFile.saveSync();
+    // const output: string[] = [
+    //   'export declare function Test(): ClassDecorator;',
+    //   'export declare function withBrowser(): ClassDecorator;',
+    //   'export declare function WithHeadless(): ClassDecorator;',
+    //   'export declare function useBrowser(): ClassDecorator;',
+    //   'export declare class TestCase implements ITestBase {',
+    // ];
+    // for (const file of files) {
+    //   output.push(...this.extractMethodsFromFile(file));
     // }
-    return output;
+    // output.push('}');
+    // // if (oFile) {
+    // //   writeFileSync(oFile, output.join('\n'), 'utf8');
+    // // }
+    // return output;
   }
   extractMethodsFromFile(filePath: string): string[] {
     const content = readFileSync(filePath, 'utf8');

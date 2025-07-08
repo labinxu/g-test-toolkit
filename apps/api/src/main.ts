@@ -7,7 +7,12 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors(); // 开启 CORS
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'], // Allow both origins
+    credentials: true,
+    allowedHeaders: ['Authorization', 'Content-Type'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  });
   const options = new DocumentBuilder()
     .setTitle('G-TOOLKIT API document')
     .setDescription('Doggy api...')

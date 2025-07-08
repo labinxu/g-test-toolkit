@@ -9,7 +9,9 @@ import {
   Res,
   NotFoundException,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { statSync } from 'fs';
 import { readdir, readFile } from 'fs/promises';
 import * as path from 'path';
@@ -75,15 +77,15 @@ export class TestCasesController {
     @Query('clientId') clientId: string,
   ) {
     try {
-      const absPath = path.resolve(process.cwd(), 'user-cases', scriptpath);
+      const absPath = path.resolve(process.cwd(), scriptpath);
       const stat = statSync(absPath);
       let message = '';
       if (stat.isFile()) {
-        this.testCasesService.executeFile(absPath, clientId);
+        this.testCasesService.executeFile(scriptpath, clientId);
         message = `execute file ${absPath}`;
       } else if (stat.isDirectory()) {
         message = `execute dir ${absPath}`;
-        const files = readdirSync(absPath).filter((f) => /\.(ts|js)$/.test(f));
+        //const files = readdirSync(absPath).filter((f) => /\.(ts|js)$/.test(f));
         this.testCasesService.executeDir(absPath, clientId);
       }
       //this.testCasesService.runDir(scriptpath);
@@ -99,7 +101,6 @@ export class TestCasesController {
   ) {
     try {
       const absPath = path.resolve(process.cwd(), 'user-cases', scriptpath);
-      console.log(`===== executeBundle ${absPath}`);
       const stat = statSync(absPath);
       let message = '';
       if (stat.isFile()) {
@@ -128,11 +129,11 @@ export class TestCasesController {
   }
 
   @Get('init')
+  @UseGuards(AuthGuard('jwt'))
   async init(@Res() res: Response) {
     try {
-      console.log('init call');
-      const functions = this.filesService.makeTypesFile();
-      const content = functions.join('');
+      const content = this.filesService.makeTypesFile();
+
       res.type('text/plain').send({ content });
     } catch (err) {
       throw new NotFoundException('make types file failed');

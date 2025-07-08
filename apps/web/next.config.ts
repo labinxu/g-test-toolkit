@@ -10,10 +10,6 @@ const nextConfig: NextConfig = {
     console.log(`BACK_SERVER_API_URL ${process.env.BACK_SERVER_API_URL}`);
     return [
       {
-        source: '/api/auth/:path*',
-        destination: '/api/auth/:path*', // Keep auth routes local
-      },
-      {
         source: '/api/:path*',
         destination: `http://127.0.0.1:3001/:path*`,
       },

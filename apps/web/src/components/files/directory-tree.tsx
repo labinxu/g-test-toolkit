@@ -1,6 +1,8 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+
+import { useSession } from '@/app/context/session-context';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -11,7 +13,6 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
-
 type FileNode = {
   name: string;
   path: string;
@@ -59,9 +60,17 @@ export default function DirectoryTree({
   const rootDir = useMemo(() => {
     return currentDir;
   }, []);
+  const { isAuthenticated, accessToken } = useSession();
+
   // Initialize and restore expanded state
   useEffect(() => {
-    fetch(`/api/files/tree?dir=${rootDir}&depth=3`)
+    if (!isAuthenticated) {
+      return;
+    }
+    fetch(`/api/files/tree?dir=${rootDir}&depth=3`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: 'include',
+    })
       .then((res) => res.json())
       .then((treeData: FileNode[]) => {
         setTree(treeData);
@@ -71,7 +80,7 @@ export default function DirectoryTree({
           setExpanded(JSON.parse(saved));
         }
       });
-  }, [refreshKey]);
+  }, [refreshKey, accessToken, isAuthenticated]);
 
   // Persist expanded state
   useEffect(() => {
@@ -91,12 +100,34 @@ export default function DirectoryTree({
   function collapseAll() {
     setExpanded({});
   }
+  const handleDelete = useCallback(
+    async (path: string, isDirectory: boolean) => {
+      setDeleting(true);
+      await fetch('/api/files/delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ path }),
+      });
+      setDeleting(false);
+      setRefreshKey(refreshKey - 1);
+      if (selectedPath === path) setSelectedPath(null);
+      setDeleteTarget(null);
+    },
+    [accessToken],
+  );
 
-  async function handleDelete(path: string, isDirectory: boolean) {
+  async function handleDelete1(path: string, isDirectory: boolean) {
     setDeleting(true);
     await fetch('/api/files/delete', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({ path }),
     });
     setDeleting(false);
@@ -202,7 +233,9 @@ export default function DirectoryTree({
       </div>
     );
   }
-
+  if (!isAuthenticated) {
+    return <div>login please</div>;
+  }
   return (
     <div className="flex flex-col rounded-lg h-full">
       {/* 如果collapsible为true则显示折叠相关按钮，否则外部控制 */}
