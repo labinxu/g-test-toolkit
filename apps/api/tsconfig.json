@@ -20,5 +20,13 @@
     "strictPropertyInitialization": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "user-cases"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "user-cases",
+    "tmp",
+    "test",
+    "workspace",
+    "data"
+  ]
 }

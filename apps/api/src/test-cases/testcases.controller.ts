@@ -7,20 +7,21 @@ import {
   BadRequestException,
   Get,
   Res,
+  Req,
   NotFoundException,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { statSync } from 'fs';
+import { statSync, mkdirSync } from 'fs';
 import { readdir, readFile } from 'fs/promises';
 import * as path from 'path';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TestCasesService } from './testcases.service';
-import { StartTestCaseDto, TestCaseDto } from './dto/start-testcase-dto';
-import { readFileSync, readdirSync } from 'fs';
+import { StartTestCaseDto } from './dto/start-testcase-dto';
+import { readFileSync, existsSync } from 'fs';
 import { FilesService } from 'src/files/files.service';
 
 @Controller('testcase')
@@ -57,36 +58,21 @@ export class TestCasesController {
     // Validation for caseName is handled by class-validator in StartTestCaseDto
     readFileSync(`./cases/${file.originalname}`);
   }
-  @Post('run')
-  async run(@Body('code') jscode: string) {
-    return await this.testCasesService.run(jscode);
-  }
-
-  @Post('run/script')
-  async runScript(@Body() caseDto: TestCaseDto) {
-    try {
-      this.testCasesService.runcase(caseDto.code, caseDto.clientId);
-      return { message: 'ok' };
-    } catch (err) {
-      throw new NotFoundException(err);
-    }
-  }
   @Get('execute')
+  @UseGuards(AuthGuard('jwt'))
   async execute(
     @Query('scriptpath') scriptpath: string,
     @Query('clientId') clientId: string,
   ) {
+    const reportDir = path.dirname(scriptpath).replace('cases', 'reports');
     try {
       const absPath = path.resolve(process.cwd(), scriptpath);
       const stat = statSync(absPath);
       let message = '';
       if (stat.isFile()) {
-        this.testCasesService.executeFile(scriptpath, clientId);
-        message = `execute file ${absPath}`;
+        this.testCasesService.executeFile(absPath, clientId, reportDir);
       } else if (stat.isDirectory()) {
         message = `execute dir ${absPath}`;
-        //const files = readdirSync(absPath).filter((f) => /\.(ts|js)$/.test(f));
-        this.testCasesService.executeDir(absPath, clientId);
       }
       //this.testCasesService.runDir(scriptpath);
       return { message, clientId };
@@ -95,20 +81,28 @@ export class TestCasesController {
     }
   }
   @Get('bundle')
+  @UseGuards(AuthGuard('jwt'))
   async executeBundle(
     @Query('scriptpath') scriptpath: string,
     @Query('clientId') clientId: string,
   ) {
     try {
-      const absPath = path.resolve(process.cwd(), 'user-cases', scriptpath);
+      const absPath = path.resolve(process.cwd(), scriptpath);
       const stat = statSync(absPath);
       let message = '';
       if (stat.isFile()) {
-        this.testCasesService.executeFile(absPath, clientId);
+        const reportDir = path.dirname(absPath).replace('cases', 'reports');
+        if (!existsSync(reportDir)) {
+          mkdirSync(reportDir, { recursive: true });
+        }
+        this.testCasesService.executeFile(absPath, clientId, reportDir);
         message = `execute file ${absPath}`;
       } else if (stat.isDirectory()) {
         message = `execute dir ${absPath}`;
-
+        const reportDir = absPath.replace('cases', 'reports');
+        if (!existsSync(reportDir)) {
+          mkdirSync(reportDir, { recursive: true });
+        }
         const filesContent: { [filename: string]: string } = {};
         const files = await readdir(absPath);
         await Promise.all(
@@ -119,9 +113,12 @@ export class TestCasesController {
           }),
         );
 
-        this.testCasesService.executeTestFiles(filesContent, clientId);
+        this.testCasesService.executeTestFiles(
+          filesContent,
+          clientId,
+          reportDir,
+        );
       }
-      //this.testCasesService.runDir(scriptpath);
       return { message, clientId };
     } catch (err) {
       throw new NotFoundException(err);

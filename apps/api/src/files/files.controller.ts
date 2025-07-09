@@ -5,29 +5,54 @@ import {
   Put,
   Body,
   Post,
+  Req,
   Res,
   UseGuards,
   Delete,
   NotFoundException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { FilesService } from './files.service';
+import { existsSync } from 'fs';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 @Controller('files')
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
+  checkPath(dir: string) {
+    if (!/^[a-zA-Z0-9_/.-]+$/.test(dir) || dir.includes('..')) {
+      throw new Error('Invalid path provided');
+    }
+  }
   // 获取目录树
   @Get('tree')
   @UseGuards(AuthGuard('jwt'))
   async getDirTree(
-    @Query('dir') dir: string = '.',
-    @Query('depth') depth: number = 2,
+    @Req() req: Request,
+    @Query('dir') dir: string,
+    @Query('depth') depth: number = 3,
   ) {
-    const baseDir = path.resolve(process.cwd(), dir);
+    this.checkPath(dir);
+    const user = req.user;
+    const absPath = path.normalize(
+      path.join(process.cwd(), 'workspace', user['username'], dir),
+    );
+    const baseDir = path.resolve(process.cwd());
+    if (!absPath.startsWith(baseDir)) {
+      throw new Error(
+        'Access to paths outside the working directory is forbidden',
+      );
+    }
+    if (!existsSync(absPath)) {
+      await fs.mkdir(absPath, { recursive: true });
+    } else {
+      console.log('exists');
+    }
     async function getTree(currentPath: string, depthLeft: number) {
       if (depthLeft < 0) return [];
       const files = await fs.readdir(currentPath, { withFileTypes: true });
@@ -51,11 +76,13 @@ export class FilesController {
       }
       return result;
     }
-    return await getTree(baseDir, depth);
+    return await getTree(absPath, depth);
   }
   @Get('testmodule')
   @UseGuards(AuthGuard('jwt'))
-  async init(@Res() res: Response) {
+  async init(@Req() req: Request, @Res() res: Response) {
+    const user = req.user;
+    console.log('current call user', user['username']);
     try {
       const content = this.filesService.makeTypesFile();
       res.type('text/plain').send({ content });
@@ -96,8 +123,13 @@ export class FilesController {
   }
   @Post('mkdir')
   @UseGuards(AuthGuard('jwt'))
-  async createDirectory(@Body() body: { dir: string }) {
-    const absPath = path.resolve(process.cwd(), body.dir);
+  async createDirectory(@Req() req: Request, @Body() body: { dir: string }) {
+    const user = req.user;
+    let createPath = body.dir;
+    if (!createPath.startsWith('workspace')) {
+      createPath = path.resolve('workspace', user['username'], createPath);
+    }
+    const absPath = path.resolve(process.cwd(), createPath);
     await fs.mkdir(absPath, { recursive: true });
     return { success: true };
   }
@@ -105,8 +137,17 @@ export class FilesController {
   // 新建文件
   @Post('create')
   @UseGuards(AuthGuard('jwt'))
-  async createFile(@Body() body: { path: string; content?: string }) {
-    const absPath = path.resolve(process.cwd(), body.path);
+  async createFile(
+    @Body() body: { path: string; content?: string },
+    @Req() req: Request,
+  ) {
+    let createPath = body.path;
+    const user = req.user;
+    if (!createPath.startsWith('workspace')) {
+      createPath = path.resolve('workspace', user['username'], createPath);
+    }
+
+    const absPath = path.resolve(process.cwd(), createPath);
     await fs.writeFile(absPath, body.content || '', 'utf-8');
     return { success: true };
   }

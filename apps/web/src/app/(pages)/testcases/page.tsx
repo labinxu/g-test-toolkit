@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
-import DirectoryTreePanel from '@/components/files/directory-tree-panel';
+import DirectoryTreePanel from './files/directory-tree-panel';
 import { ScriptEditor } from './script-editor';
 import { Control } from './control';
 import { OutputPanel } from '@/components/output-panel';
@@ -21,7 +21,7 @@ class MyTest extends TestCase {
 const headers = { 'Content-Type': 'application/json' };
 export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
-  const [currentDir, setCurrentDir] = useState('./user-cases/cases');
+  const [currentDir, setCurrentDir] = useState('cases');
   const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [testCase, setTestCase] = useState<string>('');
   const { logs, connected, clientId, clearLogs, running, setRunning } =
@@ -33,7 +33,7 @@ export default function Page() {
       return;
     }
     fetch(`/api/files/testmodule`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}`, ...headers },
       credentials: 'include',
     })
       .then((res) => res.json())
@@ -54,16 +54,18 @@ export default function Page() {
     };
   }, [testCase, monacoInited]);
   const run = useCallback(async () => {
-    console.log('run current file', currentFile);
     clearLogs();
     await fetch(
-      `/api/testcase/execute?scriptpath=${encodeURIComponent(currentFile)}&clientId=${clientId}`,
+      `/api/testcase/bundle?scriptpath=${encodeURIComponent(currentFile)}&clientId=${clientId}`,
       {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
     );
-  }, [currentFile, clientId]);
+  }, [currentFile, clientId, accessToken]);
 
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {

@@ -4,8 +4,7 @@ import { AndroidService } from 'src/mobile/android/android.service';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { SandboxExecutor } from './sandbox-executor';
 import { ReportService } from 'src/report/report.service';
-import * as path from 'path';
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync } from 'fs';
 import * as esbuild from 'esbuild';
 @Injectable()
 export class TestCasesService {
@@ -17,12 +16,12 @@ export class TestCasesService {
   ) {
     this.logger = this.loggerService.createLogger('TestCaseService');
   }
-  async runcase(clientCode: string, clientId: string) {
+  async runcase(clientCode: string, clientId: string, reportDir: string) {
     this.logger.info(`run case clientId:${clientId}`);
 
     const sandBoxExec = new SandboxExecutor(
       clientId,
-      './workspace/Anonymouse',
+      reportDir,
       this.reportService,
       this.loggerService,
       this.androidService,
@@ -125,24 +124,12 @@ export class TestCasesService {
       this.logger.sendExitTo(clientId);
     }
   }
-  async executeDir(dir: string, clientId: string) {
-    const files = readdirSync(dir).filter((f) => /\.(ts|js)$/.test(f));
-    console.log(JSON.stringify(files));
-    for (const f of files) {
-      await this.executeFile(path.resolve(dir, f), clientId);
-    }
-  }
-  async executeFile(path: string, clientId: string) {
+  async executeFile(path: string, clientId: string, reportDir: string) {
     try {
       const code = readFileSync(path);
-      await this.runcase(code.toString(), clientId);
+      await this.runcase(code.toString(), clientId, reportDir);
     } catch (err) {
       this.logger.sendErrorTo(clientId, `${err}`);
     }
-  }
-
-  async run(code: string) {
-    this.runcase(code, 'aa');
-    return { status: 'ok', message: '' };
   }
 }

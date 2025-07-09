@@ -87,7 +87,6 @@ export class TestCase implements ITestBase {
   getReportData() {
     return this.reportData;
   }
-
   setPage(page: Page) {
     const logger = this.loggerService.createLogger('WebPage');
     this.logger.sendDebugTo(this.clientId, 'setpage');

@@ -6,7 +6,7 @@ import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 
 export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
-  const [currentDir, setCurrentDir] = useState('workspace/Anonymouse');
+  const [currentDir, setCurrentDir] = useState('reports');
   const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined);
   const { isAuthenticated, accessToken } = useSession();
   // Fetch file content when currentFile changes

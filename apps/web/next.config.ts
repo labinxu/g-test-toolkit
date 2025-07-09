@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: `http://127.0.0.1:3001/:path*`,
+        destination: `${process.env.BACK_SERVER_API_URL}/:path*`,
       },
     ];
   },
@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     NEXT_PUBLIC_DOMAIN: process.env.NEXT_PUBLIC_APP_URL,
   },
+  devIndicators: false,
 };
 
 export default nextConfig;

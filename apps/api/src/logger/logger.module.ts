@@ -7,7 +7,11 @@ import { LoggerService } from './logger.service';
 import { LoggerGateway } from './logger.gateway';
 
 dotenv.config();
-
+console.log(
+  '-=====process.env.LOG_LEVEL_FILE',
+  process.env.LOG_LEVEL_FILE,
+  process.env.WORKSPACE,
+);
 const loggerFormat = winston.format.printf(
   ({ timestamp, level, message, context, clientId }) => {
     const tag = context ? `[${context}]` : '';
