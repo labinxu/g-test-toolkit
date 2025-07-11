@@ -68,7 +68,7 @@ export default function DirectoryTree({
   const rootDir = useMemo(() => {
     return currentDir;
   }, []);
-  const { isAuthenticated, accessToken } = useSession();
+  const { isAuthenticated } = useSession();
 
   // Initialize and restore expanded state
   useEffect(() => {
@@ -76,7 +76,6 @@ export default function DirectoryTree({
       return;
     }
     fetch(`/api/files/tree?dir=${rootDir}&depth=3`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
       credentials: 'include',
     })
       .then((res) => res.json())
@@ -88,7 +87,7 @@ export default function DirectoryTree({
           setExpanded(JSON.parse(saved));
         }
       });
-  }, [refreshKey, accessToken, isAuthenticated]);
+  }, [refreshKey, isAuthenticated]);
 
   // Persist expanded state
   useEffect(() => {
@@ -116,7 +115,6 @@ export default function DirectoryTree({
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
         credentials: 'include',
         body: JSON.stringify({ path }),
@@ -126,16 +124,16 @@ export default function DirectoryTree({
       if (selectedPath === path) setSelectedPath(null);
       if (isDirectory) {
         setSelectedPath(null);
-        if (onDirSelect) onDirSelect(`${currentDir}/..`);
+        if (onDirSelect)
+          onDirSelect(currentDir.substring(0, currentDir.lastIndexOf('/')));
       }
       setDeleteTarget(null);
     },
-    [accessToken, refreshKey, setRefreshKey, selectedPath],
+    [refreshKey, setRefreshKey, selectedPath],
   );
-  const handleRun = useCallback(
-    async (path: string, isDirectory: boolean) => {},
-    [accessToken],
-  );
+  const handleRun = useCallback(async (path: string, isDirectory: boolean) => {
+    console.log(path, isDirectory);
+  }, []);
   function renderNode(node: FileNode, level = 0, isLast = false) {
     const isSelected = selectedPath === node.path;
     const isOpen = expanded[node.path] ?? false;
@@ -149,7 +147,7 @@ export default function DirectoryTree({
       : 'hover:bg-green-50 text-gray-600';
 
     return (
-      <div key={node.path} className="relative group">
+      <div key={node.path} className="relative group" id="file-list">
         <div
           className={`${base} ${node.isDirectory ? folder : file}`}
           style={{ paddingLeft: `${level * 24 + 8}px` }}
@@ -223,6 +221,8 @@ export default function DirectoryTree({
             tabIndex={-1}
             onClick={(e) => {
               e.stopPropagation();
+              setSelectedPath(node.path);
+              handleRun(node.path, node.isDirectory);
             }}
             title={`Delete ${node.isDirectory ? 'folder' : 'file'}`}
           >

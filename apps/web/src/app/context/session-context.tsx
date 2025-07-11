@@ -7,26 +7,21 @@ import {
   useEffect,
   ReactNode,
 } from 'react';
-import { useRouter } from 'next/navigation';
-import Cookies from 'js-cookie';
-import { refreshToken } from '@/lib/utils';
-
-// Utility to decode JWT and get expiration time
-const getTokenExpiration = (token: string): number | null => {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.exp ? payload.exp * 1000 : null; // Convert to milliseconds
-  } catch {
-    return null;
-  }
-};
+import { useRouter, usePathname } from 'next/navigation';
 
 interface SessionContextType {
   isAuthenticated: boolean;
-  accessToken: string | null;
-  logout: () => void;
   user: { username: string; email: string } | null;
+  login: (email: string, password: string) => Promise<void>;
+  register: (
+    username: string,
+    email: string,
+    password: string,
+  ) => Promise<void>;
+  logout: () => void;
+  csrfToken: string | null;
 }
+
 type User = { username: string; email: string };
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -34,116 +29,150 @@ const SessionContext = createContext<SessionContextType | undefined>(undefined);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
-  const checkAuth = async () => {
-    let token = Cookies.get('accessToken');
-
-    if (!token) {
-      setIsAuthenticated(false);
-      setAccessToken(null);
-      setUser(null);
-      setIsLoading(false);
-      router.push('/signin');
-      return;
+  // Fetch CSRF token
+  const fetchCsrfToken = async () => {
+    try {
+      const response = await fetch('/api/auth/csrf-token', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCsrfToken(data.csrfToken);
+        return data.csrfToken;
+      } else {
+        console.error('Failed to fetch CSRF token:', response.status);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching CSRF token:', error);
+      return null;
     }
+  };
 
+  // Check authentication status
+  const checkAuth = async () => {
     try {
       const response = await fetch('/api/auth/profile', {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: 'include',
+        method: 'GET',
+        credentials: 'include', // Sends httpOnly access_token cookie
       });
 
       if (response.ok) {
+        const data = await response.json();
         setIsAuthenticated(true);
-        setAccessToken(token);
-        const { username, email } = await response.json();
-        setUser({ username, email });
-      } else if (response.status === 401) {
-        try {
-          token = await refreshToken();
-          setIsAuthenticated(true);
-          setAccessToken(token);
-        } catch (refreshError) {
-          console.error('Refresh error:', refreshError);
-          Cookies.remove('accessToken');
-          Cookies.remove('refreshToken');
-          setIsAuthenticated(false);
-          setAccessToken(null);
-          setUser(null);
+        setUser({ username: data.user.username, email: data.user.email });
+      } else {
+        console.error('Profile fetch failed:', response.status);
+        setIsAuthenticated(false);
+        setUser(null);
+        if (pathname !== '/register' && pathname !== '/signin') {
           router.push('/signin');
         }
       }
     } catch (error) {
       console.error('Auth check error:', error);
-      Cookies.remove('accessToken');
-      Cookies.remove('refreshToken');
       setIsAuthenticated(false);
-      setAccessToken(null);
       setUser(null);
-      router.push('/signin');
+      if (pathname !== '/register' && pathname !== '/signin') {
+        router.push('/signin');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Token refresh logic
+  // Initial auth and CSRF token fetch
   useEffect(() => {
-    if (!accessToken) return;
-
-    const scheduleRefresh = async () => {
-      const expiration = getTokenExpiration(accessToken);
-      if (!expiration) {
-        console.warn('Could not decode token expiration');
-        checkAuth(); // Fallback to checkAuth if token can't be decoded
-        return;
-      }
-
-      const refreshMargin = 5 * 60 * 1000; // Refresh 5 minutes before expiration
-      const timeUntilRefresh = expiration - Date.now() - refreshMargin;
-
-      if (timeUntilRefresh <= 0) {
-        await checkAuth(); // Immediate refresh or logout if token is expired
-        return;
-      }
-
-      const timeoutId = setTimeout(async () => {
-        try {
-          const newToken = await refreshToken();
-          setAccessToken(newToken);
-          console.log('Token refreshed successfully');
-        } catch (error) {
-          console.error('Failed to refresh token:', error);
-          Cookies.remove('accessToken');
-          Cookies.remove('refreshToken');
-          setIsAuthenticated(false);
-          setAccessToken(null);
-          setUser(null);
-          router.push('/signin');
-        }
-      }, timeUntilRefresh);
-
-      return () => clearTimeout(timeoutId);
+    const initialize = async () => {
+      await fetchCsrfToken();
+      await checkAuth();
     };
+    initialize();
+  }, [router, pathname]);
 
-    scheduleRefresh();
-    return () => {}; // Ensure cleanup is handled within scheduleRefresh
-  }, [accessToken, router]);
+  // Login function
+  const login = async (email: string, password: string) => {
+    if (!csrfToken) {
+      const token = await fetchCsrfToken();
+      if (!token) {
+        throw new Error('Failed to fetch CSRF token');
+      }
+    }
 
-  // Initial auth check
-  useEffect(() => {
-    checkAuth();
-  }, [router]);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
 
-  const logout = () => {
-    Cookies.remove('accessToken');
-    Cookies.remove('refreshToken');
-    setIsAuthenticated(false); // Fixed typo from previous code
-    setAccessToken(null);
-    setUser(null);
-    router.push('/signin');
+      if (response.ok) {
+        await checkAuth(); // Refresh auth state after login
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Login failed');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  };
+
+  // Register function
+  const register = async (
+    username: string,
+    email: string,
+    password: string,
+  ) => {
+    if (!csrfToken) {
+      const token = await fetchCsrfToken();
+      if (!token) {
+        throw new Error('Failed to fetch CSRF token');
+      }
+    }
+
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      if (response.ok) {
+        await checkAuth(); // Refresh auth state after registration
+        router.push('/dashboard'); // Redirect to dashboard
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Registration failed');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
+    }
+  };
+
+  // Logout function
+  const logout = async () => {
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        setIsAuthenticated(false);
+        setUser(null);
+        router.push('/signin');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   if (isLoading) {
@@ -156,7 +185,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   return (
     <SessionContext.Provider
-      value={{ isAuthenticated, accessToken, logout, user }}
+      value={{ isAuthenticated, user, login, register, logout, csrfToken }}
     >
       {children}
     </SessionContext.Provider>

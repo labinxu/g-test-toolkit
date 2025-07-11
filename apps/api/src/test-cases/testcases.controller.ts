@@ -1,13 +1,8 @@
 import {
   Controller,
-  Body,
   Post,
-  UseInterceptors,
-  UploadedFile,
-  BadRequestException,
   Get,
   Res,
-  Req,
   NotFoundException,
   Query,
   UseGuards,
@@ -16,14 +11,12 @@ import { AuthGuard } from '@nestjs/passport';
 import { statSync, mkdirSync } from 'fs';
 import { readdir, readFile } from 'fs/promises';
 import * as path from 'path';
-import { Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FastifyReply as Response } from 'fastify';
+//import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TestCasesService } from './testcases.service';
-import { StartTestCaseDto } from './dto/start-testcase-dto';
-import { readFileSync, existsSync } from 'fs';
 import { FilesService } from 'src/files/files.service';
-
+import { existsSync } from 'fs';
 @Controller('testcase')
 export class TestCasesController {
   constructor(
@@ -47,17 +40,6 @@ export class TestCasesController {
       required: ['file', 'caseName'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
-  async startTestCase(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() startTestCaseDto: StartTestCaseDto,
-  ) {
-    if (!file || startTestCaseDto.caseName === '') {
-      throw new BadRequestException('No file uploaded!');
-    }
-    // Validation for caseName is handled by class-validator in StartTestCaseDto
-    readFileSync(`./cases/${file.originalname}`);
-  }
   @Get('execute')
   @UseGuards(AuthGuard('jwt'))
   async execute(
@@ -130,8 +112,8 @@ export class TestCasesController {
   async init(@Res() res: Response) {
     try {
       const content = this.filesService.makeTypesFile();
-
-      res.type('text/plain').send({ content });
+      res.type('text/plian');
+      res.send({ content });
     } catch (err) {
       throw new NotFoundException('make types file failed');
     }

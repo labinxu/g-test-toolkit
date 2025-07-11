@@ -1,51 +1,27 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import Cookies from 'js-cookie';
-
+import { useSession } from '../context/session-context';
 export function SignupForm() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('labin');
+  const [email, setEmail] = useState('labin@gmail.com');
+  const [password, setPassword] = useState('a111111');
   const [error, setError] = useState('');
   const router = useRouter();
 
+  const { register } = useSession();
+  // Fetch CSRF token on component mount
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
     try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Optional: Store in cookie
-        // document.cookie = `accessToken=${data.accessToken}; path=/; max-age=3600; secure; samesite=strict`;
-        router.push('/reports');
-        Cookies.set('accessToken', data.accessToken, {
-          expires: 1,
-          secure: true,
-          sameSite: 'strict',
-        });
-        Cookies.set('refreshToken', data.refreshToken, {
-          expires: 7,
-          secure: true,
-          sameSite: 'strict',
-        });
-        router.push('/locate');
-      } else {
-        setError(
-          data.message || 'Login failed. Please check your credentials.',
-        );
-      }
+      await register(username, email, password);
+      router.push('/signin');
     } catch (err) {
       setError('An error occurred during login. Please try again.');
       console.error('Login error:', err);
@@ -61,10 +37,12 @@ export function SignupForm() {
         >
           Username
         </Label>
-        <input
+        <Input
           id="username"
           type="text"
           placeholder="Choose a username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           className="mt-1 w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200"
         />
       </div>
@@ -77,6 +55,10 @@ export function SignupForm() {
         </Label>
         <Input
           id="email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+          }}
           type="email"
           placeholder="Enter your email"
           className="mt-1 w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200"
@@ -92,6 +74,8 @@ export function SignupForm() {
         <Input
           id="password"
           type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
           placeholder="Create a password"
           className="mt-1 w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200"
         />
@@ -126,7 +110,10 @@ export function SignupForm() {
           </a>
         </Label>
       </div>
-      <Button className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition duration-200 font-semibold">
+      <Button
+        className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition duration-200 font-semibold"
+        onClick={handleSubmit}
+      >
         Sign Up
       </Button>
     </form>

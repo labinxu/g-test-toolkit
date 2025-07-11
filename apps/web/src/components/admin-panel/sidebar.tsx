@@ -6,7 +6,7 @@ import { useSidebar } from '@/hooks/use-sidebar';
 import { useStore } from '@/hooks/use-store';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-
+import { LayoutDashboardIcon } from 'lucide-react';
 export function Sidebar() {
   const sidebar = useStore(useSidebar, (x) => x);
   if (!sidebar) return null;
@@ -34,7 +34,8 @@ export function Sidebar() {
           asChild
         >
           <Link href="/dashboard" className="flex items-center gap-2">
-            <img src="logo.svg" />
+            {/*<img src="logo.svg" />*/}
+            <LayoutDashboardIcon />
           </Link>
         </Button>
         <Menu isOpen={getOpenState()} />

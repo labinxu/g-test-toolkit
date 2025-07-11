@@ -1,72 +1,79 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Res } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private usersRepository: Repository<User>,
     private jwtService: JwtService,
   ) {}
+  async register(registerDto: RegisterDto): Promise<{ access_token: string }> {
+    const { username, email, password } = registerDto;
 
-  async login(
-    loginDto: LoginDto,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
-    const { email, password } = loginDto;
-    const user = await this.userRepository.findOne({ where: { email } });
-
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      throw new UnauthorizedException('Invalid credentials');
+    // 验证邮箱格式
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestException('Invalid email format');
     }
 
-    const payload = { email: user.email, sub: user.id };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
-    await this.userRepository.update(user.id, {
-      refreshToken: hashedRefreshToken,
+    // 检查用户是否存在
+    const existingUser = await this.usersRepository.findOne({
+      where: { email },
     });
+    if (existingUser) {
+      throw new ConflictException('Email already exists');
+    }
 
-    return { accessToken, refreshToken };
-  }
-async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
-  const payload = this.jwtService.verify(refreshToken);
-  const user = await this.userRepository.findOne({ where: { id: payload.sub } });
-  if (!user || !user.refreshToken || !(await bcrypt.compare(refreshToken, user.refreshToken))) {
-    throw new UnauthorizedException('Invalid refresh token');
-  }
-  const newPayload = { email: user.email, sub: user.id };
-  const accessToken = this.jwtService.sign(newPayload, { expiresIn: '1h' });
-  const newRefreshToken = this.jwtService.sign(newPayload, { expiresIn: '7d' });
-  const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 10);
-  await this.userRepository.update(user.id, { refreshToken: hashedRefreshToken });
-  return { accessToken, refreshToken: newRefreshToken };
-}
+    // 哈希密码
+    const salt = await bcrypt.genSalt();
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-  async register(registerDto: RegisterDto): Promise<User> {
-    const { username, email, password } = registerDto;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = this.userRepository.create({
+    // 创建新用户
+    const user = this.usersRepository.create({
       username,
       email,
       password: hashedPassword,
     });
-    return this.userRepository.save(user);
+
+    await this.usersRepository.save(user);
+
+    // 生成 JWT
+    const payload = { sub: user.id, username: user.username };
+    const access_token = this.jwtService.sign(payload);
+
+    return { access_token };
   }
-  async profile(userId: number): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+  async login(loginDto: LoginDto): Promise<{ access_token: string }> {
+    const { email, password } = loginDto;
+    console.log(email, password);
+    // 查找用户
+    const user = await this.usersRepository.findOne({ where: { email } });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException('Invalid credentials');
     }
-    return user;
+
+    // 验证密码
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // 生成 JWT
+    const payload = { sub: user.id, username: user.username };
+    const access_token = this.jwtService.sign(payload);
+
+    return { access_token };
   }
   async validateUser(email: string): Promise<User> {
-    return this.userRepository.findOne({ where: { email } });
+    return this.usersRepository.findOne({ where: { email } });
   }
 }

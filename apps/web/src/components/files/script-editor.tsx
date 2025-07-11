@@ -26,31 +26,7 @@ export function ScriptEditor({
   const [language, setLanguage] = useState<string>('typescript');
   const lastLoadedPath = useRef<string | null>(null);
   const [content, setContent] = useState('');
-  const { isAuthenticated, accessToken } = useSession();
-
-  // const fileQuery = useQuery({
-  //   queryKey: [filePath, isAuthenticated, accessToken],
-  //   staleTime: Infinity,
-  //   refetchOnMount: false,
-  //   refetchOnWindowFocus: false,
-  //   refetchOnReconnect: false,
-  //   enabled: isAuthenticated && filePath != '',
-  //   queryFn: () =>
-  //     fetch(`/api/files/script?path=${encodeURIComponent(filePath)}`, {
-  //       method: 'get',
-  //       headers: { Authorization: `Bearer ${accessToken}` },
-  //       credentials: 'include',
-  //     }).then((res) => res.text()),
-  // });
-  // useEffect(() => {
-  //   if (fileQuery.isPending) return;
-  //   if (!fileQuery.data) return;
-  //   const content = fileQuery.data;
-  //   setContent(content);
-  //   setChanged(false);
-  //   lastLoadedPath.current = filePath;
-  // }, [fileQuery]);
-
+  const { isAuthenticated } = useSession();
   // Load file content
   useEffect(() => {
     if (!filePath || !isAuthenticated) return;
@@ -58,35 +34,17 @@ export function ScriptEditor({
     setError(null);
     fetch(`/api/files/script?path=${encodeURIComponent(filePath)}`, {
       method: 'get',
-      headers: { Authorization: `Bearer ${accessToken}` },
       credentials: 'include',
     })
-      .then((res) => res.text())
+      .then((res) => res.json())
       .then((data) => {
-        setContent(data);
+        setContent(data['content']);
         setChanged(false);
         lastLoadedPath.current = filePath;
       })
       .catch((e) => setError(e.message || 'Loading failed'))
       .finally(() => setLoading(false));
-
-    //   fetch(`/api/files/script?path=${encodeURIComponent(filePath)}`, {
-    //     method: 'GET',
-    //     headers: { Autorization: `Bearer ${accessToken}` },
-    //     credentials: 'include',
-    //   })
-    //     .then((res) => {
-    //       if (!res.ok) throw new Error('Load file failed');
-    //       return res.text();
-    //     })
-    //     .then((data) => {
-    //       setContent(data);
-    //       setChanged(false);
-    //       lastLoadedPath.current = filePath;
-    //     })
-    //     .catch((e) => setError(e.message || 'Loading failed'))
-    //     .finally(() => setLoading(false));
-  }, [filePath, isAuthenticated, accessToken]);
+  }, [filePath, isAuthenticated]);
 
   // Save file
   async function save() {
@@ -98,7 +56,6 @@ export function ScriptEditor({
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ path: filePath, content }),
       });
@@ -131,7 +88,7 @@ export function ScriptEditor({
 
   if (!filePath) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-400 text-lg rounded-xl shadow-lg bg-white">
+      <div className="flex-1 flex h-full items-center justify-center text-gray-400 text-lg rounded-xl shadow-lg bg-white">
         <FileText className="w-6 h-6 mr-2" />
         Select a file to edit
       </div>

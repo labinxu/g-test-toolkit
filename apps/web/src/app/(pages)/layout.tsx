@@ -2,7 +2,7 @@
 import { Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AdminPanelLayout from '@/components/admin-panel/admin-panel-layout';
-import { SessionProvider } from '../context/session-context';
+import { ContentLayout } from '@/components/admin-panel/content-layout';
 const queryClient = new QueryClient();
 export default function Layout({
   children,
@@ -11,11 +11,11 @@ export default function Layout({
 }>) {
   return (
     <AdminPanelLayout>
-      <SessionProvider>
+      <ContentLayout>
         <QueryClientProvider client={queryClient}>
           <Suspense>{children}</Suspense>
         </QueryClientProvider>
-      </SessionProvider>
+      </ContentLayout>
     </AdminPanelLayout>
   );
 }

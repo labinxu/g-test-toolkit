@@ -4,8 +4,7 @@ import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
 import { readFileSync } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
-import { Response } from 'express';
-import { unlink } from 'fs/promises';
+import { FastifyReply as Response } from 'fastify';
 
 @Injectable()
 export class AndroidService {
@@ -101,7 +100,7 @@ export class AndroidService {
       const pullcommand = `adb -s ${deviceId} pull /sdcard/window_dump.xml ${xmlfilepath}`;
       await this.commandService.runCommand(pullcommand);
       this.logger.debug(pullcommand);
-      res.contentType('file/xml');
+      res.header('content-type', 'file/xml');
       const fileStream = readFileSync(xmlfilepath);
       res.send(fileStream);
     } catch (err) {}

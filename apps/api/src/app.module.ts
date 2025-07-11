@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-
 import { AndroidModule } from './mobile/android/android.module';
 import { AppService } from './app.service';
 import { AppController } from './app.controller';

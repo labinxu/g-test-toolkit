@@ -2,46 +2,24 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import Cookies from 'js-cookie';
+import { useSession } from '../context/session-context';
 export default function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const router = useRouter();
-
+  const { login } = useSession();
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        Cookies.set('accessToken', data.accessToken, {
-          expires: 1,
-          secure: true,
-          sameSite: 'strict',
-        });
-        Cookies.set('refreshToken', data.refreshToken, {
-          expires: 7,
-          secure: true,
-          sameSite: 'strict',
-        });
-        router.push('/reports');
-      } else {
-        setError(
-          data.message || 'Login failed. Please check your credentials.',
-        );
-      }
+      await login(email, password);
+      router.push('/dashboard');
     } catch (err) {
       setError('An error occurred during login. Please try again.');
       console.error('Login error:', err);
+      alert(`${err}`);
     }
   };
 

@@ -18,12 +18,13 @@ export function OutputPanel({
 
   return (
     <div
-      className="w-full flex flex-col flex-none"
+      className="w-full flex flex-col flex-none rounded-lg shadow-lg"
+      onClick={() => setOpen(!open)}
       // onMouseEnter={() => setOpen(true)}
       // onMouseLeave={() => setOpen(false)}
     >
-      <div className="px-3 py-2 border-t border-b bg-gray-100 font-medium flex items-center">
-        <div>
+      <div className="rounded-lg shadow-lg border-t border-b bg-gray-100 font-medium flex items-center">
+        <div className="ml-2">
           <span>{title}</span>
         </div>
         <div className="flex justify-center items-center w-full">
@@ -39,7 +40,7 @@ export function OutputPanel({
         }}
       >
         <div
-          className="w-full h-[320px] p-2 border-none rounded-md bg-gray-50 overflow-y-auto"
+          className="w-full h-[320px] p-2 border-none rounded-lg shadow-lg bg-gray-50 overflow-y-auto"
           style={{
             whiteSpace: 'pre-wrap',
             fontFamily: 'monospace',

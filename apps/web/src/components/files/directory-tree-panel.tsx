@@ -19,7 +19,6 @@ export default function DirectoryTreePanel({
 
   const sidebarWidth = 288;
   const collapsedWidth = 28;
-  console.log('currentDir', currentDir);
   return (
     <div
       className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg bg-white"

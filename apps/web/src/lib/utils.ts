@@ -8,7 +8,9 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const refreshToken = async (): Promise<string> => {
-  const refreshToken = Cookies.get('refreshToken');
+  const username = Cookies.get('_account');
+  const refreshToken = Cookies.get(`${username}-refreshToken`);
+  console.log('refresh', refreshToken, username);
   if (!refreshToken) {
     throw new Error('No refresh token available');
   }
@@ -22,12 +24,12 @@ export const refreshToken = async (): Promise<string> => {
 
     const data = await response.json();
     if (response.ok) {
-      Cookies.set('accessToken', data.accessToken, {
+      Cookies.set(`${username}-accessToken`, data.accessToken, {
         expires: 1,
         secure: true,
         sameSite: 'strict',
       });
-      Cookies.set('refreshToken', data.refreshToken, {
+      Cookies.set(`${username}-refreshToken`, data.refreshToken, {
         expires: 7,
         secure: true,
         sameSite: 'strict',

@@ -12,7 +12,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Response, Request } from 'express';
+import { FastifyRequest as Request, FastifyReply as Response } from 'fastify';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { FilesService } from './files.service';
@@ -50,8 +50,6 @@ export class FilesController {
     }
     if (!existsSync(absPath)) {
       await fs.mkdir(absPath, { recursive: true });
-    } else {
-      console.log('exists');
     }
     async function getTree(currentPath: string, depthLeft: number) {
       if (depthLeft < 0) return [];
@@ -80,12 +78,10 @@ export class FilesController {
   }
   @Get('testmodule')
   @UseGuards(AuthGuard('jwt'))
-  async init(@Req() req: Request, @Res() res: Response) {
-    const user = req.user;
-    console.log('current call user', user['username']);
+  async init(@Res() res: Response) {
     try {
       const content = this.filesService.makeTypesFile();
-      res.type('text/plain').send({ content });
+      res.status(200).send({ content });
     } catch (err) {
       throw new NotFoundException('make types file failed');
     }
@@ -96,15 +92,13 @@ export class FilesController {
   async getFile(@Query('path') filePath: string, @Res() res: Response) {
     const absPath = path.resolve(process.cwd(), filePath);
     const content = await fs.readFile(absPath, 'utf-8');
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.send(content);
+    res.status(200).send({ content });
   }
   @Get('read')
   @UseGuards(AuthGuard('jwt'))
   async readFile(@Query('path') filePath: string, @Res() res: Response) {
     const absPath = path.resolve(process.cwd(), filePath);
     const content = await fs.readFile(absPath, 'utf-8');
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(content);
   }
   @Get('types')

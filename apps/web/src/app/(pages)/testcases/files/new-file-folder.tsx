@@ -10,7 +10,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useSession } from '@/app/context/session-context';
 
 export default function NewFileOrFolder({
   parentDir,
@@ -22,8 +21,6 @@ export default function NewFileOrFolder({
   const [isFolder, setIsFolder] = useState(false);
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
-  const { isAuthenticated, accessToken } = useSession();
-  console.log('new folder parentDir', parentDir);
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
@@ -32,7 +29,6 @@ export default function NewFileOrFolder({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ dir: `${parentDir}/${name}` }),
       });
@@ -41,7 +37,6 @@ export default function NewFileOrFolder({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ path: `${parentDir}/${name}`, content }),
       });

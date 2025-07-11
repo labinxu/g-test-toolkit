@@ -1,5 +1,11 @@
 import Cookies from 'js-cookie';
-export const RefreshToken = async (): Promise<string> => {
+export type UserExt = {
+  userName: string;
+  email: string;
+  accessToken: string;
+  refreshToken: string;
+};
+export const RefreshTokena = async (): Promise<string> => {
   const refreshToken = Cookies.get('refreshToken');
   if (!refreshToken) {
     throw new Error('No refresh token available');

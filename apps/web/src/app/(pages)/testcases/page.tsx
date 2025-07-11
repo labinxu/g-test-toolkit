@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
 import DirectoryTreePanel from './files/directory-tree-panel';
-import { ScriptEditor } from './script-editor';
+import { ScriptEditor } from '@/components/files/script-editor';
 import { Control } from './control';
 import { OutputPanel } from '@/components/output-panel';
 import { useSocket } from './socket-content';
@@ -26,21 +26,20 @@ export default function Page() {
   const [testCase, setTestCase] = useState<string>('');
   const { logs, connected, clientId, clearLogs, running, setRunning } =
     useSocket();
-  const { isAuthenticated, accessToken } = useSession();
+  const { isAuthenticated } = useSession();
   const monacoRef = useRef<Monaco>(null);
   useEffect(() => {
     if (!isAuthenticated) {
       return;
     }
     fetch(`/api/files/testmodule`, {
-      headers: { Authorization: `Bearer ${accessToken}`, ...headers },
       credentials: 'include',
     })
       .then((res) => res.json())
       .then((content: any) => {
         setTestCase(content['content']);
       });
-  }, [accessToken, isAuthenticated]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (testCase !== '' && monacoRef.current) {
@@ -61,11 +60,10 @@ export default function Page() {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
       },
     );
-  }, [currentFile, clientId, accessToken]);
+  }, [currentFile, clientId]);
 
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {
@@ -114,7 +112,7 @@ export default function Page() {
     });
   };
   return (
-    <div className="flex h-screen w-full gap-0  rounded-lg flex-1 min-h-0">
+    <div className="flex w-full gap-0  rounded-lg flex-1">
       <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
         <DirectoryTreePanel
           currentDir={currentDir}
