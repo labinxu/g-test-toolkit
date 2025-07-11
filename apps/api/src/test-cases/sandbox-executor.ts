@@ -136,7 +136,7 @@ export class SandboxExecutor {
         error: (msg: string) => this.logger.error(msg),
       },
       require: (moduleName: string) => {
-        if (moduleName === 'test-case') {
+        if (moduleName === 'test-case' || moduleName === './test-case') {
           return { TestCase, Test, withBrowser, useBrowser };
         }
         throw new Error(`Module ${moduleName} is not available in sandbox`);

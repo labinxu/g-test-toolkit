@@ -53,7 +53,7 @@ export default function Page() {
     setSelectDeviceId(data[0]);
   }, []);
   return (
-    <div className="rounded-lg shadow-lg gap-3 border-2">
+    <div className="flex flex-1 flex-col rounded-lg shadow-lg gap-3 border-2">
       <span className="font-medium ">Device Table:</span>
       <div className="gap-3 pt-1 rounded-lg shadow-lg">
         <GTable

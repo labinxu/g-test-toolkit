@@ -58,31 +58,16 @@ export class FilesService {
       }
     }
     const outputContent = `// Extracted method declarations from multiple .d.ts files\n${methodDeclarations.join('\n')}\n}`;
-    return outputContent;
-    // // 创建新的 .d.ts 文件并写入提取的函数声明
+    // 创建新的 .d.ts 文件并写入提取的函数声明
     // const outputFile = project.createSourceFile(
-    //   'extracted-methods.d.ts',
+    //   './node_modules/@types/test-case.d.ts',
     //   outputContent,
-    //   { overwrite: true },
+    //   { overwrite: false },
     // );
 
     // // 保存文件
     // outputFile.saveSync();
-    // const output: string[] = [
-    //   'export declare function Test(): ClassDecorator;',
-    //   'export declare function withBrowser(): ClassDecorator;',
-    //   'export declare function WithHeadless(): ClassDecorator;',
-    //   'export declare function useBrowser(): ClassDecorator;',
-    //   'export declare class TestCase implements ITestBase {',
-    // ];
-    // for (const file of files) {
-    //   output.push(...this.extractMethodsFromFile(file));
-    // }
-    // output.push('}');
-    // // if (oFile) {
-    // //   writeFileSync(oFile, output.join('\n'), 'utf8');
-    // // }
-    // return output;
+    return outputContent;
   }
   extractMethodsFromFile(filePath: string): string[] {
     const content = readFileSync(filePath, 'utf8');

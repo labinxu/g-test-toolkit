@@ -60,7 +60,7 @@ export default function DirectoryTree({
   const rootDir = useMemo(() => {
     return currentDir;
   }, []);
-  const { isAuthenticated, accessToken } = useSession();
+  const { isAuthenticated } = useSession();
 
   // Initialize and restore expanded state
   useEffect(() => {
@@ -68,7 +68,6 @@ export default function DirectoryTree({
       return;
     }
     fetch(`/api/files/tree?dir=${rootDir}&depth=3`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
       credentials: 'include',
     })
       .then((res) => res.json())
@@ -140,16 +139,16 @@ export default function DirectoryTree({
     const isSelected = selectedPath === node.path;
     const isOpen = expanded[node.path] ?? false;
     const base =
-      'relative flex items-center px-2 py-1 cursor-pointer select-none';
+      'relative flex items-center px-2 py-1 cursor-pointer select-none  dark:bg-zinc-600"';
     const folder = isSelected
       ? 'bg-blue-100 text-blue-700 font-bold'
       : 'hover:bg-blue-50 font-bold text-gray-700';
     const file = isSelected
-      ? 'bg-green-100 text-green-700'
-      : 'hover:bg-green-50 text-gray-600';
+      ? 'bg-green-100 text-green-700  dark:bg-zinc-600"'
+      : 'hover:bg-green-50 text-gray-600  dark:bg-zinc-600"';
 
     return (
-      <div key={node.path} className="relative group">
+      <div key={node.path} className="relative group  dark:bg-zinc-600">
         <div
           className={`${base} ${node.isDirectory ? folder : file}`}
           style={{ paddingLeft: `${level * 24 + 8}px` }}
@@ -234,10 +233,10 @@ export default function DirectoryTree({
     );
   }
   if (!isAuthenticated) {
-    return <div>login please</div>;
+    return <div className={'text-inherit bg-inherit'}>login please</div>;
   }
   return (
-    <div className="flex flex-col rounded-lg h-full">
+    <div className="flex flex-col rounded-lg h-full  dark:bg-zinc-600">
       {/* 如果collapsible为true则显示折叠相关按钮，否则外部控制 */}
       {collapsible && (
         <div className="flex gap-2 mb-2 items-center">
@@ -259,7 +258,7 @@ export default function DirectoryTree({
           </Button>
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto dark:bg-zinc-600">
         {tree.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))}
       </div>
 

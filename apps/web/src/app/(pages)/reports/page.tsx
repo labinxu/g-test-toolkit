@@ -8,7 +8,7 @@ export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
   const [currentDir, setCurrentDir] = useState('reports');
   const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined);
-  const { isAuthenticated, accessToken } = useSession();
+  const { isAuthenticated } = useSession();
   // Fetch file content when currentFile changes
   useEffect(() => {
     const fetchFileContent = async () => {
@@ -25,7 +25,7 @@ export default function Page() {
         let response = await fetch(
           `/api/files/read?path=${encodeURIComponent(currentFile)}`,
           {
-            headers: { Authorization: `Bearer ${accessToken}`, method: 'GET' },
+            method: 'GET',
             credentials: 'include',
           },
         );
@@ -49,7 +49,7 @@ export default function Page() {
     };
 
     fetchFileContent();
-  }, [currentFile, isAuthenticated, accessToken]);
+  }, [currentFile, isAuthenticated]);
 
   if (!isAuthenticated) {
     return null; // Redirect handled by useEffect
@@ -60,6 +60,7 @@ export default function Page() {
       <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
         <DirectoryTreePanel
           currentDir={currentDir}
+          editable={false}
           onSelect={setCurrentFile}
           onDirSelect={setCurrentDir}
         />

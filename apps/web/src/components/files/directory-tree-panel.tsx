@@ -7,10 +7,12 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function DirectoryTreePanel({
   currentDir,
+  editable = true,
   onSelect,
   onDirSelect,
 }: {
   currentDir: string;
+  editable: boolean;
   onSelect: (filePath: string) => void;
   onDirSelect?: (dirPath: string) => void;
 }) {
@@ -21,7 +23,7 @@ export default function DirectoryTreePanel({
   const collapsedWidth = 28;
   return (
     <div
-      className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg bg-white"
+      className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg bg-white dark:bg-zinc-500"
       style={{
         minWidth: collapsed ? collapsedWidth : 180,
         width: collapsed ? collapsedWidth : sidebarWidth,
@@ -30,7 +32,7 @@ export default function DirectoryTreePanel({
     >
       {/* 侧栏内容，折叠时隐藏但节点不移除 */}
       <div
-        className={`flex-1 h-full flex flex-col`}
+        className={`flex-1 h-full flex flex-col dark:bg-zinc-500`}
         style={{
           width: collapsed ? 0 : sidebarWidth,
           minWidth: 0,
@@ -38,11 +40,13 @@ export default function DirectoryTreePanel({
           display: collapsed ? 'none' : undefined,
         }}
       >
-        <NewFileOrFolder
-          key={currentDir}
-          parentDir={currentDir}
-          onCreated={() => setRefreshKey((k) => k + 1)}
-        />
+        {editable ? (
+          <NewFileOrFolder
+            key={currentDir}
+            parentDir={currentDir}
+            onCreated={() => setRefreshKey((k) => k + 1)}
+          />
+        ) : null}
         <DirectoryTree
           currentDir={currentDir}
           refreshKey={refreshKey}

@@ -23,7 +23,7 @@ export function ContentLayout({ children }: ContentLayoutProps) {
         <Navbar />
       </div>
       <div
-        className="flex overflow-y-auto rounded-lg shadow-lg pt-1"
+        className="flex overflow-y-auto dark:bg-zinc-900 rounded-lg shadow-lg pt-1 m-h-[calc(100vh-)]"
         style={{ height: `calc(100vh - ${navbarHeight}px)` }}
       >
         {children}

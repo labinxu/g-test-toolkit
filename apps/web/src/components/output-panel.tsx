@@ -19,12 +19,14 @@ export function OutputPanel({
   return (
     <div
       className="w-full flex flex-col flex-none rounded-lg shadow-lg"
-      onClick={() => setOpen(!open)}
       // onMouseEnter={() => setOpen(true)}
       // onMouseLeave={() => setOpen(false)}
     >
-      <div className="rounded-lg shadow-lg border-t border-b bg-gray-100 font-medium flex items-center">
-        <div className="ml-2">
+      <div
+        className="rounded-lg shadow-lg border-t border-b bg-gray-100 font-medium flex items-center  dark:bg-zinc-800"
+        onClick={() => setOpen(!open)}
+      >
+        <div className="ml-2 dark:bg-zinc-800 ">
           <span>{title}</span>
         </div>
         <div className="flex justify-center items-center w-full">
