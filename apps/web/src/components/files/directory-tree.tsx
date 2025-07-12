@@ -13,6 +13,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
+import { FileContextMenu } from './conent-menu';
 type FileNode = {
   name: string;
   path: string;
@@ -198,24 +199,6 @@ export default function DirectoryTree({
           <span>
             {node.isDirectory ? '📁' : ''} {node.name}
           </span>
-          {/* Delete button, only show on hover or selected */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={`ml-2 p-1 h-6 w-6 text-red-500 opacity-0 group-hover:opacity-100 ${isSelected ? 'opacity-100' : ''}`}
-            tabIndex={-1}
-            onClick={(e) => {
-              e.stopPropagation();
-              setDeleteTarget({
-                path: node.path,
-                isDirectory: node.isDirectory,
-              });
-            }}
-            title={`Delete ${node.isDirectory ? 'folder' : 'file'}`}
-          >
-            🗑️
-          </Button>
         </div>
         {/* Child nodes (only show when expanded) */}
         {node &&
@@ -259,7 +242,6 @@ export default function DirectoryTree({
       <div className="flex-1 min-h-0 overflow-auto dark:bg-zinc-600">
         {tree.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))}
       </div>
-
       {/* shadcn/ui AlertDialog for delete confirmation */}
       <AlertDialog
         open={!!deleteTarget}

@@ -1,15 +1,8 @@
 'use client';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
-
-import {
-  CirclePowerIcon,
-  TrashIcon,
-  FolderClosedIcon,
-  FolderOpenIcon,
-  FolderIcon,
-  FileIcon,
-} from 'lucide-react';
+import { FolderClosedIcon, FolderOpenIcon, FileIcon } from 'lucide-react';
 import { useSession } from '@/app/context/session-context';
 import {
   AlertDialog,
@@ -21,6 +14,9 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
+import { FileContextMenu } from './file-context-menu';
+import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
+
 type FileNode = {
   name: string;
   path: string;
@@ -67,7 +63,7 @@ export default function DirectoryTree({
   const [deleting, setDeleting] = useState(false);
   const rootDir = useMemo(() => {
     return currentDir;
-  }, []);
+  }, [currentDir]);
   const { isAuthenticated } = useSession();
 
   // Initialize and restore expanded state
@@ -81,13 +77,12 @@ export default function DirectoryTree({
       .then((res) => res.json())
       .then((treeData: FileNode[]) => {
         setTree(treeData);
-        // Restore expanded state
         const saved = localStorage.getItem(EXPANDED_KEY);
         if (saved) {
           setExpanded(JSON.parse(saved));
         }
       });
-  }, [refreshKey, isAuthenticated]);
+  }, [refreshKey, isAuthenticated, rootDir]);
 
   // Persist expanded state
   useEffect(() => {
@@ -97,6 +92,7 @@ export default function DirectoryTree({
   function toggleFolder(path: string) {
     setExpanded((prev) => ({ ...prev, [path]: !prev[path] }));
   }
+
   function expandAll() {
     const allDirs = getAllDirPaths(tree);
     const newState: Record<string, boolean> = {};
@@ -107,6 +103,7 @@ export default function DirectoryTree({
   function collapseAll() {
     setExpanded({});
   }
+
   const handleDelete = useCallback(
     async (path: string, isDirectory: boolean) => {
       console.log('handle delete', isDirectory, path);
@@ -120,7 +117,7 @@ export default function DirectoryTree({
         body: JSON.stringify({ path }),
       });
       setDeleting(false);
-      setRefreshKey(refreshKey + 1); // Increment refreshKey to trigger refresh
+      setRefreshKey(refreshKey + 1);
       if (selectedPath === path) setSelectedPath(null);
       if (isDirectory) {
         setSelectedPath(null);
@@ -129,11 +126,13 @@ export default function DirectoryTree({
       }
       setDeleteTarget(null);
     },
-    [refreshKey, setRefreshKey, selectedPath],
+    [refreshKey, setRefreshKey, selectedPath, onDirSelect, currentDir],
   );
+
   const handleRun = useCallback(async (path: string, isDirectory: boolean) => {
-    console.log(path, isDirectory);
+    console.log('handle run', path, isDirectory);
   }, []);
+
   function renderNode(node: FileNode, level = 0, isLast = false) {
     const isSelected = selectedPath === node.path;
     const isOpen = expanded[node.path] ?? false;
@@ -147,94 +146,79 @@ export default function DirectoryTree({
       : 'hover:bg-green-50 text-gray-600';
 
     return (
-      <div key={node.path} className="relative group" id="file-list">
-        <div
-          className={`${base} ${node.isDirectory ? folder : file}`}
-          style={{ paddingLeft: `${level * 24 + 8}px` }}
-          onClick={() => {
-            setSelectedPath(node.path);
-            if (node.isDirectory) {
-              toggleFolder(node.path);
-              onDirSelect?.(node.path);
-            } else {
-              onSelect(node.path);
-            }
-          }}
-        >
-          {/* Vertical line */}
-          {level > 0 && (
-            <span
-              className="absolute left-0 top-0 h-full w-4"
-              style={{
-                borderLeft:
-                  isLast && (!node.children || node.children.length === 0)
-                    ? 'none'
-                    : '2px solid #e5e7eb',
-                height: '100%',
+      <div key={node.path} className="relative group">
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div
+              className={`${base} ${node.isDirectory ? folder : file}`}
+              style={{ paddingLeft: `${level * 24 + 8}px` }}
+              onClick={() => {
+                setSelectedPath(node.path);
+                if (node.isDirectory) {
+                  toggleFolder(node.path);
+                  onDirSelect?.(node.path);
+                } else {
+                  onSelect(node.path);
+                }
               }}
-            />
-          )}
-          {/* Horizontal line */}
-          {level > 0 && (
-            <span
-              className="absolute"
-              style={{
-                left: `${level * 24 - 8}px`,
-                top: '50%',
-                width: '16px',
-                height: '2px',
-                background: '#e5e7eb',
-                transform: 'translateY(-1px)',
-              }}
-            />
-          )}
-          {/* Collapse/Expand icon */}
-          {node.isDirectory ? null : <span className="mr-2 w-4">📄</span>}
-          <span>
-            {node.isDirectory ? '📁' : ''} {node.name}
-          </span>
-          {/* Delete button, only show on hover or selected */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={`ml-2 p-1 h-6 w-6 text-red-500 opacity-0 group-hover:opacity-100 ${isSelected ? 'opacity-100' : ''}`}
-            tabIndex={-1}
-            onClick={(e) => {
-              e.stopPropagation();
+            >
+              {/* Vertical line */}
+              {level > 0 && (
+                <span
+                  className="absolute left-0 top-0 h-full w-4"
+                  style={{
+                    borderLeft:
+                      isLast && (!node.children || node.children.length === 0)
+                        ? 'none'
+                        : '2px solid #e5e7eb',
+                    height: '100%',
+                  }}
+                />
+              )}
+              {/* Horizontal line */}
+              {level > 0 && (
+                <span
+                  className="absolute"
+                  style={{
+                    left: `${level * 24 - 8}px`,
+                    top: '50%',
+                    width: '16px',
+                    height: '2px',
+                    background: '#e5e7eb',
+                    transform: 'translateY(-1px)',
+                  }}
+                />
+              )}
+              {/* Collapse/Expand icon */}
+              {node.isDirectory ? (
+                <span className="mr-2 w-4">
+                  {isOpen ? (
+                    <FolderOpenIcon size={16} />
+                  ) : (
+                    <FolderClosedIcon size={16} />
+                  )}
+                </span>
+              ) : (
+                <span className="mr-2 w-4">
+                  <FileIcon size={16} />
+                </span>
+              )}
+              <span>{node.name}</span>
+            </div>
+          </ContextMenuTrigger>
+          <FileContextMenu
+            node={{ path: node.path, isDirectory: node.isDirectory }}
+            onDelete={() => {
               setDeleteTarget({
                 path: node.path,
                 isDirectory: node.isDirectory,
               });
             }}
-            title={`Delete ${node.isDirectory ? 'folder' : 'file'}`}
-          >
-            <TrashIcon
-              className="group-hover:text-blue-500 group-hover:scale-125 transition-all duration-200"
-              color="black"
-            />
-          </Button>
-          <Button
-            variant="secondary"
-            size="icon"
-            className={`ml-2 p-1 h-6 w-6 text-red-500 opacity-0 group-hover:opacity-100 ${isSelected ? 'opacity-100' : ''}`}
-            tabIndex={-1}
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedPath(node.path);
-              handleRun(node.path, node.isDirectory);
-            }}
-            title={`Delete ${node.isDirectory ? 'folder' : 'file'}`}
-          >
-            <CirclePowerIcon
-              className="group-hover:text-blue-500 group-hover:scale-125 transition-all duration-200"
-              color="black"
-            />
-          </Button>
-        </div>
-        {/* Child nodes (only show when expanded) */}
-        {node &&
-          node.isDirectory &&
+            onRun={handleRun}
+          />
+        </ContextMenu>
+        {/* Child nodes */}
+        {node.isDirectory &&
           isOpen &&
           node.children &&
           node.children.map(
@@ -245,9 +229,11 @@ export default function DirectoryTree({
       </div>
     );
   }
+
   if (!isAuthenticated) {
     return <div>login please</div>;
   }
+
   return (
     <div className="flex flex-col rounded-lg h-full">
       {collapsible && (
@@ -273,7 +259,17 @@ export default function DirectoryTree({
       <div className="flex-1 min-h-0 overflow-auto">
         {tree.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))}
       </div>
-
+      {/*
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div>ooxx</div>
+        </ContextMenuTrigger>
+        <FileContextMenu
+          node={{ path: 'xx', isDirectory: false }}
+          onDelete={() => {}}
+          onRun={() => {}}
+        />
+        </ContextMenu>*/}
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
