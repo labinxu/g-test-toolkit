@@ -79,7 +79,7 @@ export default function DirectoryTree({
           setExpanded(JSON.parse(saved));
         }
       });
-  }, [refreshKey, accessToken, isAuthenticated]);
+  }, [refreshKey, isAuthenticated]);
 
   // Persist expanded state
   useEffect(() => {
@@ -106,7 +106,6 @@ export default function DirectoryTree({
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
         credentials: 'include',
         body: JSON.stringify({ path }),
@@ -116,7 +115,7 @@ export default function DirectoryTree({
       if (selectedPath === path) setSelectedPath(null);
       setDeleteTarget(null);
     },
-    [accessToken],
+    [],
   );
 
   async function handleDelete1(path: string, isDirectory: boolean) {
@@ -125,7 +124,6 @@ export default function DirectoryTree({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({ path }),
     });

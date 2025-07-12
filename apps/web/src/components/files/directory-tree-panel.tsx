@@ -23,7 +23,8 @@ export default function DirectoryTreePanel({
   const collapsedWidth = 28;
   return (
     <div
-      className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg bg-white dark:bg-zinc-500"
+      id="directory-panel"
+      className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg dark:bg-zinc-400 "
       style={{
         minWidth: collapsed ? collapsedWidth : 180,
         width: collapsed ? collapsedWidth : sidebarWidth,
@@ -32,7 +33,7 @@ export default function DirectoryTreePanel({
     >
       {/* 侧栏内容，折叠时隐藏但节点不移除 */}
       <div
-        className={`flex-1 h-full flex flex-col dark:bg-zinc-500`}
+        className={`flex-1 h-full flex flex-col `}
         style={{
           width: collapsed ? 0 : sidebarWidth,
           minWidth: 0,
@@ -69,14 +70,15 @@ export default function DirectoryTreePanel({
       >
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40">
           <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 p-0 bg-white shadow border border-gray-200 rounded-full"
+            variant="secondary"
             onClick={() => setCollapsed((v) => !v)}
             tabIndex={-1}
-            type="button"
           >
-            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            {collapsed ? (
+              <ChevronRight className="dark:bg-zinc-400" size={18} />
+            ) : (
+              <ChevronLeft size={18} className="dark:bg-zinc-400" />
+            )}
           </Button>
         </div>
       </div>

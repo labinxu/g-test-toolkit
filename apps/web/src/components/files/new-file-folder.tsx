@@ -3,15 +3,23 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Plus } from 'lucide-react';
+import { PlusIcon } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useSession } from '@/app/context/session-context';
-
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { FileType } from './file-type';
 export default function NewFileOrFolder({
   parentDir,
   onCreated,
@@ -22,8 +30,7 @@ export default function NewFileOrFolder({
   const [isFolder, setIsFolder] = useState(false);
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
-  const { isAuthenticated, accessToken } = useSession();
-
+  const [fileType, setFileType] = useState('file');
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
@@ -32,7 +39,6 @@ export default function NewFileOrFolder({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ dir: `${parentDir}/${name}` }),
       });
@@ -41,7 +47,6 @@ export default function NewFileOrFolder({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ path: `${parentDir}/${name}`, content }),
       });
@@ -52,52 +57,42 @@ export default function NewFileOrFolder({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-row items-center gap-1 mb-2 rounded-lg shadow-2xl"
-    >
-      <div className="flex items-center gap-1 ml-2">
-        <Switch
-          id="folder-switch"
-          checked={isFolder}
-          onCheckedChange={setIsFolder}
-          className="data-[state=checked]:bg-primary h-4 w-7"
-        />
-        <label
-          htmlFor="folder-switch"
-          className="text-[11px] select-none text-gray-700"
-          style={{ cursor: 'pointer', lineHeight: 1 }}
-        >
-          Folder
-        </label>
-      </div>
-      <Input
-        placeholder={isFolder ? 'Folder name' : 'File name'}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        required
-        className="w-28 h-6 text-xs px-2 py-1"
-        style={{ fontSize: 12 }}
-      />
+    <div className="flex flex-1 ">
+      <form
+        id="id-create-file"
+        onSubmit={handleSubmit}
+        className="flex flex-row items-center gap-1 m-2 rounded-lg shadow-2xl justify-between"
+      >
+        <div className="flex flex-row">
+          <FileType value={fileType} setValue={setFileType} />
 
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="submit"
-              className="h-6 w-6 p-0 flex items-center justify-center"
-              variant="ghost"
-              aria-label="Create"
-              tabIndex={0}
-            >
-              <Plus className="w-3 h-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <span>Create {isFolder ? 'Folder' : 'File'}</span>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </form>
+          <Input
+            placeholder={isFolder ? 'Folder name' : 'File name'}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            style={{ fontSize: 12 }}
+          />
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="submit"
+                className="h-6 w-6 p-0 flex items-center justify-center bg-accent"
+                variant="ghost"
+                aria-label="Create"
+                tabIndex={0}
+              >
+                <PlusIcon className="w-3 h-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <span>Create {isFolder ? 'Folder' : 'File'}</span>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </form>
+    </div>
   );
 }

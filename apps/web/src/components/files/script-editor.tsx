@@ -125,7 +125,7 @@ export function ScriptEditor({
         {loading ? (
           <Skeleton className="w-full h-[60vh] rounded-xl" />
         ) : (
-          <div className="rounded-xl overflow-hidden h-full bg-white shadow-xl">
+          <div className="rounded-xl overflow-hidden h-full bg-white dark:bg-zinc-500 shadow-xl">
             <MonacoEditor
               height="100%"
               language={language}

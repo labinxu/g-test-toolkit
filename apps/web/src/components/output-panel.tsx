@@ -42,7 +42,7 @@ export function OutputPanel({
         }}
       >
         <div
-          className="w-full h-[320px] p-2 border-none rounded-lg shadow-lg bg-gray-50 overflow-y-auto"
+          className="w-full h-[320px] dark:bg-zinc-300 p-2 border-none rounded-lg shadow-lg bg-gray-50 overflow-y-auto"
           style={{
             whiteSpace: 'pre-wrap',
             fontFamily: 'monospace',

@@ -18,12 +18,12 @@ export function ContentLayout({ children }: ContentLayoutProps) {
   }, []);
 
   return (
-    <div className="container flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col">
       <div ref={navbarRef}>
         <Navbar />
       </div>
       <div
-        className="flex overflow-y-auto dark:bg-zinc-900 rounded-lg shadow-lg pt-1 m-h-[calc(100vh-)]"
+        className="flex overflow-y-auto dark:bg-zinc-900 rounded-lg shadow-lg pt-1 ]"
         style={{ height: `calc(100vh - ${navbarHeight}px)` }}
       >
         {children}

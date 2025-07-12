@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import DirectoryTree from './directory-tree';
-import NewFileOrFolder from './new-file-folder';
+import NewFileOrFolder from '@/components/files/new-file-folder';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -21,7 +21,7 @@ export default function DirectoryTreePanel({
   const collapsedWidth = 28;
   return (
     <div
-      className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg bg-white"
+      className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg dark:bg-zinc-300 bg-white"
       style={{
         minWidth: collapsed ? collapsedWidth : 180,
         width: collapsed ? collapsedWidth : sidebarWidth,
