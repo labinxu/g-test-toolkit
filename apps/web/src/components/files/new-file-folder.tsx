@@ -1,9 +1,11 @@
 'use client';
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { PlusIcon } from 'lucide-react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { Form, FormItem, FormControl, FormField } from '../ui/form';
 import {
   Tooltip,
   TooltipContent,
@@ -20,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { FileType } from './file-type';
+
 export default function NewFileOrFolder({
   parentDir,
   onCreated,
@@ -27,72 +30,92 @@ export default function NewFileOrFolder({
   parentDir: string;
   onCreated?: () => void;
 }) {
-  const [isFolder, setIsFolder] = useState(false);
-  const [name, setName] = useState('');
-  const [content, setContent] = useState('');
-  const [fileType, setFileType] = useState('file');
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name) return;
-    if (isFolder) {
-      await fetch('/api/files/mkdir', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ dir: `${parentDir}/${name}` }),
-      });
-    } else {
+  const fileNameSchema = z
+    .string()
+    .min(1, { message: 'File name must be at least 1 character.' })
+    .max(255, { message: 'File name cannot exceed 255 characters.' })
+    .regex(/^[^\s].*[^\s]$/, {
+      message: 'File name cannot start or end with spaces.',
+    })
+    .regex(/^[^/<>*?\\:"|]+$/, {
+      message: 'File name contains invalid characters: /<>*?\\:"|',
+    })
+    .refine((val) => !/^\.*$/.test(val), {
+      message: 'File name cannot be only dots (e.g., . or ..).',
+    })
+    .refine((val) => !/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(val), {
+      message:
+        'File name cannot be a reserved name (e.g., CON, PRN, AUX, NUL, COM1, LPT1).',
+    });
+  const formSchema = z.object({
+    fileName: fileNameSchema,
+    fileType: z.string(),
+  });
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      fileName: '',
+      fileType: 'File',
+    },
+  });
+  async function handleSubmit(data: z.infer<typeof formSchema>) {
+    console.log('create ', data);
+    if (data.fileType === 'file') {
       await fetch('/api/files/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ path: `${parentDir}/${name}`, content }),
+        body: JSON.stringify({
+          path: `${parentDir}/${data.fileName}`,
+        }),
+      });
+    } else {
+      await fetch('/api/files/mkdir', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path: `${parentDir}/${data.fileName}` }),
       });
     }
-    setName('');
-    setContent('');
     onCreated?.();
   }
-
   return (
     <div className="flex flex-1 ">
-      <form
-        id="id-create-file"
-        onSubmit={handleSubmit}
-        className="flex flex-row items-center gap-1 m-2 rounded-lg shadow-2xl justify-between"
-      >
-        <div className="flex flex-row">
-          <FileType value={fileType} setValue={setFileType} />
-
-          <Input
-            placeholder={isFolder ? 'Folder name' : 'File name'}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            style={{ fontSize: 12 }}
+      <Form {...form}>
+        <form
+          id="id-create-file"
+          onSubmit={form.handleSubmit(handleSubmit)}
+          className="flex flex-row items-center gap-1 m-2 rounded-lg shadow-2xl justify-between"
+        >
+          <FormField
+            control={form.control}
+            name="fileType"
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <FileType value={field.value} setValue={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
           />
-        </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="submit"
-                className="h-6 w-6 p-0 flex items-center justify-center bg-accent"
-                variant="ghost"
-                aria-label="Create"
-                tabIndex={0}
-              >
-                <PlusIcon className="w-3 h-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <span>Create {isFolder ? 'Folder' : 'File'}</span>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </form>
+          <FormField
+            control={form.control}
+            name="fileName"
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Input placeholder="testcase" {...field} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <Button type="submit" variant={'secondary'} size={'icon'}>
+            <PlusIcon />
+          </Button>
+        </form>
+      </Form>
     </div>
   );
 }

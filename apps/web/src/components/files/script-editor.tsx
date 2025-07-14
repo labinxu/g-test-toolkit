@@ -1,17 +1,16 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
-import dynamic from 'next/dynamic';
+//import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FileText, Save, Loader2 } from 'lucide-react';
-import { OnMount } from '@monaco-editor/react';
 import { useSession } from '@/app/context/session-context';
-import { useQuery } from '@tanstack/react-query';
-const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
-  ssr: false,
-});
-
+// const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
+//   ssr: false,
+// });
+import { Editor, OnMount } from '@monaco-editor/react';
+import { useTheme } from 'next-themes';
 export function ScriptEditor({
   filePath,
   onMount,
@@ -27,6 +26,8 @@ export function ScriptEditor({
   const lastLoadedPath = useRef<string | null>(null);
   const [content, setContent] = useState('');
   const { isAuthenticated } = useSession();
+  const { theme } = useTheme();
+  console.log('theme ', theme);
   // Load file content
   useEffect(() => {
     if (!filePath || !isAuthenticated) return;
@@ -59,10 +60,10 @@ export function ScriptEditor({
         },
         body: JSON.stringify({ path: filePath, content }),
       });
-      if (!res.ok) throw new Error('保存失败');
+      if (!res.ok) throw new Error('Save Failed');
       setChanged(false);
     } catch (e: any) {
-      setError(e.message || '保存失败');
+      setError(e.message || 'Save Failed');
     } finally {
       setSaving(false);
     }
@@ -88,7 +89,7 @@ export function ScriptEditor({
 
   if (!filePath) {
     return (
-      <div className="flex-1 flex h-full items-center justify-center text-gray-400 text-lg rounded-xl shadow-lg bg-white">
+      <div className="flex-1 flex h-full items-center justify-center text-lg rounded-xl shadow-lg ">
         <FileText className="w-6 h-6 mr-2" />
         Select a file to edit
       </div>
@@ -96,7 +97,7 @@ export function ScriptEditor({
   }
 
   return (
-    <div className="relative flex flex-col h-full w-full rounded-xl shadow-lg bg-white">
+    <div className="relative flex flex-col h-full w-full rounded-xl shadow-lg">
       <div className="flex items-center gap-2 pb-2 ml-2">
         <Badge
           variant="outline"
@@ -125,12 +126,12 @@ export function ScriptEditor({
         {loading ? (
           <Skeleton className="w-full h-[60vh] rounded-xl" />
         ) : (
-          <div className="rounded-xl overflow-hidden h-full bg-white dark:bg-zinc-500 shadow-xl">
-            <MonacoEditor
+          <div className="rounded-xl overflow-hidden h-full shadow-lg mr-1">
+            <Editor
               height="100%"
               language={language}
-              theme="vs"
               value={content}
+              theme={theme === 'dark' ? 'vs-dark' : 'vs'}
               options={{
                 fontSize: 14,
                 minimap: { enabled: false },

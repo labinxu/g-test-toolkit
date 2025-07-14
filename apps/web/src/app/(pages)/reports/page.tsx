@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useSession } from '@/app/context/session-context';
 import DirectoryTreePanel from '@/components/files/directory-tree-panel';
-
+import DirectoryTree from '@/components/files/directory-tree';
 export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
   const [currentDir, setCurrentDir] = useState('reports');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined);
   const { isAuthenticated } = useSession();
   // Fetch file content when currentFile changes
@@ -58,12 +59,16 @@ export default function Page() {
   return (
     <div className="flex h-screen w-full gap-0 rounded-lg flex-1 min-h-0">
       <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
-        <DirectoryTreePanel
-          currentDir={currentDir}
-          editable={false}
-          onSelect={setCurrentFile}
-          onDirSelect={setCurrentDir}
-        />
+        <DirectoryTreePanel>
+          <DirectoryTree
+            currentDir={currentDir}
+            refreshKey={refreshKey}
+            setRefreshKey={setRefreshKey}
+            onSelect={setCurrentFile}
+            onDirSelect={setCurrentDir}
+            collapsible={false}
+          />
+        </DirectoryTreePanel>
       </div>
       <div className="flex-1 pl-4 h-full min-w-0 flex flex-col transition-all duration-300">
         {iframeSrc ? (
@@ -75,7 +80,7 @@ export default function Page() {
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400">
-            请选择一个 HTML 文件进行预览
+            Select HTML File to view.
           </div>
         )}
       </div>

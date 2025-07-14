@@ -68,7 +68,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(true);
         setUser({ username: data.user.username, email: data.user.email });
       } else {
-        console.error('Profile fetch failed:', response.status);
         setIsAuthenticated(false);
         setUser(null);
         if (pathname !== '/register' && pathname !== '/signin') {
@@ -76,7 +75,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('Auth check error:', error);
       setIsAuthenticated(false);
       setUser(null);
       if (pathname !== '/register' && pathname !== '/signin') {
@@ -141,6 +139,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
+        headers: { 'Content-type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ username, email, password }),
       });
@@ -162,7 +161,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       const response = await fetch('/api/auth/logout', {
-        method: 'POST',
+        method: 'GET',
         credentials: 'include',
       });
       if (response.ok) {

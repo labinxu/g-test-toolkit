@@ -14,9 +14,7 @@ import {
 
 export function ModeToggle() {
   const { setTheme, theme } = useTheme();
-  React.useEffect(() => {
-    console.log('toggle theme', theme);
-  }, [theme]);
+  React.useEffect(() => {}, [theme]);
   return (
     <TooltipProvider disableHoverableContent>
       <Tooltip delayDuration={100}>

@@ -2,11 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { LoggerService } from 'src/logger/logger.service';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { writeFileSync } from 'fs';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { TestCase } from './entities/testcase.entity';
 @Injectable()
 export class ReportService {
   private logger: CustomLogger;
 
-  constructor(private readonly loggerService: LoggerService) {}
+  constructor(
+    @InjectRepository(TestCase)
+    private readonly testCasesRepository: Repository<TestCase>,
+    private readonly loggerService: LoggerService,
+  ) {}
   async onModuleInit() {
     this.logger = this.loggerService.createLogger('ReportService');
   }
@@ -15,15 +22,21 @@ export class ReportService {
     workspace: string,
     testName: string,
     data: any,
-  ): Promise<string> {
+  ): Promise<{ testcase: TestCase; reportFile: string }> {
     this.logger.debug(`generate report at ${workspace}`);
-    const now = new Date();
-    const reportFile = `${workspace}/${testName}.html`;
+    const now = new Date().toISOString();
+    const reportFile = `${workspace}/${testName}_${now}.html`;
     const hasError = data.logs?.some((log: string) =>
       log.toLowerCase().includes('error'),
     );
     const status = hasError ? 'Failed' : 'Passed';
     const durationSeconds = (data.duration / 1000).toFixed(2);
+    const testcase = await this.testCasesRepository.create({
+      testCaseName: testName,
+      status: status,
+      date: now,
+      detail: reportFile,
+    });
 
     const reportHtml = `
 <!DOCTYPE html>
@@ -44,7 +57,7 @@ export class ReportService {
   </style>
 </head>
 <body>
-  <h1>Test Report: ${testName} Time: ${now.toISOString()}</h1>
+  <h1>Test Report: ${testName} Time: ${now}</h1>
   <div class="summary">
     <p><strong>Status:</strong> <span class="status-${status.toLowerCase()}">${status}</span></p>
     <p><strong>Duration:</strong> ${durationSeconds} seconds</p>
@@ -62,6 +75,6 @@ export class ReportService {
 </html>`;
 
     writeFileSync(reportFile, reportHtml);
-    return reportFile;
+    return { testcase, reportFile };
   }
 }

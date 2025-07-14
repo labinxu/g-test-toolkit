@@ -5,6 +5,7 @@ import * as path from 'path';
 import { readFileSync, readdirSync, writeFileSync } from 'fs';
 import { Project } from 'ts-morph';
 import { SyntaxKind } from 'typescript';
+import * as fs from 'fs/promises';
 
 // 匹配函数声明（不包含 constructor）
 const methodRegex =
@@ -91,5 +92,28 @@ export class FilesService {
       .join('\n');
     writeFileSync(entryFile, files);
     return { entryFile };
+  }
+  async getTree(currentPath: string, depthLeft: number) {
+    if (depthLeft < 0) return [];
+    const files = await fs.readdir(currentPath, { withFileTypes: true });
+    const result = [];
+    for (const file of files) {
+      const fullPath = path.join(currentPath, file.name);
+      if (file.isDirectory()) {
+        result.push({
+          name: file.name,
+          path: path.relative(process.cwd(), fullPath),
+          isDirectory: true,
+          children: await this.getTree(fullPath, depthLeft - 1),
+        });
+      } else {
+        result.push({
+          name: file.name,
+          path: path.relative(process.cwd(), fullPath),
+          isDirectory: false,
+        });
+      }
+    }
+    return result;
   }
 }

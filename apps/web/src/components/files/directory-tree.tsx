@@ -13,7 +13,6 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
-import { FileContextMenu } from './conent-menu';
 type FileNode = {
   name: string;
   path: string;
@@ -88,6 +87,7 @@ export default function DirectoryTree({
   }, [expanded]);
 
   function toggleFolder(path: string) {
+    console.log('components toggle folder', path);
     setExpanded((prev) => ({ ...prev, [path]: !prev[path] }));
   }
   function expandAll() {
@@ -138,16 +138,16 @@ export default function DirectoryTree({
     const isSelected = selectedPath === node.path;
     const isOpen = expanded[node.path] ?? false;
     const base =
-      'relative flex items-center px-2 py-1 cursor-pointer select-none  dark:bg-zinc-600"';
+      'relative flex items-center px-2 py-1 cursor-pointer select-none ';
     const folder = isSelected
-      ? 'bg-blue-100 text-blue-700 font-bold'
-      : 'hover:bg-blue-50 font-bold text-gray-700';
+      ? 'text-blue-600 font-bold '
+      : 'font-bold hover:text-blue-500 ';
     const file = isSelected
-      ? 'bg-green-100 text-green-700  dark:bg-zinc-600"'
-      : 'hover:bg-green-50 text-gray-600  dark:bg-zinc-600"';
+      ? 'text-green-400 dark:text-green-400 '
+      : 'hover:text-blue-500  ';
 
     return (
-      <div key={node.path} className="relative group  dark:bg-zinc-600">
+      <div key={node.path} className="relative group">
         <div
           className={`${base} ${node.isDirectory ? folder : file}`}
           style={{ paddingLeft: `${level * 24 + 8}px` }}
@@ -217,7 +217,7 @@ export default function DirectoryTree({
     return <div className={'text-inherit bg-inherit'}>login please</div>;
   }
   return (
-    <div className="flex flex-col rounded-lg h-full  dark:bg-zinc-600">
+    <div className="flex flex-col rounded-lg h-full">
       {/* 如果collapsible为true则显示折叠相关按钮，否则外部控制 */}
       {collapsible && (
         <div className="flex gap-2 mb-2 items-center">
@@ -239,7 +239,7 @@ export default function DirectoryTree({
           </Button>
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-auto dark:bg-zinc-600">
+      <div className="flex-1 min-h-0 overflow-auto ">
         {tree.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))}
       </div>
       {/* shadcn/ui AlertDialog for delete confirmation */}
@@ -255,7 +255,7 @@ export default function DirectoryTree({
               Delete {deleteTarget?.isDirectory ? 'Folder' : 'File'}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete{' '}
+              Are you sure you want to delete
               {deleteTarget?.isDirectory ? 'folder' : 'file'}:{' '}
               <b>{deleteTarget?.path}</b>? This action cannot be undone.
             </AlertDialogDescription>

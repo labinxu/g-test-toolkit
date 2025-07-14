@@ -10,12 +10,14 @@ import { FilesModule } from './files/files.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { User } from './auth/entities/user.entity';
+import { TestCase } from './report/entities/testcase.entity';
+import { ReportModule } from './report/report.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: './data/auth_db.sqlite',
-      entities: [User],
+      entities: [User, TestCase],
       synchronize: true,
     }),
     AndroidModule,
@@ -23,6 +25,7 @@ import { User } from './auth/entities/user.entity';
     TestCaseModule,
     FilesModule,
     AuthModule,
+    ReportModule,
   ],
   controllers: [AppController],
   providers: [AppService, LoggerService, LoggerGateway],

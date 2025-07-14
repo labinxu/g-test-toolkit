@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Res,
+  Req,
   NotFoundException,
   Query,
   UseGuards,
@@ -17,6 +18,7 @@ import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TestCasesService } from './testcases.service';
 import { FilesService } from 'src/files/files.service';
 import { existsSync } from 'fs';
+import { FastifyRequest as Request } from 'fastify';
 @Controller('testcase')
 export class TestCasesController {
   constructor(
@@ -62,12 +64,28 @@ export class TestCasesController {
       throw new NotFoundException(err);
     }
   }
+  @Get('listcases')
+  @UseGuards(AuthGuard('jwt'))
+  async listCases(@Req() req: Request, @Query('depth') depth: number = 3) {
+    const user = req.user;
+    const absPath = path.normalize(
+      path.join(process.cwd(), 'workspace', user['username'], 'cases'),
+    );
+    const baseDir = path.resolve(process.cwd());
+    if (!absPath.startsWith(baseDir)) {
+      throw new Error(
+        'Access to paths outside the working directory is forbidden',
+      );
+    }
+    return await this.filesService.getTree(absPath, depth);
+  }
   @Get('bundle')
   @UseGuards(AuthGuard('jwt'))
   async executeBundle(
     @Query('scriptpath') scriptpath: string,
     @Query('clientId') clientId: string,
   ) {
+    console.log('clientid', clientId);
     try {
       const absPath = path.resolve(process.cwd(), scriptpath);
       const stat = statSync(absPath);
@@ -87,6 +105,9 @@ export class TestCasesController {
         }
         const filesContent: { [filename: string]: string } = {};
         const files = await readdir(absPath);
+        if (files.length === 0) {
+          return { message: 'no files', clientId };
+        }
         await Promise.all(
           files.map(async (file) => {
             const fullPath = path.join(absPath, file);

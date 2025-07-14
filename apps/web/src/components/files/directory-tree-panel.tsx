@@ -1,30 +1,20 @@
 'use client';
 import { useState } from 'react';
-import DirectoryTree from './directory-tree';
-import NewFileOrFolder from './new-file-folder';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function DirectoryTreePanel({
-  currentDir,
-  editable = true,
-  onSelect,
-  onDirSelect,
+  children,
 }: {
-  currentDir: string;
-  editable: boolean;
-  onSelect: (filePath: string) => void;
-  onDirSelect?: (dirPath: string) => void;
+  children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const sidebarWidth = 288;
   const collapsedWidth = 28;
   return (
     <div
-      id="directory-panel"
-      className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg dark:bg-zinc-400 "
+      className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg dark:bg-zinc-800 bg-white"
       style={{
         minWidth: collapsed ? collapsedWidth : 180,
         width: collapsed ? collapsedWidth : sidebarWidth,
@@ -33,7 +23,7 @@ export default function DirectoryTreePanel({
     >
       {/* 侧栏内容，折叠时隐藏但节点不移除 */}
       <div
-        className={`flex-1 h-full flex flex-col `}
+        className={`flex-1 h-full flex flex-col`}
         style={{
           width: collapsed ? 0 : sidebarWidth,
           minWidth: 0,
@@ -41,23 +31,7 @@ export default function DirectoryTreePanel({
           display: collapsed ? 'none' : undefined,
         }}
       >
-        {editable ? (
-          <NewFileOrFolder
-            key={currentDir}
-            parentDir={currentDir}
-            onCreated={() => setRefreshKey((k) => k + 1)}
-          />
-        ) : null}
-        <DirectoryTree
-          currentDir={currentDir}
-          refreshKey={refreshKey}
-          setRefreshKey={setRefreshKey}
-          onSelect={onSelect}
-          onDirSelect={(dir) => {
-            onDirSelect?.(dir);
-          }}
-          collapsible={false}
-        />
+        {children}
       </div>
       {/* 折叠/展开按钮 */}
       <div
@@ -71,14 +45,13 @@ export default function DirectoryTreePanel({
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40">
           <Button
             variant="secondary"
+            size="icon"
+            className="h-7 w-7 p-0  shadow border  rounded-full"
             onClick={() => setCollapsed((v) => !v)}
             tabIndex={-1}
+            type="button"
           >
-            {collapsed ? (
-              <ChevronRight className="dark:bg-zinc-400" size={18} />
-            ) : (
-              <ChevronLeft size={18} className="dark:bg-zinc-400" />
-            )}
+            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </Button>
         </div>
       </div>

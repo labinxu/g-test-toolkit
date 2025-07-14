@@ -120,4 +120,11 @@
     @apply bg-background text-foreground;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
   }
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
 }

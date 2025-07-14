@@ -16,13 +16,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { FileContextMenu } from './file-context-menu';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
-
-type FileNode = {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  children?: FileNode[];
-};
+import { FileNode } from './types';
+import { DeleteAlertDialog } from '../alert-dialog/delete-alert';
+import { RunAlertDialog } from '../alert-dialog/run-alert';
+import { useSocket } from '../socket-content';
 
 const EXPANDED_KEY = 'directoryTreeExpanded';
 
@@ -39,8 +36,6 @@ function getAllDirPaths(tree: FileNode[]): string[] {
   return result;
 }
 
-type DeleteTarget = { path: string; isDirectory: boolean } | null;
-
 export default function DirectoryTree({
   currentDir,
   onSelect,
@@ -48,6 +43,7 @@ export default function DirectoryTree({
   refreshKey = 0,
   setRefreshKey,
   collapsible = true,
+  run,
 }: {
   currentDir: string;
   onSelect: (filePath: string) => void;
@@ -55,15 +51,16 @@ export default function DirectoryTree({
   refreshKey?: number;
   setRefreshKey: (k: number) => void;
   collapsible?: boolean;
+  run: (node?: FileNode, clientId?: string) => Promise<void>;
 }) {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FileNode | null>(null);
+  const [runTarget, setRunTarget] = useState<FileNode | null>(null);
+  const [running, setRunning] = useState(false);
+  const { clientId } = useSocket();
   const [deleting, setDeleting] = useState(false);
-  const rootDir = useMemo(() => {
-    return currentDir;
-  }, [currentDir]);
   const { isAuthenticated } = useSession();
 
   // Initialize and restore expanded state
@@ -71,7 +68,7 @@ export default function DirectoryTree({
     if (!isAuthenticated) {
       return;
     }
-    fetch(`/api/files/tree?dir=${rootDir}&depth=3`, {
+    fetch(`/api/testcase/listcases?&depth=3`, {
       credentials: 'include',
     })
       .then((res) => res.json())
@@ -82,7 +79,7 @@ export default function DirectoryTree({
           setExpanded(JSON.parse(saved));
         }
       });
-  }, [refreshKey, isAuthenticated, rootDir]);
+  }, [refreshKey, isAuthenticated]);
 
   // Persist expanded state
   useEffect(() => {
@@ -105,8 +102,7 @@ export default function DirectoryTree({
   }
 
   const handleDelete = useCallback(
-    async (path: string, isDirectory: boolean) => {
-      console.log('handle delete', isDirectory, path);
+    async (node: FileNode) => {
       setDeleting(true);
       await fetch('/api/files/delete', {
         method: 'DELETE',
@@ -114,12 +110,12 @@ export default function DirectoryTree({
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ path }),
+        body: JSON.stringify({ path: node.path }),
       });
       setDeleting(false);
       setRefreshKey(refreshKey + 1);
-      if (selectedPath === path) setSelectedPath(null);
-      if (isDirectory) {
+      if (selectedPath === node.path) setSelectedPath(null);
+      if (node.isDirectory) {
         setSelectedPath(null);
         if (onDirSelect)
           onDirSelect(currentDir.substring(0, currentDir.lastIndexOf('/')));
@@ -129,22 +125,31 @@ export default function DirectoryTree({
     [refreshKey, setRefreshKey, selectedPath, onDirSelect, currentDir],
   );
 
-  const handleRun = useCallback(async (path: string, isDirectory: boolean) => {
-    console.log('handle run', path, isDirectory);
-  }, []);
+  const handleRun = useCallback(
+    async (node: FileNode) => {
+      setRunning(true);
+      if (!clientId) {
+        console.log('directory-tree clientId not initialized');
+        return;
+      }
+      await run(node, clientId);
+      setRunning(false);
+    },
+    [clientId],
+  );
 
   function renderNode(node: FileNode, level = 0, isLast = false) {
     const isSelected = selectedPath === node.path;
     const isOpen = expanded[node.path] ?? false;
-    const base =
-      'relative flex items-center px-2 py-1 cursor-pointer select-none';
-    const folder = isSelected
-      ? 'bg-blue-100 text-blue-700 font-bold'
-      : 'hover:bg-blue-50 font-bold text-gray-700';
-    const file = isSelected
-      ? 'bg-green-100 text-green-700'
-      : 'hover:bg-green-50 text-gray-600';
 
+    const base =
+      'relative flex items-center px-2 py-1 cursor-pointer select-none ';
+    const folder = isSelected
+      ? 'text-blue-600 font-bold '
+      : 'font-bold hover:text-blue-500 ';
+    const file = isSelected
+      ? 'text-green-400 dark:text-green-400 '
+      : 'hover:text-blue-500  ';
     return (
       <div key={node.path} className="relative group">
         <ContextMenu>
@@ -158,6 +163,7 @@ export default function DirectoryTree({
                   toggleFolder(node.path);
                   onDirSelect?.(node.path);
                 } else {
+                  onDirSelect?.('');
                   onSelect(node.path);
                 }
               }}
@@ -190,6 +196,7 @@ export default function DirectoryTree({
                 />
               )}
               {/* Collapse/Expand icon */}
+
               {node.isDirectory ? (
                 <span className="mr-2 w-4">
                   {isOpen ? (
@@ -207,14 +214,9 @@ export default function DirectoryTree({
             </div>
           </ContextMenuTrigger>
           <FileContextMenu
-            node={{ path: node.path, isDirectory: node.isDirectory }}
-            onDelete={() => {
-              setDeleteTarget({
-                path: node.path,
-                isDirectory: node.isDirectory,
-              });
-            }}
-            onRun={handleRun}
+            node={node}
+            onDelete={setDeleteTarget}
+            onRun={setRunTarget}
           />
         </ContextMenu>
         {/* Child nodes */}
@@ -257,56 +259,20 @@ export default function DirectoryTree({
         </div>
       )}
       <div className="flex-1 min-h-0 overflow-auto">
-        {tree.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))}
+        {tree?.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))}
       </div>
-      {/*
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div>ooxx</div>
-        </ContextMenuTrigger>
-        <FileContextMenu
-          node={{ path: 'xx', isDirectory: false }}
-          onDelete={() => {}}
-          onRun={() => {}}
-        />
-        </ContextMenu>*/}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {deleteTarget?.isDirectory ? 'Folder' : 'File'}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete{' '}
-              {deleteTarget?.isDirectory ? 'folder' : 'file'}:{' '}
-              <b>{deleteTarget?.path}</b>? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              disabled={deleting}
-              onClick={() => setDeleteTarget(null)}
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deleting}
-              onClick={() => {
-                if (deleteTarget)
-                  handleDelete(deleteTarget.path, deleteTarget.isDirectory);
-              }}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {deleting ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteAlertDialog
+        deleting={deleting}
+        deleteTarget={deleteTarget}
+        handleDelete={handleDelete}
+        setDeleteTarget={setDeleteTarget}
+      />
+      <RunAlertDialog
+        running={running}
+        runTarget={runTarget}
+        handleRun={handleRun}
+        setRunTarget={setRunTarget}
+      />
     </div>
   );
 }

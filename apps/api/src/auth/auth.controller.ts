@@ -16,7 +16,6 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { AuthGuard } from '@nestjs/passport';
-import { Logger } from 'winston';
 
 @Controller('auth')
 export class AuthController {
@@ -107,7 +106,7 @@ export class AuthController {
       });
     }
   }
-  @Post('logout')
+  @Get('logout')
   async logout(@Res() res: FastifyReply) {
     res.clearCookie('access_token', { path: '/' });
     return res

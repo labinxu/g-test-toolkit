@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 
 import { CommandModule } from 'src/command/command.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { TestCase } from 'src/report/entities/testcase.entity';
 import { TestCasesService } from './testcases.service';
 import { TestCasesController } from './testcases.controller';
 import { FastifyMulterModule } from '@nest-lab/fastify-multer';
@@ -24,7 +26,7 @@ import { FilesService } from 'src/files/files.service';
       },
       limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
     }),
-
+    TypeOrmModule.forFeature([TestCase]),
     CommandModule,
     LoggerModule,
     AndroidModule,

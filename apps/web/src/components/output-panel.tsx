@@ -23,10 +23,10 @@ export function OutputPanel({
       // onMouseLeave={() => setOpen(false)}
     >
       <div
-        className="rounded-lg shadow-lg border-t border-b bg-gray-100 font-medium flex items-center  dark:bg-zinc-800"
+        className="rounded-lg shadow-lg border-t border-b font-medium flex items-center  "
         onClick={() => setOpen(!open)}
       >
-        <div className="ml-2 dark:bg-zinc-800 ">
+        <div className="ml-2 ">
           <span>{title}</span>
         </div>
         <div className="flex justify-center items-center w-full">
@@ -42,7 +42,7 @@ export function OutputPanel({
         }}
       >
         <div
-          className="w-full h-[320px] dark:bg-zinc-300 p-2 border-none rounded-lg shadow-lg bg-gray-50 overflow-y-auto"
+          className="w-full h-[320px] p-2 border-none rounded-lg shadow-lg overflow-y-auto"
           style={{
             whiteSpace: 'pre-wrap',
             fontFamily: 'monospace',

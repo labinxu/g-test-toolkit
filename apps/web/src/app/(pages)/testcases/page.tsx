@@ -2,12 +2,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
-import DirectoryTreePanel from './files/directory-tree-panel';
+import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 import { ScriptEditor } from '@/components/files/script-editor';
 import { Control } from './control';
 import { OutputPanel } from '@/components/output-panel';
 import { useSocket } from './socket-content';
 import { useSession } from '@/app/context/session-context';
+import NewFileOrFolder from '@/components/files/new-file-folder';
+import DirectoryTree from './files/directory-tree';
+import { FileNode } from './files/types';
 
 const INITIAL_CODE = `import { TestCase, Test, WithBrowser} from 'test-case';
 @Test()
@@ -18,10 +21,10 @@ class MyTest extends TestCase {
   }
 }
 `;
-const headers = { 'Content-Type': 'application/json' };
 export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
-  const [currentDir, setCurrentDir] = useState('cases');
+  const [currentDir, setCurrentDir] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [testCase, setTestCase] = useState<string>('');
   const { logs, connected, clientId, clearLogs, running, setRunning } =
@@ -52,18 +55,29 @@ export default function Page() {
       setMonacoInited(false);
     };
   }, [testCase, monacoInited]);
-  const run = useCallback(async () => {
-    clearLogs();
-    await fetch(
-      `/api/testcase/bundle?scriptpath=${encodeURIComponent(currentFile)}&clientId=${clientId}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
+  const run = useCallback(
+    async (node?: FileNode, cId?: string) => {
+      clearLogs();
+      let runPath = currentFile;
+      if (node) {
+        runPath = node.path;
+      }
+      let clientIdd = clientId;
+      if (cId) {
+        clientIdd = cId;
+      }
+      await fetch(
+        `/api/testcase/bundle?scriptpath=${encodeURIComponent(runPath)}&clientId=${clientIdd}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
         },
-      },
-    );
-  }, [currentFile, clientId]);
+      );
+    },
+    [currentFile, clientId],
+  );
 
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {
@@ -88,10 +102,9 @@ export default function Page() {
   );
   const renderLogs = () => {
     return logs.map((log, index) => {
-      let color = 'black';
+      let color = '';
       try {
         if (log.includes('error') || log.includes('Error')) {
-          color = 'red';
         } else if (
           log.includes('success') ||
           log.includes('Success') ||
@@ -114,11 +127,22 @@ export default function Page() {
   return (
     <div className="flex w-full gap-0  rounded-lg flex-1">
       <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
-        <DirectoryTreePanel
-          currentDir={currentDir}
-          onSelect={setCurrentFile}
-          onDirSelect={setCurrentDir}
-        />
+        <DirectoryTreePanel>
+          <NewFileOrFolder
+            key={currentDir}
+            parentDir={currentDir}
+            onCreated={() => setRefreshKey((k) => k + 1)}
+          />
+          <DirectoryTree
+            currentDir={currentDir}
+            refreshKey={refreshKey}
+            setRefreshKey={setRefreshKey}
+            onSelect={setCurrentFile}
+            onDirSelect={setCurrentDir}
+            collapsible={false}
+            run={run}
+          />
+        </DirectoryTreePanel>
       </div>
       <div className="flex-1 pl-4 h-full min-w-0 flex flex-col transition-all duration-300 min-h-0">
         <div className="flex flex-col flex-1 min-h-0">

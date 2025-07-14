@@ -18,7 +18,7 @@ export function FileType({
       <Select value={value} onValueChange={setValue}>
         <SelectTrigger
           id="id-type-of-file"
-          className="w-[100px] h-[40px] p-1 flex items-center justify-between border border-gray-300 rounded-md dark"
+          className="w-[100px] h-[40px] p-1 flex items-center justify-between border rounded-md dark"
         >
           <SelectValue placeholder="File ype" />
         </SelectTrigger>

@@ -51,30 +51,7 @@ export class FilesController {
     if (!existsSync(absPath)) {
       await fs.mkdir(absPath, { recursive: true });
     }
-    async function getTree(currentPath: string, depthLeft: number) {
-      if (depthLeft < 0) return [];
-      const files = await fs.readdir(currentPath, { withFileTypes: true });
-      const result = [];
-      for (const file of files) {
-        const fullPath = path.join(currentPath, file.name);
-        if (file.isDirectory()) {
-          result.push({
-            name: file.name,
-            path: path.relative(process.cwd(), fullPath),
-            isDirectory: true,
-            children: await getTree(fullPath, depthLeft - 1),
-          });
-        } else {
-          result.push({
-            name: file.name,
-            path: path.relative(process.cwd(), fullPath),
-            isDirectory: false,
-          });
-        }
-      }
-      return result;
-    }
-    return await getTree(absPath, depth);
+    return await this.filesService.getTree(absPath, depth);
   }
   @Get('testmodule')
   @UseGuards(AuthGuard('jwt'))
@@ -117,13 +94,19 @@ export class FilesController {
   }
   @Post('mkdir')
   @UseGuards(AuthGuard('jwt'))
-  async createDirectory(@Req() req: Request, @Body() body: { dir: string }) {
+  async createDirectory(@Req() req: Request, @Body() body: { path: string }) {
     const user = req.user;
-    let createPath = body.dir;
+    let createPath = body.path;
     if (!createPath.startsWith('workspace')) {
-      createPath = path.resolve('workspace', user['username'], createPath);
+      createPath = path.join(
+        'workspace',
+        user['username'],
+        'cases',
+        createPath,
+      );
     }
     const absPath = path.resolve(process.cwd(), createPath);
+    console.log(`mkdir ${absPath}`);
     await fs.mkdir(absPath, { recursive: true });
     return { success: true };
   }
@@ -136,13 +119,21 @@ export class FilesController {
     @Req() req: Request,
   ) {
     let createPath = body.path;
+
     const user = req.user;
     if (!createPath.startsWith('workspace')) {
-      createPath = path.resolve('workspace', user['username'], createPath);
+      createPath = path.join(
+        'workspace',
+        user['username'],
+        'cases',
+        createPath,
+      );
+    } else {
+      console.log('startsWith found', createPath);
     }
 
     const absPath = path.resolve(process.cwd(), createPath);
-    await fs.writeFile(absPath, body.content || '', 'utf-8');
+    await fs.writeFile(absPath, '', 'utf-8');
     return { success: true };
   }
   @Delete('delete')

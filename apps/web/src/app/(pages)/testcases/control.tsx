@@ -1,6 +1,6 @@
 'use client';
 import { Button } from '@/components/ui/button';
-
+import { FileNode } from './files/types';
 export function Control({
   currentFile,
   running,
@@ -12,7 +12,7 @@ export function Control({
   running: boolean;
   connected: boolean;
   setRunning: (run: boolean) => void;
-  run: () => Promise<void>;
+  run: (path?: FileNode) => Promise<void>;
 }) {
   return (
     <div className="flex justify-between items-center rounded-lg shadow-sm ">
