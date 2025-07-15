@@ -27,6 +27,7 @@ export default function Page() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [testCase, setTestCase] = useState<string>('');
+  const [openLog, setOpenLog] = useState(false);
   const { logs, connected, clientId, clearLogs, running, setRunning } =
     useSocket();
   const { isAuthenticated } = useSession();
@@ -75,6 +76,7 @@ export default function Page() {
           },
         },
       );
+      setOpenLog(true);
     },
     [currentFile, clientId],
   );
@@ -159,7 +161,11 @@ export default function Page() {
             setRunning={setRunning}
             run={run}
           />
-          <OutputPanel renderLogs={renderLogs} />
+          <OutputPanel
+            renderLogs={renderLogs}
+            open={openLog}
+            setOpen={setOpenLog}
+          />
         </div>
       </div>
     </div>

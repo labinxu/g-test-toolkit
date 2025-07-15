@@ -6,13 +6,16 @@ import { ChevronsUpDown } from 'lucide-react';
 interface OutputPanelProps {
   renderLogs: () => React.ReactNode;
   title?: string;
+  open: boolean;
+  setOpen: (o: boolean) => void;
 }
 
 export function OutputPanel({
   renderLogs,
   title = 'Output',
+  open = false,
+  setOpen,
 }: OutputPanelProps) {
-  const [open, setOpen] = React.useState(false);
   // 日志区最大高度
   const panelHeight = 320;
 
