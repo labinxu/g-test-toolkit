@@ -35,12 +35,21 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const socket = io('http://localhost:3001/log');
+    const socket = io('http://localhost:3001/log', {
+      transports: ['polling', 'websocket'],
+      path: '/socket.io',
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      withCredentials: true,
+    });
+
     socketRef.current = socket;
 
     socket.on('connect', () => {
       setConnected(true);
       setClientId(socket.id);
+      console.log('logger gateway on connect');
       socket.emit('hello', 'Hello from Next.js client!');
     });
 

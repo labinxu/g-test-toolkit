@@ -33,7 +33,7 @@ export function OutputPanel({
           <span>{title}</span>
         </div>
         <div className="flex justify-center items-center w-full">
-          <Button variant={'secondary'} onClick={() => setOpen((v) => !v)}>
+          <Button variant={'secondary'}>
             <ChevronsUpDown />
           </Button>
         </div>

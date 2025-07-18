@@ -1,2 +1,5 @@
 * TODO <2025-06-18 Wed>[0/1]
 - [] Check the mobile phone is on power,screen displayed.
+
+* sign up with verify code
+payload:{"content":{"data":{"platform":"web","channel":"email","session":"f1f427b8f3c3e68321ca7253431d0f1c","verify":"234185"}}}

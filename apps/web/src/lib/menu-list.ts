@@ -1,31 +1,32 @@
 import {
-  Users,
   Settings,
   SquarePen,
   LayoutGrid,
   LucideIcon,
   TabletSmartphone,
   CommandIcon,
-} from 'lucide-react';
+  UtensilsCrossedIcon,
+  LucideCassetteTape,
+} from 'lucide-react'
 
 type Submenu = {
-  href: string;
-  label: string;
-  active?: boolean;
-};
+  href: string
+  label: string
+  active?: boolean
+}
 
 type Menu = {
-  href: string;
-  label: string;
-  active?: boolean;
-  icon: LucideIcon;
-  submenus?: Submenu[];
-};
+  href: string
+  label: string
+  active?: boolean
+  icon: LucideIcon
+  submenus?: Submenu[]
+}
 
 type Group = {
-  groupLabel: string;
-  menus: Menu[];
-};
+  groupLabel: string
+  menus: Menu[]
+}
 
 export function getMenuList(pathname: string): Group[] {
   return [
@@ -59,6 +60,12 @@ export function getMenuList(pathname: string): Group[] {
           ],
         },
         {
+          href: '/recorder',
+          label: 'PageRecorder',
+          icon: LucideCassetteTape,
+        },
+
+        {
           href: '',
           label: 'Commands',
           icon: CommandIcon,
@@ -74,6 +81,21 @@ export function getMenuList(pathname: string): Group[] {
             {
               href: '/commands/system',
               label: 'System',
+            },
+          ],
+        },
+        {
+          href: '/tools',
+          label: 'Tools',
+          icon: UtensilsCrossedIcon,
+          submenus: [
+            {
+              label: 'DateTime',
+              href: '/tools/trans-datetime',
+            },
+            {
+              label: 'Account',
+              href: '/tools/account',
             },
           ],
         },
@@ -94,5 +116,5 @@ export function getMenuList(pathname: string): Group[] {
         },
       ],
     },
-  ];
+  ]
 }

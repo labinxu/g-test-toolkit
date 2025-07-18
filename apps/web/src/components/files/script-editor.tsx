@@ -27,7 +27,6 @@ export function ScriptEditor({
   const [content, setContent] = useState('');
   const { isAuthenticated } = useSession();
   const { theme } = useTheme();
-  console.log('theme ', theme);
   // Load file content
   useEffect(() => {
     if (!filePath || !isAuthenticated) return;

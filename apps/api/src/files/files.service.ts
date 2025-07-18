@@ -2,11 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
 import * as path from 'path';
-import { readFileSync, readdirSync, writeFileSync } from 'fs';
-import { Project } from 'ts-morph';
-import { SyntaxKind } from 'typescript';
+import { readFileSync, readdirSync, writeFileSync, existsSync } from 'fs';
 import * as fs from 'fs/promises';
-
+import { Project, SyntaxKind, FunctionDeclaration } from 'ts-morph';
 // 匹配函数声明（不包含 constructor）
 const methodRegex =
   /^\s*(?:public\s+|protected\s+|private\s+)?(\w+)\s*\(([^)]*)\)\s*:\s*([^\{;]+)[\{;]?/gm;
@@ -17,6 +15,101 @@ export class FilesService {
     this.logger = this.loggerService.createLogger('FileService');
   }
   makeTypesFile(oFile: string = null) {
+    this.logger.debug(`make test module declare file output:${oFile}`);
+    const files = [
+      'test-cases/classes/impls/android-device.d.ts',
+      'test-cases/classes/impls/web-page.d.ts',
+      'test-cases/classes/test-case-base.d.ts',
+      'test-cases/classes/test-case-decorator.d.ts',
+    ];
+
+    const project = new Project();
+    const sourceFiles = files
+      .map((filePath) => {
+        // Resolve relative path to absolute path based on project root
+        const absolutePath = path.resolve(__dirname, '..', filePath);
+        // Check if file exists
+        if (!existsSync(absolutePath)) {
+          this.logger.error(`File not found: ${absolutePath}`);
+          return null;
+        }
+        try {
+          return project.addSourceFileAtPath(absolutePath);
+        } catch (error) {
+          this.logger.error(
+            `Failed to add source file ${absolutePath}: ${(error as Error).message}`,
+          );
+          return null;
+        }
+      })
+      .filter((sourceFile) => sourceFile !== null);
+
+    const methodDeclarations: string[] = [];
+    // Extract function declarations from .d.ts files (e.g., test-decorator.d.ts)
+    for (const sourceFile of sourceFiles) {
+      // Get all exported declarations (functions, classes, etc.)
+      const declarations = sourceFile.getExportedDeclarations();
+      for (const [_, decls] of declarations) {
+        for (const decl of decls) {
+          // Check if the declaration is a function using type guard
+          if (decl.isKind(SyntaxKind.FunctionDeclaration)) {
+            const func = decl as FunctionDeclaration;
+            let declarationText = func.getText();
+            // Ensure 'export declare' is included, but avoid duplication
+            if (!declarationText.startsWith('export declare')) {
+              declarationText = `export declare ${declarationText}`;
+            }
+            // Ensure it ends with a semicolon
+            if (!declarationText.endsWith(';')) {
+              declarationText += ';';
+            }
+            methodDeclarations.push(declarationText);
+          }
+          // Skip other declarations (e.g., classes like AndroidDevice)
+        }
+      }
+    }
+    // Add the TestCase class declaration
+    methodDeclarations.push(
+      'export declare class TestCase implements ITestBase {',
+    );
+
+    // Extract class methods from other files
+    for (const sourceFile of sourceFiles) {
+      const classes = sourceFile.getClasses();
+      for (const cls of classes) {
+        const className = cls.getName() || 'UnnamedClass';
+        // Extract class method declarations
+        const methods = cls
+          .getMethods()
+          .filter((method) => method.getKind() !== SyntaxKind.Constructor)
+          .map((method) => {
+            return `${method.getText()};`;
+          });
+        // Add class name as comment if methods exist
+        if (methods.length > 0) {
+          methodDeclarations.push(
+            `// Methods from ${className}`,
+            ...methods,
+            '',
+          );
+        }
+      }
+    }
+
+    const outputContent = `// Extracted method declarations from multiple .d.ts files\n${methodDeclarations.join('\n')}\n}`;
+    // 创建新的 .d.ts 文件并写入提取的函数声明
+    const outputFile = project.createSourceFile(
+      './node_modules/@types/test-case.d.ts',
+      outputContent,
+      { overwrite: true },
+    );
+
+    // 保存文件
+    outputFile.saveSync();
+    return outputContent;
+  }
+  makeTypesFile2(oFile: string = null) {
     this.logger.debug(`'make types file' output:${oFile}`);
     // if (oFile && existsSync(oFile)) {
     //   const content = readFileSync(oFile);
@@ -26,6 +119,7 @@ export class FilesService {
       'dist/test-cases/classes/impls/android-device.d.ts',
       'dist/test-cases/classes/impls/web-page.d.ts',
       'dist/test-cases/classes/test-case-base.d.ts',
+      'dist/test-cases/classes/test-decorator.d.ts',
     ];
     const project = new Project();
     const sourceFiles = files.map((path) => project.addSourceFileAtPath(path));

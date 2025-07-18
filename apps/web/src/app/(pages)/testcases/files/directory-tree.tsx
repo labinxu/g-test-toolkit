@@ -259,7 +259,11 @@ export default function DirectoryTree({
         </div>
       )}
       <div className="flex-1 min-h-0 overflow-auto">
-        {tree?.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))}
+        {typeof tree?.map === 'function' ? (
+          tree.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))
+        ) : (
+          <div>No Files</div>
+        )}
       </div>
       <DeleteAlertDialog
         deleting={deleting}

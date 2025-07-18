@@ -8,7 +8,7 @@ import {
   ReactNode,
 } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-
+import { toast } from 'sonner';
 interface SessionContextType {
   isAuthenticated: boolean;
   user: { username: string; email: string } | null;
@@ -115,7 +115,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await checkAuth(); // Refresh auth state after login
       } else {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
+        toast('Error', errorData.message || 'Login failed');
       }
     } catch (error) {
       console.error('Login error:', error);

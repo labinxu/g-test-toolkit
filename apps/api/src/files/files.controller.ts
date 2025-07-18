@@ -60,7 +60,7 @@ export class FilesController {
       const content = this.filesService.makeTypesFile();
       res.status(200).send({ content });
     } catch (err) {
-      throw new NotFoundException('make types file failed');
+      throw new NotFoundException('make types file failed', err);
     }
   }
   // 获取文件内容

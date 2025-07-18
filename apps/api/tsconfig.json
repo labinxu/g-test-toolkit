@@ -1,6 +1,7 @@
 {
   "extends": "@repo/typescript-config/nestjs.json",
   "compilerOptions": {
+    "lib": ["dom", "esnext"],
     "target": "es2020",
     "baseUrl": "./",
     "module": "CommonJS",
@@ -13,11 +14,12 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "moduleResolution": "nodejs",
+    "moduleResolution": "node",
     "strict": true,
     "useDefineForClassFields": true,
     "strictPropertyInitialization": false,
-    "typeRoots": ["./node_modules/@types", "./src/types"]
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": [

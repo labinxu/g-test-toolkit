@@ -106,7 +106,7 @@ export default function NewFileOrFolder({
             render={({ field }) => (
               <FormItem>
                 <FormControl>
-                  <Input placeholder="testcase" {...field} />
+                  <Input placeholder="type name" {...field} />
                 </FormControl>
               </FormItem>
             )}

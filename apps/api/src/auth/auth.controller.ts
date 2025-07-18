@@ -70,7 +70,6 @@ export class AuthController {
     @Req() req: FastifyRequest,
     @Res() res: FastifyReply,
   ) {
-    console.log('=======resceive login request', req.body, loginDto);
     try {
       const { access_token } = await this.authService.login(loginDto);
       // 设置 JWT 到 cookie

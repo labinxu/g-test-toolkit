@@ -86,10 +86,7 @@ export default function Page() {
       if (!monaco || !editor) return;
       monacoRef.current = monaco;
       setMonacoInited(true);
-      monaco.languages.typescript.typescriptDefaults.addExtraLib(
-        'declare module "my-module" { export function myFunc(): void; }',
-        'my-module.d.ts',
-      );
+
       monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
         target: monaco.languages.typescript.ScriptTarget.ESNext,
         allowNonTsExtensions: true,
@@ -107,6 +104,7 @@ export default function Page() {
       let color = '';
       try {
         if (log.includes('error') || log.includes('Error')) {
+          color = 'red';
         } else if (
           log.includes('success') ||
           log.includes('Success') ||

@@ -4,9 +4,11 @@ export const __multiTaskClasses: Function[] = [];
 
 export const __useBrowserStaticMethods: Record<string, Function[]> = {};
 
-export function Test(): ClassDecorator {
-  return function (constructor: Function) {
+export function Test(options?: { module?: string }): ClassDecorator {
+  return function (constructor: Function, ...args: any[]) {
+    (constructor as any).module = options?.module ? options.module : 'default';
     __testCaseClasses.push(constructor);
+    console.log('Decorator args', args);
   };
 }
 export function useBrowser() {

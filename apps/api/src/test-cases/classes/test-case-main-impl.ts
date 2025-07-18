@@ -34,10 +34,9 @@ export async function main(
   const logger = loggerService.createLogger('main');
   for (const Ctor of __testCaseClasses) {
     const needBrowser = (Ctor as any).__useBrowser;
-    console.log('needBrowser', needBrowser);
     const headless = (Ctor as any).__headless;
     const debug = (Ctor as any).__debug;
-
+    logger.sendDebugTo(clientId, `module: ${(Ctor as any).module}`);
     let page: Page | null = null;
     let bc: BrowserControl | null = null;
     let bcs: BrowserControl[] = [];
