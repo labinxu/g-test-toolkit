@@ -7,11 +7,13 @@ import {
   withBrowser,
   __testCaseClasses,
 } from './classes/test-case-main';
+
 import { CustomLogger } from 'src/logger/logger.custom';
 import { AndroidService } from 'src/mobile/android/android.service';
 import { ReportService } from 'src/report/report.service';
 import { LoggerService } from 'src/logger/logger.service';
 import { useBrowser } from './classes/test-case-decorator';
+import { readFileSync } from 'fs';
 
 export class SandboxExecutor {
   private logger: CustomLogger;
@@ -54,11 +56,39 @@ export class SandboxExecutor {
     }
   }
 
+  /**
+   * Compiles a TypeScript file to JavaScript that can be used in the sandbox
+   * @param filePath Path to the TypeScript file
+   * @returns Transpiled JavaScript code
+   */
+  async compileFileToSandboxModule(filePath: string): Promise<string> {
+    try {
+      // Read the TypeScript file content
+      const fileContent = readFileSync(filePath, 'utf8');
+
+      // Transpile the TypeScript to JavaScript
+      const jsCode = this.transpileTypeScript(fileContent);
+
+      // Wrap the code to make it compatible with CommonJS module system
+      const wrappedCode = `
+        (function(module, exports, require) {
+          ${jsCode}
+        })(module, exports, require);
+      `;
+
+      return wrappedCode;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to compile TypeScript file ${filePath}: ${errorMsg}`,
+      );
+    }
+  }
+
   async executeWithBundle(clientCode: string): Promise<void> {
     // Clear previous test case classes to avoid conflicts
     __testCaseClasses.length = 0;
     // Transpile TypeScript to JavaScript
-    this.logger.debug('executeWithBundle');
     // Create a mock module and exports object for CommonJS compatibility
     const module = { exports: {} };
     const sandbox = {

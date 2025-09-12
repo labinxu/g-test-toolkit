@@ -27,6 +27,7 @@ export default function Page() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [testCase, setTestCase] = useState<string>('');
+  const [helpermodule, setHelperModule] = useState('');
   const [openLog, setOpenLog] = useState(false);
   const { logs, connected, clientId, clearLogs, running, setRunning } =
     useSocket();
@@ -43,6 +44,14 @@ export default function Page() {
       .then((content: any) => {
         setTestCase(content['content']);
       });
+
+    fetch(`/api/files/testcasecommon`, {
+      credentials: 'include',
+    })
+      .then((res) => res.json())
+      .then((content: any) => {
+        setHelperModule(content['content']);
+      });
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -52,10 +61,18 @@ export default function Page() {
         'test-case.d.ts',
       );
     }
+    if (helpermodule !== '' && monacoRef.current) {
+      monacoRef.current.languages.typescript.typescriptDefaults.addExtraLib(
+        `declare module "testcase-common" { ${helpermodule} }`,
+        'testcase-common.d.ts',
+      );
+    }
+
     return () => {
       setMonacoInited(false);
     };
   }, [testCase, monacoInited]);
+
   const run = useCallback(
     async (node?: FileNode, cId?: string) => {
       clearLogs();

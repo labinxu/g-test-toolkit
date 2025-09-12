@@ -18,17 +18,13 @@ import * as path from 'path';
 import { FilesService } from './files.service';
 import { existsSync } from 'fs';
 import * as dotenv from 'dotenv';
+import { sanitizeUsername, checkPath } from 'src/common/utils';
 dotenv.config();
 
 @Controller('files')
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
-  checkPath(dir: string) {
-    if (!/^[a-zA-Z0-9_/.-]+$/.test(dir) || dir.includes('..')) {
-      throw new Error('Invalid path provided');
-    }
-  }
   // 获取目录树
   @Get('tree')
   @UseGuards(AuthGuard('jwt'))
@@ -37,10 +33,11 @@ export class FilesController {
     @Query('dir') dir: string,
     @Query('depth') depth: number = 3,
   ) {
-    this.checkPath(dir);
+    const dpath = checkPath(dir);
     const user = req.user;
+    const username = sanitizeUsername(user['username']);
     const absPath = path.normalize(
-      path.join(process.cwd(), 'workspace', user['username'], dir),
+      path.join(process.cwd(), 'workspace', 'users', username, dpath),
     );
     const baseDir = path.resolve(process.cwd());
     if (!absPath.startsWith(baseDir)) {
@@ -61,6 +58,22 @@ export class FilesController {
       res.status(200).send({ content });
     } catch (err) {
       throw new NotFoundException('make types file failed', err);
+    }
+  }
+  @Get('testcasecommon')
+  @UseGuards(AuthGuard('jwt'))
+  async helper(@Res() res: Response) {
+    const commonPath = path.join(
+      __dirname,
+      '../..',
+      'workspace/common_scripts/dist/index.d.ts',
+    );
+
+    try {
+      const content = await this.filesService.getTestcaseCommon(commonPath);
+      res.status(200).send({ content });
+    } catch (err) {
+      throw new NotFoundException('make helper types file failed', err);
     }
   }
   // 获取文件内容
@@ -96,11 +109,13 @@ export class FilesController {
   @UseGuards(AuthGuard('jwt'))
   async createDirectory(@Req() req: Request, @Body() body: { path: string }) {
     const user = req.user;
+    const username = sanitizeUsername(user['username']);
     let createPath = body.path;
     if (!createPath.startsWith('workspace')) {
       createPath = path.join(
         'workspace',
-        user['username'],
+        'users',
+        username,
         'cases',
         createPath,
       );
@@ -157,5 +172,12 @@ export class FilesController {
       }
       return { success: false, error: errorMsg };
     }
+  }
+
+  @Get('buildhelper')
+  //@UseGuards(AuthGuard('jwt'))
+  async buildHelperModule(@Res() res: Response) {
+    await this.filesService.generateModule();
+    return res.send({ code: 'ok' });
   }
 }

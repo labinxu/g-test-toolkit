@@ -19,6 +19,7 @@ import { TestCasesService } from './testcases.service';
 import { FilesService } from 'src/files/files.service';
 import { existsSync } from 'fs';
 import { FastifyRequest as Request } from 'fastify';
+import { checkPath } from 'src/common/utils';
 @Controller('testcase')
 export class TestCasesController {
   constructor(
@@ -68,8 +69,9 @@ export class TestCasesController {
   @UseGuards(AuthGuard('jwt'))
   async listCases(@Req() req: Request, @Query('depth') depth: number = 3) {
     const user = req.user;
+    const userDir = checkPath(user['username']);
     const absPath = path.normalize(
-      path.join(process.cwd(), 'workspace', user['username'], 'cases'),
+      path.join(process.cwd(), 'workspace/users', userDir, 'cases'),
     );
     const baseDir = path.resolve(process.cwd());
     if (!absPath.startsWith(baseDir)) {

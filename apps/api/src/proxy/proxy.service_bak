@@ -1,0 +1,120 @@
+import { Injectable } from '@nestjs/common'
+import { createProxyMiddleware, Options, responseInterceptor } from 'http-proxy-middleware'
+
+@Injectable()
+export class ProxyService {
+  createProxy(targetUrl: string) {
+    const proxyOptions: Options = {
+      target: targetUrl,
+      changeOrigin: true,
+      //ignorePath: true,
+      ws: true, // 启用 WebSocket 代理
+      pathRewrite: (path, req) => {
+        try {
+          const url = new URL(req.url || '', targetUrl)
+          const queryUrl = url.searchParams.get('url') || ''
+          const targetPath = new URL(queryUrl, targetUrl).pathname
+          console.log('Path rewritten:===========', {
+            original: path,
+            queryUrl,
+            rewritten: targetPath,
+          })
+          return targetPath != '/' ? targetPath : queryUrl
+        } catch (error) {
+          console.error('Path rewrite error:', error)
+          return path.replace(/^\/proxy?url=/, '')
+        }
+      },
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+      }, // 添加浏览器头
+      followRedirects: true, // 跟随重定向
+      timeout: 10000, // 超时10秒
+      router: (req) => {
+        try {
+          console.log('onrouter', targetUrl)
+          const url = new URL(targetUrl)
+          const port = url.port || (url.protocol === 'https:' ? '443' : '80')
+          const hostname = url.hostname
+          const validPorts = ['443', '80', '8080'] // Only allow standard ports
+          const matchedPort = validPorts.find((p) => p === port)
+          console.log(`Router: port=${port}, hostname=${hostname}, matched=${matchedPort}`)
+          if (matchedPort) {
+            return `${url.protocol}//${hostname}:${matchedPort}`
+          }
+          console.log('Routing to default target:', targetUrl)
+          return targetUrl
+        } catch (error) {
+          console.error('Router error:', error)
+          return targetUrl
+        }
+      },
+      selfHandleResponse: true,
+      on: {
+        proxyReq: (proxyReq, req, res) => {
+          console.log('proxyReq', req.url)
+        },
+        proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
+          console.log('Proxy response received:', {
+            status: proxyRes.statusCode,
+            contentType: proxyRes.headers['content-type'],
+          })
+          proxyRes.headers['Access-Control-Allow-Origin'] = '*'
+          proxyRes.headers['Access-Control-Allow-Methods'] =
+            'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS'
+          proxyRes.headers['Access-Control-Allow-Credentials'] = 'true'
+          // 移除 X-Frame-Options 以允许 iframe 嵌入
+          delete proxyRes.headers['x-frame-options']
+          if (proxyRes.headers['content-type']?.includes('text/html')) {
+            const response = responseBuffer.toString('utf8')
+            const rewrittenResponse = response.replace(
+              /(src|href|content)="((?:https?:)?\/\/([a-zA-Z0-9.-]+)(?::(\d+))?([^"]*))"/g,
+              (match, attr, originalUrl, hostname, port, path) => {
+                console.log('=====', {
+                  match,
+                  attr,
+                  originalUrl,
+                  hostname,
+                  port,
+                  path,
+                })
+                try {
+                  const protocol = originalUrl.startsWith('http://') ? 'http' : 'https'
+                  const url = `${protocol}://${hostname}${port ? `:${port}` : ''}${path}`
+                  new URL(url) // Verify URL validity
+                  const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`
+
+                  console.log('Riscrittura URL assoluto:', {
+                    original: url,
+                    proxy: proxyUrl,
+                  })
+                  return `${attr}="${proxyUrl}"`
+                } catch (error) {
+                  console.error('Errore riscrsittura URL assoluto:', {
+                    match,
+                    error: error,
+                  })
+                  return match
+                }
+              }
+            )
+            return Buffer.from(rewrittenResponse)
+          }
+          return responseBuffer
+        }),
+        error: (err, req, res) => {
+          console.error('Proxy middleware error:', {
+            error: err.message,
+            url: req.url,
+          })
+        },
+      },
+    }
+
+    return createProxyMiddleware(proxyOptions)
+  }
+}
