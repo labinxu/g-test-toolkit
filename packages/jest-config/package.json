@@ -1,10 +1,23 @@
 {
   "name": "@repo/jest-config",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
+  "main": "base.js",
+  "types": "base.d.ts",
+  "exports": {
+    "./base": "./dist/base.js",
+    "./nest": "./dist/nest.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "ts-jest": "^29.0.0"
   },
   "devDependencies": {
     "@jest/types": "^30.0.0",

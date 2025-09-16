@@ -6,8 +6,6 @@
     "baseUrl": "./",
     "module": "CommonJS",
     "outDir": "./dist",
-    "experimentalDecorators": true,
-    "skipLibCheck": true,
     "allowJs": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
@@ -19,7 +17,10 @@
     "useDefineForClassFields": true,
     "strictPropertyInitialization": false,
     "typeRoots": ["./node_modules/@types", "./src/types"],
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@repo/*": ["../packages/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": [
@@ -29,6 +30,8 @@
     "tmp",
     "test",
     "workspace",
-    "data"
+    "data",
+    "jest.config.ts",
+    "**/*.spec.ts"
   ]
 }

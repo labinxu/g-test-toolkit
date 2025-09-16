@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Body,
   Get,
   Res,
   Req,
@@ -9,17 +10,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { statSync, mkdirSync } from 'fs';
-import { readdir, readFile } from 'fs/promises';
 import * as path from 'path';
 import { FastifyReply as Response } from 'fastify';
-//import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { TestCasesService } from './testcases.service';
 import { FilesService } from 'src/files/files.service';
-import { existsSync } from 'fs';
+import * as fs from 'fs';
 import { FastifyRequest as Request } from 'fastify';
-import { checkPath } from 'src/common/utils';
+import { checkPath, getErrorMessage } from 'src/common/utils';
+import { RunTestCaseDto, RunTestCaseFileDto } from './dto/run-testcase-dto';
 @Controller('testcase')
 export class TestCasesController {
   constructor(
@@ -52,10 +51,9 @@ export class TestCasesController {
     const reportDir = path.dirname(scriptpath).replace('cases', 'reports');
     try {
       const absPath = path.resolve(process.cwd(), scriptpath);
-      const stat = statSync(absPath);
+      const stat = fs.statSync(absPath);
       let message = '';
       if (stat.isFile()) {
-        this.testCasesService.executeFile(absPath, clientId, reportDir);
       } else if (stat.isDirectory()) {
         message = `execute dir ${absPath}`;
       }
@@ -90,23 +88,22 @@ export class TestCasesController {
     console.log('clientid', clientId);
     try {
       const absPath = path.resolve(process.cwd(), scriptpath);
-      const stat = statSync(absPath);
+      const stat = fs.statSync(absPath);
       let message = '';
       if (stat.isFile()) {
         const reportDir = path.dirname(absPath).replace('cases', 'reports');
-        if (!existsSync(reportDir)) {
-          mkdirSync(reportDir, { recursive: true });
+        if (!fs.existsSync(reportDir)) {
+          fs.mkdirSync(reportDir, { recursive: true });
         }
-        this.testCasesService.executeFile(absPath, clientId, reportDir);
         message = `execute file ${absPath}`;
       } else if (stat.isDirectory()) {
         message = `execute dir ${absPath}`;
         const reportDir = absPath.replace('cases', 'reports');
-        if (!existsSync(reportDir)) {
-          mkdirSync(reportDir, { recursive: true });
+        if (!fs.existsSync(reportDir)) {
+          fs.mkdirSync(reportDir, { recursive: true });
         }
         const filesContent: { [filename: string]: string } = {};
-        const files = await readdir(absPath);
+        const files = fs.readdirSync(absPath);
         if (files.length === 0) {
           return { message: 'no files', clientId };
         }
@@ -114,14 +111,8 @@ export class TestCasesController {
           files.map(async (file) => {
             const fullPath = path.join(absPath, file);
             console.log(fullPath);
-            filesContent[fullPath] = await readFile(fullPath, 'utf-8');
+            filesContent[fullPath] = fs.readFileSync(fullPath, 'utf-8');
           }),
-        );
-
-        this.testCasesService.executeTestFiles(
-          filesContent,
-          clientId,
-          reportDir,
         );
       }
       return { message, clientId };
@@ -140,5 +131,72 @@ export class TestCasesController {
     } catch (err) {
       throw new NotFoundException('make types file failed');
     }
+  }
+
+  @Get('interfaces')
+  @UseGuards(AuthGuard('jwt'))
+  async interfaces(@Res() res: Response) {
+    try {
+      const interfs = await this.testCasesService.getInterfaces();
+      res.type('application/json');
+      res.send(interfs);
+    } catch (err) {
+      throw new NotFoundException('make types file failed');
+    }
+  }
+
+  @Get('corelib')
+  async corelib() {
+    try {
+      await this.testCasesService.buildCoreLib();
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error));
+    }
+  }
+
+  @Get('gettrlib')
+  async gettrlib() {
+    try {
+      await this.testCasesService.buildGettrLib();
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error));
+    }
+  }
+  @Post('runcode')
+  async runTestCase(@Body() runTestCaseDto: RunTestCaseDto) {
+    const testCode = `import { TestCase, Test, withBrowser} from 'core-lib';
+@Test()
+@withBrowser({headless:false})
+class MyTest extends TestCase {
+  async test_demo() {
+    this.logger.debug('Test executed from MyTest');
+  }
+}
+`;
+    return await this.testCasesService.runInSandbox(testCode);
+  }
+
+  @Post('runpath')
+  async runTestCaseFile(@Body() runTestCaseFileDto: RunTestCaseFileDto) {
+    const baseDir = path.resolve(__dirname, '../..');
+    const dir = runTestCaseFileDto.filePath;
+
+    // Sanitize the input path to prevent path traversal
+    const sanitizedDir = checkPath(dir);
+
+    // Resolve the path safely
+    const absPath = path.join(baseDir, sanitizedDir);
+
+    // Ensure the resolved path stays within baseDir
+    if (!absPath.startsWith(baseDir)) {
+      throw new Error('Path traversal attempt detected');
+    }
+
+    console.log(absPath);
+    const code = fs.readFileSync(absPath);
+    return await this.testCasesService.runInSandbox(
+      code.toString('utf-8'),
+      runTestCaseFileDto.clientId,
+    );
   }
 }

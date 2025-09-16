@@ -12,7 +12,7 @@ const loggerFormat = winston.format.printf(
 @Injectable({ scope: Scope.TRANSIENT })
 export class CustomLogger {
   private logger: winston.Logger;
-  private context = 'LOG:';
+  private context = 'LOG';
   private clientId: string | null;
   constructor(
     private readonly winstonLogger: winston.Logger,
@@ -55,54 +55,34 @@ export class CustomLogger {
   removeLogFileTransports(transport: winston.transports.FileTransportInstance) {
     this.logger.remove(transport);
   }
-  info(message: string) {
+  sendTo(clientId: string, msg: string, tag: string) {
+    this.loggerGateway?.sendLogTo(clientId, this.format(tag ? tag : '', msg));
+  }
+  info(message: string, tag?: string) {
     this.logger.info(message);
+    this.sendTo(this.clientId, message, tag);
   }
 
-  error(message: string) {
+  error(message: string, tag?: string) {
     this.logger.error(message);
+    this.sendTo(this.clientId, message, tag);
   }
 
-  warn(message: string) {
+  warn(message: string, tag?: string) {
     this.logger.warn(message);
+    this.sendTo(this.clientId, message, tag);
   }
 
-  debug(message: string) {
+  debug(message: string, tag?: string) {
     this.logger.debug(message);
+    this.sendTo(this.clientId, message, tag);
   }
 
-  sendLogTo(clientId: string, message: string) {
-    this.loggerGateway?.sendLogTo(clientId, this.format('', message));
-  }
-  sendDebugTo(clientId: string, message: string) {
-    if (!clientId) {
-      this.logger.error('client id not initialized!');
-      return;
-    }
-    this.loggerGateway?.sendLogTo(clientId, this.format('debug', message));
-    this.logger.debug(message);
-  }
-  sendErrorTo(clientId: string, message: string) {
-    if (!clientId) {
-      this.logger.error('client id not initialized!');
-      return;
-    }
-    this.loggerGateway?.sendLogTo(clientId, this.format('error', message));
-    this.logger.error(message);
-  }
-  sendInfoTo(clientId: string, message: string) {
-    this.loggerGateway?.sendLogTo(clientId, this.format('info', message));
-    this.logger.info(message);
-  }
-  sendWarnTo(clientId: string, message: string) {
-    this.loggerGateway?.sendLogTo(clientId, this.format('warn', message));
-    this.logger.warn(message);
-  }
-  sendExitTo(clientId: string) {
-    this.loggerGateway.sendExitTo(clientId);
-  }
-
-  verbose(message: string) {
+  verbose(message: string, tag?: string) {
     this.logger.verbose(message);
+    this.sendTo(this.clientId, message, tag);
+  }
+  complete() {
+    this.loggerGateway.sendExitTo(this.clientId);
   }
 }

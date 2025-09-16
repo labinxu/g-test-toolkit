@@ -11,11 +11,13 @@ import { useSession } from '@/app/context/session-context';
 import NewFileOrFolder from '@/components/files/new-file-folder';
 import DirectoryTree from './files/directory-tree';
 import { FileNode } from './files/types';
+import { toast } from 'sonner';
 
-const INITIAL_CODE = `import { TestCase, Test, WithBrowser} from 'test-case';
+const INITIAL_CODE = `import { TestCase, Test, WithBrowser} from 'core-lib';
 @Test()
 @WithBrowser({headless:false})
 class MyTest extends TestCase {
+constructor(){LOGGER.info('hello test')}
   async test_demo() {
     this.print('Test executed');
   }
@@ -26,52 +28,31 @@ export default function Page() {
   const [currentDir, setCurrentDir] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [monacoInited, setMonacoInited] = useState<boolean>(false);
-  const [testCase, setTestCase] = useState<string>('');
-  const [helpermodule, setHelperModule] = useState('');
   const [openLog, setOpenLog] = useState(false);
   const { logs, connected, clientId, clearLogs, running, setRunning } =
     useSocket();
   const { isAuthenticated } = useSession();
   const monacoRef = useRef<Monaco>(null);
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !monacoInited || !monacoRef.current) {
       return;
     }
-    fetch(`/api/files/testmodule`, {
+    fetch(`/api/testcase/interfaces`, {
       credentials: 'include',
     })
       .then((res) => res.json())
-      .then((content: any) => {
-        setTestCase(content['content']);
+      .then((data: { [key: string]: string }[]) => {
+        data.forEach((item) => {
+          Object.entries(item).forEach(([key, val]) => {
+            monacoRef.current?.languages.typescript.typescriptDefaults.addExtraLib(
+              `declare module "${key}" { ${val} }`,
+              `${key}.d.ts`,
+            );
+            console.log(`addextralib: declare module ${key} { ${val} }`);
+          });
+        });
       });
-
-    fetch(`/api/files/testcasecommon`, {
-      credentials: 'include',
-    })
-      .then((res) => res.json())
-      .then((content: any) => {
-        setHelperModule(content['content']);
-      });
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (testCase !== '' && monacoRef.current) {
-      monacoRef.current.languages.typescript.typescriptDefaults.addExtraLib(
-        `declare module "test-case" { ${testCase} }`,
-        'test-case.d.ts',
-      );
-    }
-    if (helpermodule !== '' && monacoRef.current) {
-      monacoRef.current.languages.typescript.typescriptDefaults.addExtraLib(
-        `declare module "testcase-common" { ${helpermodule} }`,
-        'testcase-common.d.ts',
-      );
-    }
-
-    return () => {
-      setMonacoInited(false);
-    };
-  }, [testCase, monacoInited]);
+  }, [isAuthenticated, monacoInited]);
 
   const run = useCallback(
     async (node?: FileNode, cId?: string) => {
@@ -97,6 +78,23 @@ export default function Page() {
     },
     [currentFile, clientId],
   );
+  const runPath = useCallback(async () => {
+    clearLogs();
+    fetch(`/api/testcase/runpath`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ filePath: currentFile, clientId }),
+    })
+      .then((resp) => {
+        if (resp.ok) {
+          toast.message('Start succefull...');
+        }
+      })
+      .catch((err) => {});
+    setOpenLog(true);
+  }, [currentFile, clientId]);
 
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {
@@ -157,7 +155,7 @@ export default function Page() {
             onSelect={setCurrentFile}
             onDirSelect={setCurrentDir}
             collapsible={false}
-            run={run}
+            run={runPath}
           />
         </DirectoryTreePanel>
       </div>
@@ -174,7 +172,7 @@ export default function Page() {
             running={running}
             connected={connected}
             setRunning={setRunning}
-            run={run}
+            run={runPath}
           />
           <OutputPanel
             renderLogs={renderLogs}

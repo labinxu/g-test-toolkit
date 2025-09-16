@@ -12,31 +12,16 @@ import {
   ScriptTarget,
   ModuleResolutionKind,
 } from 'ts-morph';
-import { checkPath, combineDtsFiles, findDtsFiles } from 'src/common/utils';
+import {
+  checkPath,
+  combineDtsFiles,
+  findFilesByExtname,
+} from 'src/common/utils';
 
 // 匹配函数声明（不包含 constructor）
 const methodRegex =
   /^\s*(?:public\s+|protected\s+|private\s+)?(\w+)\s*\(([^)]*)\)\s*:\s*([^\{;]+)[\{;]?/gm;
 
-async function getTypeScriptFiles(tdir: string): Promise<string[]> {
-  let results: string[] = [];
-  const dir = checkPath(tdir);
-  const files = await fs.readdir(dir);
-
-  for (const file of files) {
-    const fullPath = path.join(dir, file);
-    const stat = await fs.stat(fullPath);
-
-    if (stat.isDirectory()) {
-      const subFiles = await getTypeScriptFiles(fullPath);
-      results = results.concat(subFiles);
-    } else if (fullPath.endsWith('.ts') || fullPath.endsWith('.tsx')) {
-      results.push(fullPath);
-    }
-  }
-
-  return results;
-}
 @Injectable()
 export class FilesService {
   private logger: CustomLogger;
@@ -238,7 +223,7 @@ export class FilesService {
     }
 
     //
-    const dtsFiles = await findDtsFiles(typesDir);
+    const dtsFiles = await findFilesByExtname(typesDir, '.d.ts');
     console.log(dtsFiles.join(','));
     combineDtsFiles(dtsFiles, `${outDir}/index.d.ts`);
   }

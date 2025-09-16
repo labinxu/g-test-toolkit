@@ -34,8 +34,8 @@ import { FilesService } from 'src/files/files.service';
   ],
   controllers: [TestCasesController],
   providers: [
-    CommandService,
     FilesService,
+    CommandService,
     TestCasesService,
     AndroidService,
     ReportService,

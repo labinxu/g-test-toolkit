@@ -6,4 +6,7 @@ export const config = {
   coverageProvider: 'v8',
   moduleFileExtensions: ['js', 'ts', 'json'],
   testEnvironment: 'jsdom',
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
 } as const satisfies Config;

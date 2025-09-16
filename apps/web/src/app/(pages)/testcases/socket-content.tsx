@@ -49,8 +49,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     socket.on('connect', () => {
       setConnected(true);
       setClientId(socket.id);
-      console.log('logger gateway on connect');
-      socket.emit('hello', 'Hello from Next.js client!');
+      socket.emit('hello', 'Hello from client!');
     });
 
     socket.on('disconnect', () => setConnected(false));
@@ -61,6 +60,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     });
     socket.on('disconnect', () => {
       setConnected(false);
+      setRunning(false);
       console.log('Disconnected');
     });
     // 可以添加更多事件
