@@ -41,7 +41,7 @@ export async function main({
         }
       }
     }
-
+    logger.debug(`browserMethods ${withBrowserMethods.length}`);
     logger.debug(
       `module: ${instance.constructor.name} workspace: ${workspace} starting...`,
     );
@@ -69,7 +69,9 @@ export async function main({
     rst?.page && instance.setPage(rst?.page);
     for (const method of testMethods) {
       try {
-        logger.info(`Running ${Ctor.name}.${method}`);
+        logger.info(
+          `Running ${Ctor.name}.${method} ret:${!rst?.page ? 'no browser' : 'browser opened'}`,
+        );
         await (instance as any)[method]();
         logger.info(`${Ctor.name}.${method} passed`);
       } catch (err) {

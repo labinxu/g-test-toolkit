@@ -9,6 +9,7 @@ import path from 'path';
 import * as vm from 'vm';
 import { Project } from 'ts-morph';
 import { getErrorMessage } from 'src/common/utils';
+import { BrowserHelper } from 'src/browser/browser-helper';
 
 @Injectable()
 export class TestCasesService {
@@ -92,6 +93,7 @@ export class TestCasesService {
         workspace: process.env.WORKSPACE,
         clientId,
         loggerService: this.loggerService,
+        browserHelper: new BrowserHelper(),
       }, // 注入传入的参数
       result: null,
       console, // 注入 console 以支持 console.log

@@ -20,14 +20,26 @@ export class BrowserHelper {
         '--disable-features=PrivacySandboxSettings4',
         '--disable-features=TrackingProtection3pcd',
         '--start-maximized',
+        '--disable-sync', // 禁用同步
+        '--no-zygote', // 禁用 Zygote 进程
+        '--disable-translate', // 禁用翻译
+        '--no-first-run', // 跳过首次运行
+        '--disable-webrtc', // 完全禁用 WebRTC（如果网站使用 WebRTC 触发提示）
         '--window-size=1940,1230',
+        '--disable-features=VizDisplayCompositor', // 禁用合成器（可选，避免图形相关提示）
+        '--disable-bluetooth',
+        '--disable-webusb',
+        '--disable-features=WebBluetooth,WebUSB',
+        '--use-fake-ui-for-media-stream',
       ],
     });
+    const context = bs.defaultBrowserContext();
+    // fixed popup permission dialog
+    await context.overridePermissions('https://gettr.com', []);
     const page = await bs.newPage();
     page.setUserAgent(
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
     );
-
     await page.setViewport({
       width: 1920, // 宽度，例如 1920px
       height: 1080, // 高度，例如 1080px
