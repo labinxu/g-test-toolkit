@@ -8,7 +8,13 @@ puppeteerExra.use(StealthPlugin());
 export class BrowserHelper {
   private broweres: Browser[];
 
-  async newBrowser({ headless = false }: { headless: boolean }) {
+  async newBrowser({
+    headless = false,
+    domain,
+  }: {
+    headless: boolean;
+    domain?: string;
+  }) {
     const bs = await puppeteer.launch({
       headless: headless,
       devtools: false,
@@ -35,8 +41,9 @@ export class BrowserHelper {
     });
     const context = bs.defaultBrowserContext();
     // fixed popup permission dialog
-    await context.overridePermissions('https://gettr.com', []);
+    domain && (await context.overridePermissions(domain, []));
     const page = await bs.newPage();
+
     page.setUserAgent(
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
     );

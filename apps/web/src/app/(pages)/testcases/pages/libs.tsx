@@ -4,13 +4,13 @@ import { OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
 import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 import { ScriptEditor } from '@/components/files/script-editor';
-import { Control } from './control';
+import { Control } from '../control';
 import { OutputPanel } from '@/components/output-panel';
-import { useSocket } from './socket-content';
+import { useSocket } from '../socket-content';
 import { useSession } from '@/app/context/session-context';
 import NewFileOrFolder from '@/components/files/new-file-folder';
-import DirectoryTree from './files/directory-tree';
-import { FileNode } from './files/types';
+import DirectoryTree from '../files/directory-tree';
+import { FileNode } from '../files/types';
 import { toast } from 'sonner';
 
 const INITIAL_CODE = `import { TestCase, Test, WithBrowser} from 'core-lib';
@@ -53,34 +53,31 @@ export default function Page() {
         });
       });
   }, [isAuthenticated, monacoInited]);
-  const buildCoreLib = useCallback(async () => {
-    fetch(`/api/testcase/corelib?clientId=${clientId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-      .then((resp) => {
-        if (resp.ok) {
-          toast.message('Building...');
-        }
-      })
-      .catch((err) => {});
-  }, [clientId]);
-  const buildGettrLib = useCallback(async () => {
-    fetch(`/api/testcase/gettrlib?clientId=${clientId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-      .then((resp) => {
-        if (resp.ok) {
-          toast.message('building...');
-        }
-      })
-      .catch((err) => {});
-  }, [clientId]);
+
+  const run = useCallback(
+    async (node?: FileNode, cId?: string) => {
+      clearLogs();
+      let runPath = currentFile;
+      if (node) {
+        runPath = node.path;
+      }
+      let clientIdd = clientId;
+      if (cId) {
+        clientIdd = cId;
+      }
+      await fetch(
+        `/api/testcase/bundle?scriptpath=${encodeURIComponent(runPath)}&clientId=${clientIdd}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      setOpenLog(true);
+    },
+    [currentFile, clientId],
+  );
   const runPath = useCallback(async () => {
     clearLogs();
     fetch(`/api/testcase/runpath`, {
@@ -92,7 +89,7 @@ export default function Page() {
     })
       .then((resp) => {
         if (resp.ok) {
-          toast.message('Starting...');
+          toast.message('Start succefull...');
         }
       })
       .catch((err) => {});
@@ -176,8 +173,6 @@ export default function Page() {
             connected={connected}
             setRunning={setRunning}
             run={runPath}
-            buildCoreLib={buildCoreLib}
-            buildCommonLib={buildGettrLib}
           />
           <OutputPanel
             renderLogs={renderLogs}

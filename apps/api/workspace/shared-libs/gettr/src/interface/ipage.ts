@@ -1,11 +1,23 @@
-import { Page } from 'puppeteer';
 export class IPage {
-  protected page: Page;
+  protected testcase: any;
   async goto(url: string) {
-    return await this.page.goto(url);
+    return await this.testcase.page().goto(url);
   }
-  constructor(page: Page) {
-    console.log('ipage constructor ', page ? 'page opened' : 'no page');
-    this.page = page;
+  constructor(testInstance: any) {
+    this.testcase = testInstance;
+  }
+  async delay(ms?: number) {
+    const sleep = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+    await sleep(ms ? ms : this.delayTime);
+  }
+  get delayTime() {
+    return this.testcase.delaytime;
+  }
+  get page() {
+    return this.testcase.page;
+  }
+  get logger() {
+    return this.testcase.logger;
   }
 }

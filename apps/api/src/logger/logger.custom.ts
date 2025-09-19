@@ -29,7 +29,7 @@ export class CustomLogger {
   format(level: string, message: string): string {
     const timestamp = new Date().toISOString();
     const tag = this.context ? `[${this.context}]` : '';
-    return `${timestamp} ${level} ${tag} ${message}`;
+    return `${timestamp}  ${tag} [${level}] ${message}`;
   }
   setContext(context: string) {
     this.logger.debug(`set context: clientID:${this.clientId}`);
@@ -55,34 +55,37 @@ export class CustomLogger {
   removeLogFileTransports(transport: winston.transports.FileTransportInstance) {
     this.logger.remove(transport);
   }
-  sendTo(clientId: string, msg: string, tag: string) {
-    this.loggerGateway?.sendLogTo(clientId, this.format(tag ? tag : '', msg));
+  sendTo(clientId: string, msg: string, level?: string) {
+    this.loggerGateway?.sendLogTo(
+      clientId,
+      this.format(level ? level : '', msg),
+    );
   }
   info(message: string, tag?: string) {
     this.logger.info(message);
-    this.sendTo(this.clientId, message, tag);
+    this.sendTo(this.clientId, message, tag ? tag : 'info');
   }
 
   error(message: string, tag?: string) {
     this.logger.error(message);
-    this.sendTo(this.clientId, message, tag);
+    this.sendTo(this.clientId, message, tag ? tag : 'error');
   }
 
   warn(message: string, tag?: string) {
     this.logger.warn(message);
-    this.sendTo(this.clientId, message, tag);
+    this.sendTo(this.clientId, message, tag ? tag : 'warn');
   }
 
   debug(message: string, tag?: string) {
     this.logger.debug(message);
-    this.sendTo(this.clientId, message, tag);
+    this.sendTo(this.clientId, message, tag ? tag : 'debug');
   }
 
   verbose(message: string, tag?: string) {
     this.logger.verbose(message);
-    this.sendTo(this.clientId, message, tag);
+    this.sendTo(this.clientId, message, tag ? tag : 'verbose');
   }
-  complete() {
-    this.loggerGateway.sendExitTo(this.clientId);
+  complete(clientId?: string) {
+    this.loggerGateway.sendExitTo(clientId ? clientId : this.clientId);
   }
 }

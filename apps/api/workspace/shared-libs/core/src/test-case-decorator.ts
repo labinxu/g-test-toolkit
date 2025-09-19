@@ -29,14 +29,15 @@ export function useBrowser() {
 export function withBrowser(options: {
   headless?: boolean;
   debug?: boolean;
+  domain?: string;
 }): ClassDecorator {
   return function (constructor: Function) {
     if (!options) {
-      options = { headless: false, debug: true };
+      options = { headless: false, debug: true, domain: undefined };
     }
     (constructor as any).__useBrowser = true;
     (constructor as any).__headless = options.headless;
-
+    (constructor as any).__domain = options.domain;
     (constructor as any).__debug =
       options.debug === undefined ? true : options.debug;
   };

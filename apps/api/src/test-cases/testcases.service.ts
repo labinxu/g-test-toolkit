@@ -69,12 +69,20 @@ export class TestCasesService {
       throw error;
     }
   }
-  async runInSandbox(code: string, clientId = ''): Promise<any> {
+  async runInSandbox(code: string, clientId?: string): Promise<any> {
     this.logger.debug('runInSandbox');
-    const transformedCode = await this.transformCode(code);
-    // 加载 core-lib
-    const coreLib = await this.loadCoreLib();
-    const gettrLib = await this.loadGettrLib();
+    let transformedCode = '';
+    let coreLib: any;
+    let gettrLib: any;
+    try {
+      transformedCode = await this.transformCode(code);
+      // 加载 core-lib
+      coreLib = await this.loadCoreLib();
+      gettrLib = await this.loadGettrLib();
+    } catch (err) {
+      this.logger.complete(clientId);
+      return;
+    }
     // 创建沙盒上下文
     const sandbox: any = {
       require: (moduleName: string) => {
@@ -95,7 +103,6 @@ export class TestCasesService {
         loggerService: this.loggerService,
         browserHelper: new BrowserHelper(),
       }, // 注入传入的参数
-      result: null,
       console, // 注入 console 以支持 console.log
       coreMain: coreLib.main,
     };
@@ -104,7 +111,7 @@ export class TestCasesService {
     // 包装代码
     const wrappedCode = `
       ${transformedCode}
-      result= coreMain(params)
+      coreMain(params)
     `;
 
     try {
@@ -146,7 +153,7 @@ export class TestCasesService {
     try {
       if (!fs.existsSync(coreLibPath)) {
         throw new Error(
-          `core-lib not found at ${coreLibPath}. Please generate core-lib first.`,
+          `core-lib not found at ${coreLibPath}. Please generate gettr-lib first.`,
         );
       }
       const module = await import(coreLibPath);
@@ -156,7 +163,7 @@ export class TestCasesService {
       throw error;
     }
   }
-  async buildGettrLib() {
+  async buildGettrLib(clientId?: string) {
     console.log('libdir:', process.env.GETTR_LIB_DIR);
     const coreDir = path.join(
       __dirname,
@@ -174,10 +181,11 @@ export class TestCasesService {
     }
     fs.mkdirSync(outputDir, { recursive: true });
     this.generateIndexWithTsMorph(coreDir, srcDir, indexPath);
-    await this.buildWithEsbuild(indexPath, outputDir);
+    const result = await this.buildWithEsbuild(indexPath, outputDir);
+    clientId && this.logger.sendTo(clientId, `gettr lib ${result}`, 'info');
   }
 
-  async buildCoreLib() {
+  async buildCoreLib(clientId?: string) {
     console.log('libdir:', process.env.CORE_LIB_DIR);
     const coreDir = path.join(
       __dirname,
@@ -196,7 +204,8 @@ export class TestCasesService {
     }
     fs.mkdirSync(outputDir, { recursive: true });
     await this.generateIndexWithTsMorph(coreDir, srcDir, indexPath);
-    await this.buildWithEsbuild(indexPath, outputDir);
+    const result = await this.buildWithEsbuild(indexPath, outputDir);
+    clientId && this.logger.sendTo(clientId, `core lib ${result}`, 'info');
   }
   async generateIndexWithTsMorph(
     coreDir: string,
@@ -208,7 +217,6 @@ export class TestCasesService {
       skipAddingFilesFromTsConfig: true,
     });
 
-    // 添加 interfaces 和 src 目录下的文件
     project.addSourceFilesAtPaths([`${srcDir}/*.ts`]);
 
     // 收集导出的符号
@@ -230,7 +238,6 @@ export class TestCasesService {
       }
     });
 
-    // 生成 index.ts 内容
     const indexContent = `// Auto-generated index.ts for lib\n${exportStatements.join('\n')}`;
     fs.writeFileSync(indexPath, indexContent);
 
@@ -238,38 +245,40 @@ export class TestCasesService {
     console.log('Export statements:', exportStatements);
   }
 
-  // 步骤 2: 使用 esbuild 编译到 dist
   async buildWithEsbuild(indexPath: string, outputDir: string) {
-    // 先运行 ts-morph 生成 index.ts
-
-    // esbuild 配置：编译 TypeScript，生成 .js 和 .d.ts，保持模块结构
     const buildOptions: esbuild.BuildOptions = {
       entryPoints: [indexPath], // 从 index.ts 开始
-      bundle: true, // 不打包成单一文件，保持目录结构以支持 import * as
+      bundle: true,
       outdir: outputDir,
-      format: 'esm', // ESM 格式，支持 import * from 'core-lib'
-      platform: 'node', // Node.js 环境
+      format: 'esm',
+      platform: 'node',
       sourcemap: false,
       minify: false,
       loader: {
         '.ts': 'ts', // TypeScript loader
       },
-      external: ['node:*'], // 排除 Node.js 内置模块
-      write: true, // 写入文件系统
+      external: ['node:*'],
+      write: true,
     };
 
     try {
       const result = await esbuild.build(buildOptions);
       if (result.errors.length > 0) {
         console.error('Esbuild errors:', result.errors);
-        process.exit(1);
       }
-      console.log('Built lib to', outputDir);
+      const files = fs.readdirSync(outputDir);
+      if (files.length === 0) {
+        throw new Error(
+          `No files found in ${outputDir}. Build may have failed.`,
+        );
+      }
+      console.log(`Built lib to ${outputDir}:`, files);
+
+      return `build succssfully`;
     } catch (error) {
       console.error('Build failed:', error);
-      process.exit(1);
     } finally {
-      esbuild.stop(); // 清理 esbuild
+      esbuild.stop();
     }
   }
 }

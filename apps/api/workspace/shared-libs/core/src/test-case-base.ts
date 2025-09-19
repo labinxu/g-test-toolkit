@@ -3,9 +3,9 @@ import { Page } from 'puppeteer';
 import { CustomLogger } from '../../types';
 
 export class TestCase {
-  protected p: Page | null = null;
+  public page: Page | null = null;
   private tag: string | '';
-  private logger: CustomLogger;
+  public logger: CustomLogger;
   protected reportData: Record<string, any> = {};
   private sharedState: {
     clientId: string;
@@ -13,6 +13,7 @@ export class TestCase {
     logs: string[];
     details?: string[];
     exceptCounter?: number;
+    delaytime: number;
     emiter: EventEmitter;
   };
   constructor(logger: any, workspace: string) {
@@ -23,6 +24,7 @@ export class TestCase {
       workspace,
       logs: [],
       details: [],
+      delaytime: 2000,
       exceptCounter: 0,
       emiter: emiter,
     };
@@ -33,11 +35,17 @@ export class TestCase {
   debug(msg: string) {
     this.logger.debug(msg, this.tag);
   }
+  setDelayTime(dl: number) {
+    this.sharedState.delaytime = dl;
+  }
   setPage(p: Page) {
-    this.p = p;
+    this.page = p;
   }
   get emiter() {
     return this.sharedState.emiter;
+  }
+  get delaytime() {
+    return this.sharedState.delaytime;
   }
   get exceptCounter() {
     return this.sharedState.exceptCounter;
@@ -82,9 +90,6 @@ export class TestCase {
     return this.reportData;
   }
 
-  page() {
-    return this.p;
-  }
   exceptEqual(except: any, actual: any, description?: string) {}
   exceptNotNull(except: any, description?: string) {}
 

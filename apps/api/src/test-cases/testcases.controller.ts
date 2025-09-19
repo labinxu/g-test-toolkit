@@ -146,34 +146,24 @@ export class TestCasesController {
   }
 
   @Get('corelib')
-  async corelib() {
+  async corelib(@Query('clientId') clientId: string) {
     try {
-      await this.testCasesService.buildCoreLib();
+      this.testCasesService.buildCoreLib(clientId);
     } catch (error) {
       throw new NotFoundException(getErrorMessage(error));
     }
+
+    return { result: 'ok', message: 'building...' };
   }
 
   @Get('gettrlib')
-  async gettrlib() {
+  async gettrlib(@Query('clientId') clientId: string) {
     try {
-      await this.testCasesService.buildGettrLib();
+      this.testCasesService.buildGettrLib(clientId);
     } catch (error) {
       throw new NotFoundException(getErrorMessage(error));
     }
-  }
-  @Post('runcode')
-  async runTestCase(@Body() runTestCaseDto: RunTestCaseDto) {
-    const testCode = `import { TestCase, Test, withBrowser} from 'core-lib';
-@Test()
-@withBrowser({headless:false})
-class MyTest extends TestCase {
-  async test_demo() {
-    this.logger.debug('Test executed from MyTest');
-  }
-}
-`;
-    return await this.testCasesService.runInSandbox(testCode);
+    return { result: 'ok', message: 'building...' };
   }
 
   @Post('runpath')
@@ -194,9 +184,15 @@ class MyTest extends TestCase {
 
     console.log(absPath);
     const code = fs.readFileSync(absPath);
-    return await this.testCasesService.runInSandbox(
-      code.toString('utf-8'),
-      runTestCaseFileDto.clientId,
-    );
+    try {
+      this.testCasesService.runInSandbox(
+        code.toString('utf-8'),
+        runTestCaseFileDto.clientId,
+      );
+    } catch (err) {
+      throw new NotFoundException(getErrorMessage(err));
+    }
+
+    return { result: 'ok', message: 'Running...' };
   }
 }

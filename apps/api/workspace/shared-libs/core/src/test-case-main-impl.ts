@@ -1,7 +1,4 @@
-import {
-  __testCaseClasses,
-  __useBrowserStaticMethods,
-} from './test-case-decorator';
+import { __testCaseClasses } from './test-case-decorator';
 import { TestCase } from './test-case-base';
 import { BrowserHelper, CustomLogger } from '../../types';
 
@@ -22,7 +19,7 @@ export async function main({
     const needBrowser = (Ctor as any).__useBrowser;
     const headless = (Ctor as any).__headless;
     const debug = (Ctor as any).__debug;
-
+    const domain = (Ctor as any).__domain;
     let instance = new Ctor(loggerService.createLogger(Ctor.name, clientId));
     const allMethods = Object.getOwnPropertyNames(
       Object.getPrototypeOf(instance),
@@ -41,7 +38,9 @@ export async function main({
         }
       }
     }
-    logger.debug(`browserMethods ${withBrowserMethods.length}`);
+    logger.debug(
+      `browserMethods ${withBrowserMethods.length} testMethods:${testMethods.length}`,
+    );
     logger.debug(
       `module: ${instance.constructor.name} workspace: ${workspace} starting...`,
     );
@@ -53,7 +52,7 @@ export async function main({
       for (const method of withBrowserMethods) {
         try {
           const tempins = instance.clone();
-          const { page } = await browserHelper.newBrowser({ headless });
+          const { page } = await browserHelper.newBrowser({ headless, domain });
           const ret = (tempins as any)[method](page).catch((err: Error) => {
             logger.error(`${err}`);
             return { success: false, error: `${err}` };
@@ -90,5 +89,6 @@ export async function main({
     //end for testMethods
     logger.info('All TestCase Completed!');
     logger.complete();
+    __testCaseClasses.length = 0;
   }
 }
