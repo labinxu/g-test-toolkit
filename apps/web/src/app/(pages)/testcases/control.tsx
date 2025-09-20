@@ -37,10 +37,10 @@ export function Control({
               {!running ? 'Execute' : 'Running'}
             </Button>
             <Button variant={'outline'} size={'sm'} onClick={buildCoreLib}>
-              Reload Core lib
+              Corelib
             </Button>
             <Button variant={'outline'} size={'sm'} onClick={buildCommonLib}>
-              Reload gettr lib
+              Gettrlib
             </Button>
           </>
         ) : null}
