@@ -14,34 +14,40 @@ export function Control({
   currentFile: string;
   running: boolean;
   connected: boolean;
-  setRunning: (run: boolean) => void;
-  run: (path?: FileNode) => Promise<void>;
-  buildCoreLib: () => Promise<void>;
-  buildCommonLib: () => Promise<void>;
+  setRunning?: (run: boolean) => void;
+  run?: (path?: FileNode) => Promise<void>;
+  buildCoreLib?: () => Promise<void>;
+  buildCommonLib?: () => Promise<void>;
 }) {
   return (
     <div className="flex justify-between items-center rounded-lg shadow-sm ">
       <div>
         {currentFile ? (
           <>
-            <Button
-              variant={'outline'}
-              size={'sm'}
-              disabled={running}
-              onClick={() => {
-                !running && run();
-                setRunning(!running);
-              }}
-            >
-              {!running ? '' : <Loader2Icon className="animate-spin" />}
-              {!running ? 'Execute' : 'Running'}
-            </Button>
-            <Button variant={'outline'} size={'sm'} onClick={buildCoreLib}>
-              Corelib
-            </Button>
-            <Button variant={'outline'} size={'sm'} onClick={buildCommonLib}>
-              Gettrlib
-            </Button>
+            {run ? (
+              <Button
+                variant={'outline'}
+                size={'sm'}
+                disabled={running}
+                onClick={() => {
+                  !running && run && run();
+                  setRunning && setRunning(!running);
+                }}
+              >
+                {!running ? '' : <Loader2Icon className="animate-spin" />}
+                {!running ? 'Execute' : 'Running'}
+              </Button>
+            ) : null}
+            {buildCoreLib ? (
+              <Button variant={'outline'} size={'sm'} onClick={buildCoreLib}>
+                Corelib
+              </Button>
+            ) : null}
+            {buildCommonLib ? (
+              <Button variant={'outline'} size={'sm'} onClick={buildCommonLib}>
+                Gettrlib
+              </Button>
+            ) : null}
           </>
         ) : null}
       </div>

@@ -10,16 +10,30 @@ import * as vm from 'vm';
 import { Project } from 'ts-morph';
 import { getErrorMessage } from 'src/common/utils';
 import { BrowserHelper } from 'src/browser/browser-helper';
-
 @Injectable()
 export class TestCasesService {
   private logger: CustomLogger;
+  private coreModule = null;
+  private coreModuleLastUpdate = null;
+  private gettrModule = null;
+  private gettrModuleLastUpdate = null;
   constructor(
     private readonly loggerService: LoggerService,
     private readonly androidService: AndroidService,
     private readonly reportService: ReportService,
   ) {
     this.logger = this.loggerService.createLogger('TestCaseService');
+  }
+  deepClearCache(modulePath: string) {
+    const resolved = require.resolve(modulePath);
+    const mod = require.cache[resolved];
+    if (mod) {
+      // 递归清理子模块
+      mod.children.forEach((child) => {
+        this.deepClearCache(child.id);
+      });
+      delete require.cache[resolved];
+    }
   }
   async getInterfaces() {
     const coreLibPath = path.join(
@@ -136,7 +150,25 @@ export class TestCasesService {
           `core-lib not found at ${coreLibPath}. Please generate core-lib first.`,
         );
       }
+      // 获取文件的修改时间
+      const stats = fs.statSync(coreLibPath);
+      const currentModifiedTime = stats.mtimeMs;
+      // 如果模块已缓存且修改时间未变，返回缓存的模块
+      if (
+        this.coreModule &&
+        this.coreModuleLastUpdate === currentModifiedTime
+      ) {
+        return this.coreModule;
+      }
+
+      // 文件已更改，重新加载模块
+      console.log(`Reloading core-lib from ${coreLibPath}`);
+      this.deepClearCache(coreLibPath);
       const module = await import(coreLibPath);
+      // 更新缓存和修改时间
+      this.coreModule = module;
+      this.coreModuleLastUpdate = currentModifiedTime;
+
       return module;
     } catch (error) {
       console.error('Failed to load core-lib:', error);
@@ -144,19 +176,37 @@ export class TestCasesService {
     }
   }
   async loadGettrLib() {
-    const coreLibPath = path.join(
+    const gettrLibPath = path.join(
       __dirname,
       '../..',
       process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr',
       '/dist/index.js',
     );
     try {
-      if (!fs.existsSync(coreLibPath)) {
+      if (!fs.existsSync(gettrLibPath)) {
         throw new Error(
-          `core-lib not found at ${coreLibPath}. Please generate gettr-lib first.`,
+          `core-lib not found at ${gettrLibPath}. Please generate gettr-lib first.`,
         );
       }
-      const module = await import(coreLibPath);
+      // 获取文件的修改时间
+      const stats = fs.statSync(gettrLibPath);
+      const currentModifiedTime = stats.mtimeMs;
+      // 如果模块已缓存且修改时间未变，返回缓存的模块
+      if (
+        this.gettrModule &&
+        this.gettrModuleLastUpdate === currentModifiedTime
+      ) {
+        return this.gettrModule;
+      }
+
+      // 文件已更改，重新加载模块
+      console.log(`Reloading core-lib from ${gettrLibPath}`);
+      this.deepClearCache(gettrLibPath);
+      const module = require(gettrLibPath);
+      // 更新缓存和修改时间
+      this.gettrModule = module;
+      this.gettrModuleLastUpdate = currentModifiedTime;
+
       return module;
     } catch (error) {
       console.error('Failed to load core-lib:', error);
@@ -165,11 +215,13 @@ export class TestCasesService {
   }
   async buildGettrLib(clientId?: string) {
     console.log('libdir:', process.env.GETTR_LIB_DIR);
+
     const coreDir = path.join(
       __dirname,
       '../..',
       process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr',
     );
+
     const outputDir = path.join(coreDir, 'dist');
     const srcDir = path.join(coreDir, 'src');
     const indexPath = path.join(coreDir, 'index.ts');
@@ -183,6 +235,8 @@ export class TestCasesService {
     this.generateIndexWithTsMorph(coreDir, srcDir, indexPath);
     const result = await this.buildWithEsbuild(indexPath, outputDir);
     clientId && this.logger.sendTo(clientId, `gettr lib ${result}`, 'info');
+    // delete the module cache,
+    delete require.cache[require.resolve(indexPath)];
   }
 
   async buildCoreLib(clientId?: string) {
@@ -206,6 +260,9 @@ export class TestCasesService {
     await this.generateIndexWithTsMorph(coreDir, srcDir, indexPath);
     const result = await this.buildWithEsbuild(indexPath, outputDir);
     clientId && this.logger.sendTo(clientId, `core lib ${result}`, 'info');
+
+    // delete the module cache
+    delete require.cache[require.resolve(indexPath)];
   }
   async generateIndexWithTsMorph(
     coreDir: string,

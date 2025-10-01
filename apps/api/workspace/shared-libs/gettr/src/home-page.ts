@@ -1,4 +1,5 @@
 import { IPage } from './interface/ipage';
+import { LiveStreamPage } from './livestream-page';
 import { LoginPage } from './login-page';
 import { ProfilePage } from './profile-page';
 
@@ -36,6 +37,8 @@ export class HomePage extends IPage {
       this.logger.error('profile button not found');
       return;
     }
+    await profileButton.click();
+    this.delay();
     return new ProfilePage(this.testcase);
   }
   async post(text: string) {
@@ -98,7 +101,32 @@ class LoginPage extends IPage {
       return;
     }
     const postResult = await waitNode.evaluate((el) => el.textContent);
-    this.logger.info(postResult);
+    this.logger.info(`post content: ${postResult}`);
     this.testcase.assertEqual('Your post was sent.', postResult);
+  }
+  async gotoLiveStreamPage() {
+    await this.delay();
+    const createBt = await this.page.$(
+      'div.MuiBox-root:nth-of-type(1) >button:nth-of-type(3)',
+    );
+    if (!createBt) {
+      this.logger.error('Create button not found!');
+      return;
+    }
+    await createBt.click();
+    await this.delay();
+    const buttons = await this.page.$$('div#simple-popper button');
+    if (!buttons || buttons.length == 0) {
+      this.logger.error('no buttons are found on create panel');
+      return;
+    }
+    const pagePromise = this.testcase.pagePromise();
+    await buttons[2].click();
+    await this.delay();
+    const page = await pagePromise;
+    this.logger.debug(`new page ${page.url()}`);
+    this.testcase.setPage(page);
+    const lvp = new LiveStreamPage(this.testcase);
+    await lvp.createLiveStream();
   }
 }

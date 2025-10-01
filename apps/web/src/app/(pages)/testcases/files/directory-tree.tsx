@@ -37,6 +37,7 @@ function getAllDirPaths(tree: FileNode[]): string[] {
 }
 
 export default function DirectoryTree({
+  api,
   currentDir,
   onSelect,
   onDirSelect,
@@ -45,13 +46,14 @@ export default function DirectoryTree({
   collapsible = true,
   run,
 }: {
+  api: string;
   currentDir: string;
   onSelect: (filePath: string) => void;
   onDirSelect?: (dirPath: string) => void;
   refreshKey?: number;
   setRefreshKey: (k: number) => void;
   collapsible?: boolean;
-  run: (node?: FileNode, clientId?: string) => Promise<void>;
+  run?: (node?: FileNode, clientId?: string) => Promise<void>;
 }) {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export default function DirectoryTree({
     if (!isAuthenticated) {
       return;
     }
-    fetch(`/api/testcase/listcases?&depth=3`, {
+    fetch(api, {
       credentials: 'include',
     })
       .then((res) => res.json())
@@ -132,7 +134,7 @@ export default function DirectoryTree({
         console.log('directory-tree clientId not initialized');
         return;
       }
-      await run(node, clientId);
+      run && (await run(node, clientId));
       setRunning(false);
     },
     [clientId],

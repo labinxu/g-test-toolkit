@@ -1,12 +1,14 @@
 import { EventEmitter } from 'events';
-import { Page } from 'puppeteer';
+import { Browser, Page } from 'puppeteer';
 import { CustomLogger } from '../../types';
 
 export class TestCase {
   public page: Page | null = null;
+  public browser: Browser | null = null;
   protected reportData: Record<string, any> = {};
   private sharedState: {
     workspace: string;
+    clientId: string;
     logs: string[];
     details: string[];
     exceptCounter: number;
@@ -14,10 +16,11 @@ export class TestCase {
     emiter: EventEmitter;
     logger: CustomLogger;
   };
-  constructor(logger: any, workspace: string) {
+  constructor(logger: any, clientId: string, workspace: string) {
     const emiter = new EventEmitter();
     this.sharedState = {
       workspace,
+      clientId,
       logs: [],
       details: [],
       logger,
@@ -27,7 +30,24 @@ export class TestCase {
     };
     emiter.on('event', (msg) => console.log(msg));
   }
-
+  async pagePromise() {
+    return new Promise((resolve, reject) => {
+      this.browser?.once('targetcreated', async (target) => {
+        const newPage = await target.page();
+        if (newPage) {
+          await newPage.setViewport({
+            width: 1920, // 宽度，例如 1920px
+            height: 1080, // 高度，例如 1080px
+            deviceScaleFactor: 1, // 缩放比例，1 为正常比例
+            isMobile: false,
+          });
+          resolve(newPage);
+        } else {
+          reject(new Error('Failed to get new page'));
+        }
+      });
+    });
+  }
   setDelayTime(dl: number) {
     this.sharedState.delaytime = dl;
   }
@@ -36,6 +56,12 @@ export class TestCase {
   }
   setPage(p: Page) {
     this.page = p;
+  }
+  setBrowser(br: any) {
+    this.browser = br;
+  }
+  get clientId() {
+    return this.sharedState.clientId;
   }
   get logger() {
     return this.sharedState.logger;
@@ -88,11 +114,11 @@ export class TestCase {
     this.sharedState.exceptCounter += 1;
     let message = '';
     if (except === actual) {
-      message = `Expected: ${except}\nActual: ${actual}\nResult: Passed\ndescription: ${description ? description : ''}`;
+      message = `Expected: ${except} Actual: ${actual} Result: Passed`;
       this.details.push(message);
       this.logger.info(message);
     } else {
-      message = `Expected: ${except}\nActual: ${actual}\nResult: Failed\ndescription: ${description ? description : ''}`;
+      message = `Expected: ${except} Actual: ${actual} Result: Failed. description: ${description}`;
       this.details.push(message);
       this.logger.error(message);
       throw new Error(`Error: Expected ${except}, got ${actual}`);
@@ -103,11 +129,11 @@ export class TestCase {
     let message = '';
 
     if (except) {
-      message = `Expected: ${except} not null\nResult: Passed\ndescription: ${description ? description : ''}`;
+      message = `Except: ${description} ${except} not null Result: Passed`;
       this.details.push(message);
       this.logger.info(message);
     } else {
-      message = `Expected: ${except}\n Actual: is null \nResult: Failed\ndescription: ${description ? description : ''}`;
+      message = `Expected not null Result: Failed. description: ${description}`;
       this.details.push(message);
       this.logger.error(message);
       throw new Error(`Error: Expected ${except} is null `);

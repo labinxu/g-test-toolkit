@@ -63,6 +63,20 @@ export class TestCasesController {
       throw new NotFoundException(err);
     }
   }
+  @Get('listcore')
+  @UseGuards(AuthGuard('jwt'))
+  async listcore(@Query('depth') depth: 3) {
+    const absPath = path.normalize(
+      path.join(process.cwd(), 'workspace', 'shared-libs'),
+    );
+    const baseDir = path.resolve(process.cwd());
+    if (!absPath.startsWith(baseDir)) {
+      throw new Error(
+        'Access to paths outside the working directory is forbidden',
+      );
+    }
+    return await this.filesService.getTree(absPath, depth);
+  }
   @Get('listcases')
   @UseGuards(AuthGuard('jwt'))
   async listCases(@Req() req: Request, @Query('depth') depth: number = 3) {
@@ -194,5 +208,15 @@ export class TestCasesController {
     }
 
     return { result: 'ok', message: 'Running...' };
+  }
+  @Get('livestream')
+  async livestream(@Query('clientId') clientId) {
+    try {
+      console.log(`Livestream ${clientId}`);
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error));
+    }
+
+    return { result: 'ok', message: 'pushing livestream' };
   }
 }

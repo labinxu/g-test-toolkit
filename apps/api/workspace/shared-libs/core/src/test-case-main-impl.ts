@@ -21,7 +21,13 @@ export async function main({
     const debug = (Ctor as any).__debug;
     const domain = (Ctor as any).__domain;
     const timeout = (Ctor as any).__timeout;
-    let instance = new Ctor(loggerService.createLogger(Ctor.name, clientId));
+    const retry = (Ctor as any).__retry;
+
+    let instance = new Ctor(
+      loggerService.createLogger(Ctor.name, clientId),
+      clientId,
+      workspace,
+    );
     const allMethods = Object.getOwnPropertyNames(
       Object.getPrototypeOf(instance),
     );
@@ -50,12 +56,15 @@ export async function main({
         let tempins = null;
         try {
           tempins = instance.clone();
-          const { page } = await browserHelper.newBrowser({
+          const { bs, page } = await browserHelper.newBrowser({
+            logger,
             headless,
             timeout,
             domain,
+            retry,
           });
-          tempins.page = page;
+          tempins.setPage(page);
+          tempins.setBrowser(bs);
           tempins.tearUp();
           const ret = await (tempins as any)[method](page);
           browserPromises.push(ret);
@@ -66,10 +75,25 @@ export async function main({
         }
       }
     }
-    // end for with browser methods
-    const rst = await browserHelper?.newBrowser({ headless, timeout, domain });
-    rst?.page && instance.setPage(rst?.page);
-    instance.tearUp();
+    let rst = null;
+    try {
+      // end for with browser methods
+      rst = await browserHelper?.newBrowser({
+        logger,
+        headless,
+        timeout,
+        domain,
+        retry,
+      });
+      rst?.page && instance.setPage(rst?.page);
+      rst?.bs && instance.setBrowser(rst.bs);
+    } catch (err) {
+      logger.info('Error to run test cases');
+      logger.complete();
+      __testCaseClasses.length = 0;
+      return;
+    }
+    await instance.tearUp();
     for (const method of testMethods) {
       try {
         logger.info(
@@ -86,7 +110,7 @@ export async function main({
         logger.info(`${Ctor.name}.${method} completed`);
       }
     }
-    instance.tearDown();
+    await instance.tearDown();
     if (!debug) {
       await browserHelper?.close();
     }

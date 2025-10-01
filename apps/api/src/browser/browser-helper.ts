@@ -2,20 +2,25 @@ import { Browser } from 'puppeteer';
 import puppeteerExra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import puppeteer from 'puppeteer';
+import { CustomLogger } from 'src/logger/logger.custom';
 export { Browser };
 puppeteerExra.use(StealthPlugin());
 
 export class BrowserHelper {
   private broweres: Browser[];
-
+  public newPagePromise: any;
   async newBrowser({
+    logger = null,
     headless = false,
     timeout = 60000,
     domain,
+    retry,
   }: {
+    logger: CustomLogger;
     headless: boolean;
     timeout: number;
     domain?: string;
+    retry?: number;
   }) {
     const bs = await puppeteer.launch({
       headless: headless,
@@ -41,6 +46,8 @@ export class BrowserHelper {
         '--use-fake-ui-for-media-stream',
       ],
     });
+    // 等待新标签页的 Promise
+
     const pages = await bs.pages();
     const page = pages[0];
     const context = bs.defaultBrowserContext();
@@ -55,8 +62,27 @@ export class BrowserHelper {
       deviceScaleFactor: 1, // 缩放比例，1 为正常比例
       isMobile: false,
     });
-    domain && (await page.goto(domain, { waitUntil: 'networkidle2', timeout }));
+    const delay = async (ms?: number) => {
+      const sleep = (ms: number) =>
+        new Promise((resolve) => setTimeout(resolve, ms));
+      await sleep(ms);
+    };
 
+    let retry_ = retry;
+    while (retry_ > 0) {
+      try {
+        logger?.debug(`try ${retry_} time to ${domain}`);
+        domain &&
+          (await page.goto(domain, { waitUntil: 'networkidle2', timeout }));
+        break;
+      } catch (err) {
+        retry_ -= 1;
+        await delay(2000);
+      }
+    }
+    if (retry_ === 0) {
+      throw new Error(`Open ${domain} failed`);
+    }
     return { bs, page };
   }
   async close() {

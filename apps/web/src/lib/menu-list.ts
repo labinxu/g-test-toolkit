@@ -57,8 +57,8 @@ export function getMenuList(pathname: string): Group[] {
               label: 'User Case',
             },
             {
-              href: '/testcases/pages/corelib',
-              label: 'Core Lib',
+              href: '/testcases/libs',
+              label: 'Libs',
             },
             {
               href: '/reports',

@@ -31,13 +31,17 @@ export declare class CustomLogger {
 export declare class BrowserHelper {
   private broweres;
   newBrowser({
+    logger,
     headless,
     timeout = 60000,
     domain,
+    retry,
   }: {
+    logger: any;
     headless: boolean;
     timeout: number;
     domain?: string;
+    retry?: number;
   }): Promise<{
     bs: Browser;
     page: import('puppeteer').Page;

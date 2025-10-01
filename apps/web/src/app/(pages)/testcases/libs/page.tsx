@@ -1,28 +1,17 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
 import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 import { ScriptEditor } from '@/components/files/script-editor';
-import { Control } from './control';
+import { Control } from '../control';
 import { OutputPanel } from '@/components/output-panel';
-import { useSocket } from './socket-content';
+import { useSocket } from '../socket-content';
 import { useSession } from '@/app/context/session-context';
 import NewFileOrFolder from '@/components/files/new-file-folder';
-import DirectoryTree from './files/directory-tree';
-import { FileNode } from './files/types';
+import DirectoryTree from '../files/directory-tree';
 import { toast } from 'sonner';
 
-const INITIAL_CODE = `import { TestCase, Test, WithBrowser} from 'core-lib';
-@Test()
-@WithBrowser({headless:false})
-class MyTest extends TestCase {
-constructor(){LOGGER.info('hello test')}
-  async test_demo() {
-    this.print('Test executed');
-  }
-}
-`;
 export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
   const [currentDir, setCurrentDir] = useState('');
@@ -33,43 +22,39 @@ export default function Page() {
     useSocket();
   const { isAuthenticated } = useSession();
   const monacoRef = useRef<Monaco>(null);
-  useEffect(() => {
-    if (!isAuthenticated || !monacoInited || !monacoRef.current) {
-      return;
-    }
-    fetch(`/api/testcase/interfaces`, {
-      credentials: 'include',
-    })
-      .then((res) => res.json())
-      .then((data: { [key: string]: string }[]) => {
-        data.forEach((item) => {
-          Object.entries(item).forEach(([key, val]) => {
-            monacoRef.current?.languages.typescript.typescriptDefaults.addExtraLib(
-              `declare module "${key}" { ${val} }`,
-              `${key}.d.ts`,
-            );
-            console.log(`addextralib: declare module ${key} { ${val} }`);
-          });
-        });
-      });
-  }, [isAuthenticated, monacoInited]);
-  const runPath = useCallback(async () => {
-    clearLogs();
-    fetch(`/api/testcase/runpath`, {
-      method: 'POST',
+
+  const buildGettrLib = useCallback(async () => {
+    fetch(`/api/testcase/gettrlib?clientId=${clientId}`, {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ filePath: currentFile, clientId }),
     })
       .then((resp) => {
         if (resp.ok) {
-          toast.message('Start succefull...');
+          toast.message('building...');
         }
       })
-      .catch((err) => {});
-    setOpenLog(true);
-  }, [currentFile, clientId]);
+      .catch((err) => {
+        toast.error(`${err}`);
+      });
+  }, [clientId]);
+  const buildCoreLib = useCallback(async () => {
+    fetch(`/api/testcase/corelib?clientId=${clientId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+      .then((resp) => {
+        if (resp.ok) {
+          toast.message('Building...');
+        }
+      })
+      .catch((err) => {
+        toast.error(`${err}`);
+      });
+  }, [clientId]);
 
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monaco: Monaco) => {
@@ -102,12 +87,6 @@ export default function Page() {
           log.includes('passed')
         ) {
           color = 'green';
-        } else if (log.includes('[info]')) {
-          color = '#3B82F6';
-        } else if (log.includes('debug')) {
-          color = '#6B7280';
-        } else if (log.includes('[warn]')) {
-          color = '#F59E0B';
         }
       } catch (err) {
         console.log(logs);
@@ -130,14 +109,13 @@ export default function Page() {
             onCreated={() => setRefreshKey((k) => k + 1)}
           />
           <DirectoryTree
-            api={'/api/testcase/listcases?&depth=3'}
+            api={'/api/testcase/listcore?&depth=3'}
             currentDir={currentDir}
             refreshKey={refreshKey}
             setRefreshKey={setRefreshKey}
             onSelect={setCurrentFile}
             onDirSelect={setCurrentDir}
             collapsible={false}
-            run={runPath}
           />
         </DirectoryTreePanel>
       </div>
@@ -154,7 +132,8 @@ export default function Page() {
             running={running}
             connected={connected}
             setRunning={setRunning}
-            run={runPath}
+            buildCoreLib={buildCoreLib}
+            buildCommonLib={buildGettrLib}
           />
           <OutputPanel
             renderLogs={renderLogs}

@@ -31,8 +31,10 @@ export function withBrowser(options: {
   debug?: boolean;
   timeout?: number;
   domain?: string;
+  retry?: number;
 }): ClassDecorator {
   return function (constructor: Function) {
+<<<<<<< HEAD
     if (!options) {
       (constructor as any).__headless = options.headless;
       options = {
@@ -42,11 +44,21 @@ export function withBrowser(options: {
         domain: undefined,
       };
     }
+=======
+    const opts = {
+      headless: false,
+      debug: true,
+      timeout: 60000,
+      domain: undefined,
+      retry: 3,
+      ...options,
+    };
+>>>>>>> 26ec61c (add libs)
     (constructor as any).__useBrowser = true;
-    (constructor as any).__headless = options.headless;
-    (constructor as any).__timeout = options.timeout;
-    (constructor as any).__domain = options.domain;
-    (constructor as any).__debug =
-      options.debug === undefined ? true : options.debug;
+    (constructor as any).__headless = opts.headless;
+    (constructor as any).__timeout = opts.timeout;
+    (constructor as any).__domain = opts.domain;
+    (constructor as any).__debug = opts.debug;
+    (constructor as any).__retry = opts.retry;
   };
 }
