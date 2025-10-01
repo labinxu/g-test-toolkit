@@ -10,6 +10,7 @@
 !.yarn/versions
 
 apps/api/data
+apps/api/workspace/users/labin/reports
 # testing
 /coverage
 

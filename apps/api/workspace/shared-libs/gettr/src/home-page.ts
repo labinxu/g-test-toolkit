@@ -1,4 +1,6 @@
 import { IPage } from './interface/ipage';
+import { LoginPage } from './login-page';
+import { ProfilePage } from './profile-page';
 
 export class HomePage extends IPage {
   constructor(instance: any) {
@@ -18,6 +20,23 @@ export class HomePage extends IPage {
       '#root > div > div > div > div:nth-of-type(3)> button:nth-of-type(2)',
     );
     await signupButton?.click();
+  }
+  async gotoProfilePage() {
+    const userMenuTrigger = await this.page.$('div.user-menu-trigger');
+    if (!userMenuTrigger) {
+      this.logger.error(`User menu button can't found!`);
+      return;
+    }
+    await userMenuTrigger.click();
+    await this.delay();
+    const profileButton = await this.page.waitForSelector(
+      '#user-menu > div.MuiPaper-root.MuiPopover-paper.dropdownContent_recover.MuiPaper-elevation8.MuiPaper-rounded > div:nth-child(2) > button',
+    );
+    if (!profileButton) {
+      this.logger.error('profile button not found');
+      return;
+    }
+    return new ProfilePage(this.testcase);
   }
   async post(text: string) {
     this.logger.debug(`post ${text}`);
@@ -71,5 +90,15 @@ class LoginPage extends IPage {
     await this.page.click('button[type="submit"]');
     await this.delay();
     return new HomePage(this.testcase);
+    const waitNode = await this.page.waitForSelector(
+      'div.Toastify__toast-body span',
+    );
+    if (!waitNode) {
+      this.logger.error(`Post ${text} failed!`);
+      return;
+    }
+    const postResult = await waitNode.evaluate((el) => el.textContent);
+    this.logger.info(postResult);
+    this.testcase.assertEqual('Your post was sent.', postResult);
   }
 }

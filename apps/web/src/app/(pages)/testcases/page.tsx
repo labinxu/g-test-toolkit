@@ -130,6 +130,12 @@ export default function Page() {
           log.includes('passed')
         ) {
           color = 'green';
+        } else if (log.includes('[info]')) {
+          color = '#3B82F6';
+        } else if (log.includes('debug')) {
+          color = '#6B7280';
+        } else if (log.includes('[warn]')) {
+          color = '#F59E0B';
         }
       } catch (err) {
         console.log(logs);

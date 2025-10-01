@@ -4,42 +4,41 @@ import { CustomLogger } from '../../types';
 
 export class TestCase {
   public page: Page | null = null;
-  private tag: string | '';
-  public logger: CustomLogger;
   protected reportData: Record<string, any> = {};
   private sharedState: {
-    clientId: string;
     workspace: string;
     logs: string[];
-    details?: string[];
-    exceptCounter?: number;
+    details: string[];
+    exceptCounter: number;
     delaytime: number;
     emiter: EventEmitter;
+    logger: CustomLogger;
   };
   constructor(logger: any, workspace: string) {
-    this.logger = logger;
     const emiter = new EventEmitter();
     this.sharedState = {
-      clientId: '',
       workspace,
       logs: [],
       details: [],
+      logger,
       delaytime: 2000,
       exceptCounter: 0,
       emiter: emiter,
     };
     emiter.on('event', (msg) => console.log(msg));
-    this.tag = this.constructor.name;
-    this.logger.debug(`construct TestCase ${this.tag}`);
   }
-  debug(msg: string) {
-    this.logger.debug(msg, this.tag);
+
+  setDelayTime(dl: number) {
+    this.sharedState.delaytime = dl;
   }
   setDelayTime(dl: number) {
     this.sharedState.delaytime = dl;
   }
   setPage(p: Page) {
     this.page = p;
+  }
+  get logger() {
+    return this.sharedState.logger;
   }
   get emiter() {
     return this.sharedState.emiter;
@@ -62,9 +61,7 @@ export class TestCase {
   get workspace() {
     return this.sharedState.workspace;
   }
-  get clientId() {
-    return this.sharedState.clientId;
-  }
+
   async tearUp() {
     this.reportData['startTime'] = Date.now();
   }
@@ -77,9 +74,6 @@ export class TestCase {
     this.reportData.exceptCounter = this.exceptCounter;
   }
 
-  setClientId(clientId: string) {
-    this.sharedState.clientId = clientId;
-  }
   appendLog(log: string): void {
     this.logs.push(log);
   }
@@ -90,9 +84,35 @@ export class TestCase {
     return this.reportData;
   }
 
-  exceptEqual(except: any, actual: any, description?: string) {}
-  exceptNotNull(except: any, description?: string) {}
+  assertEqual(except: any, actual: any, description?: string) {
+    this.sharedState.exceptCounter += 1;
+    let message = '';
+    if (except === actual) {
+      message = `Expected: ${except}\nActual: ${actual}\nResult: Passed\ndescription: ${description ? description : ''}`;
+      this.details.push(message);
+      this.logger.info(message);
+    } else {
+      message = `Expected: ${except}\nActual: ${actual}\nResult: Failed\ndescription: ${description ? description : ''}`;
+      this.details.push(message);
+      this.logger.error(message);
+      throw new Error(`Error: Expected ${except}, got ${actual}`);
+    }
+  }
+  assertNotNull(except: any, description?: string) {
+    this.sharedState.exceptCounter += 1;
+    let message = '';
 
+    if (except) {
+      message = `Expected: ${except} not null\nResult: Passed\ndescription: ${description ? description : ''}`;
+      this.details.push(message);
+      this.logger.info(message);
+    } else {
+      message = `Expected: ${except}\n Actual: is null \nResult: Failed\ndescription: ${description ? description : ''}`;
+      this.details.push(message);
+      this.logger.error(message);
+      throw new Error(`Error: Expected ${except} is null `);
+    }
+  }
   clone() {
     const cloned = Object.create(Object.getPrototypeOf(this));
     cloned.sharedState = this.sharedState;

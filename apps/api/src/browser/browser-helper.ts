@@ -10,9 +10,11 @@ export class BrowserHelper {
 
   async newBrowser({
     headless = false,
+    timeout = 60000,
     domain,
   }: {
     headless: boolean;
+    timeout: number;
     domain?: string;
   }) {
     const bs = await puppeteer.launch({
@@ -39,11 +41,11 @@ export class BrowserHelper {
         '--use-fake-ui-for-media-stream',
       ],
     });
+    const pages = await bs.pages();
+    const page = pages[0];
     const context = bs.defaultBrowserContext();
     // fixed popup permission dialog
     domain && (await context.overridePermissions(domain, []));
-    const page = await bs.newPage();
-
     page.setUserAgent(
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
     );
@@ -53,6 +55,8 @@ export class BrowserHelper {
       deviceScaleFactor: 1, // 缩放比例，1 为正常比例
       isMobile: false,
     });
+    domain && (await page.goto(domain, { waitUntil: 'networkidle2', timeout }));
+
     return { bs, page };
   }
   async close() {

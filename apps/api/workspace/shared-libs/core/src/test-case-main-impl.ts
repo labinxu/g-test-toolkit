@@ -20,6 +20,7 @@ export async function main({
     const headless = (Ctor as any).__headless;
     const debug = (Ctor as any).__debug;
     const domain = (Ctor as any).__domain;
+    const timeout = (Ctor as any).__timeout;
     let instance = new Ctor(loggerService.createLogger(Ctor.name, clientId));
     const allMethods = Object.getOwnPropertyNames(
       Object.getPrototypeOf(instance),
@@ -39,33 +40,36 @@ export async function main({
       }
     }
     logger.debug(
-      `browserMethods ${withBrowserMethods.length} testMethods:${testMethods.length}`,
+      `module: ${instance.constructor.name} workspace: ${workspace} domain:${domain} starting...`,
     );
-    logger.debug(
-      `module: ${instance.constructor.name} workspace: ${workspace} starting...`,
-    );
-    await instance.tearUp();
 
     // start browser for test with new browser
     if (needBrowser && browserHelper) {
       const browserPromises: Promise<void>[] = [];
       for (const method of withBrowserMethods) {
+        let tempins = null;
         try {
-          const tempins = instance.clone();
-          const { page } = await browserHelper.newBrowser({ headless, domain });
-          const ret = (tempins as any)[method](page).catch((err: Error) => {
-            logger.error(`${err}`);
-            return { success: false, error: `${err}` };
+          tempins = instance.clone();
+          const { page } = await browserHelper.newBrowser({
+            headless,
+            timeout,
+            domain,
           });
+          tempins.page = page;
+          tempins.tearUp();
+          const ret = await (tempins as any)[method](page);
           browserPromises.push(ret);
         } catch (err) {
           logger.error(`${err}`);
+        } finally {
+          tempins?.tearDown();
         }
       }
     }
     // end for with browser methods
-    const rst = await browserHelper?.newBrowser({ headless });
+    const rst = await browserHelper?.newBrowser({ headless, timeout, domain });
     rst?.page && instance.setPage(rst?.page);
+    instance.tearUp();
     for (const method of testMethods) {
       try {
         logger.info(
@@ -82,7 +86,7 @@ export async function main({
         logger.info(`${Ctor.name}.${method} completed`);
       }
     }
-
+    instance.tearDown();
     if (!debug) {
       await browserHelper?.close();
     }
