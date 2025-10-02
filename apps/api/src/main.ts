@@ -39,11 +39,24 @@ async function bootstrap() {
       '36f35c47625d65f8f8fbf1545e5da6617be0704103267b52b842fa7f5695748f',
     parseOptions: {},
   });
-
   await fastifyInstance.register(fastifyCsrfProtection, {
     cookieKey: '_csrf',
     cookieOpts: { signed: true },
   });
+
+  // Expose a CSRF token endpoint for SPA clients
+  fastifyInstance.get('/api/csrf-token', async (request, reply) => {
+    const raw = (request as any).cookies?._csrf
+    if (!raw) {
+      return reply.code(400).send({ error: 'CSRF cookie not found' })
+    }
+    // If cookie is signed, unsign to get the actual token
+    const unsignResult = (fastifyInstance as any).unsignCookie
+      ? (fastifyInstance as any).unsignCookie(raw)
+      : { valid: false, value: raw }
+    const token = unsignResult && unsignResult.valid ? unsignResult.value : raw
+    return { token }
+  })
 
   // Rest of the code remains the same
   app.enableCors({

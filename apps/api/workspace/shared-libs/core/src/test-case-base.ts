@@ -48,9 +48,7 @@ export class TestCase {
       });
     });
   }
-  setDelayTime(dl: number) {
-    this.sharedState.delaytime = dl;
-  }
+ 
   setDelayTime(dl: number) {
     this.sharedState.delaytime = dl;
   }
@@ -129,7 +127,7 @@ export class TestCase {
     let message = '';
 
     if (except) {
-      message = `Except: ${description} ${except} not null Result: Passed`;
+      message = `Assert: ${description} ${except} not null Result: Passed`;
       this.details.push(message);
       this.logger.info(message);
     } else {

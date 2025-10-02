@@ -12,13 +12,13 @@ export class ProfilePage extends IPage {
     const moreBt = await this.page.waitForSelector(
       'div.profile.hover-class div.dropdown-w',
     );
-    this.testcase.assertNotNull(moreBt, 'more button should not null');
+    this.testcase.assertNotNull(moreBt, 'More button');
     await moreBt.click();
     await this.delay();
     const deleteBt = await this.page.waitForSelector(
       'div.MuiPaper-root button.danger',
     );
-    this.testcase.assertNotNull(deleteBt, 'delete button should not null');
+    this.testcase.assertNotNull(deleteBt, 'delete button');
     await this.delay();
     await deleteBt.click();
     await this.delay();
@@ -27,7 +27,7 @@ export class ProfilePage extends IPage {
     );
     this.testcase.assertNotNull(
       confirmDelete,
-      'Confirm delete button should not null',
+      'Confirm button',
     );
     await confirmDelete.click();
     await this.delay();

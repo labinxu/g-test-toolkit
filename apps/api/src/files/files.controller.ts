@@ -139,6 +139,7 @@ export class FilesController {
     if (!createPath.startsWith('workspace')) {
       createPath = path.join(
         'workspace',
+        'users',
         user['username'],
         'cases',
         createPath,

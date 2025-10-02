@@ -92,7 +92,10 @@ class LoginPage extends IPage {
     await this.page.type('input#password', password);
     await this.page.click('button[type="submit"]');
     await this.delay();
+
     return new HomePage(this.testcase);
+  }
+  async post(text: string) {
     const waitNode = await this.page.waitForSelector(
       'div.Toastify__toast-body span',
     );
@@ -120,12 +123,14 @@ class LoginPage extends IPage {
       this.logger.error('no buttons are found on create panel');
       return;
     }
+
     const pagePromise = this.testcase.pagePromise();
     await buttons[2].click();
     await this.delay();
     const page = await pagePromise;
     this.logger.debug(`new page ${page.url()}`);
     this.testcase.setPage(page);
+
     const lvp = new LiveStreamPage(this.testcase);
     await lvp.createLiveStream();
   }

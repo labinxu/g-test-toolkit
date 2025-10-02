@@ -6,6 +6,7 @@ import { ReportService } from 'src/report/report.service';
 import * as esbuild from 'esbuild';
 import * as fs from 'fs';
 import path from 'path';
+// import { pathToFileURL } from 'url';
 import * as vm from 'vm';
 import { Project } from 'ts-morph';
 import { getErrorMessage } from 'src/common/utils';
@@ -24,15 +25,31 @@ export class TestCasesService {
   ) {
     this.logger = this.loggerService.createLogger('TestCaseService');
   }
-  deepClearCache(modulePath: string) {
-    const resolved = require.resolve(modulePath);
-    const mod = require.cache[resolved];
-    if (mod) {
-      // 递归清理子模块
-      mod.children.forEach((child) => {
-        this.deepClearCache(child.id);
-      });
-      delete require.cache[resolved];
+  deepClearCache(modulePath: string, visited: Set<string> = new Set()) {
+    let resolved: string
+    try {
+      resolved = require.resolve(modulePath)
+    } catch {
+      return
+    }
+    if (visited.has(resolved)) return
+    visited.add(resolved)
+
+    const mod = require.cache[resolved]
+    if (!mod) return
+
+    // 先清理子模块，避免循环依赖
+    for (const child of mod.children) {
+      this.deepClearCache(child.id, visited)
+    }
+    
+    // 删除当前模块缓存
+    delete require.cache[resolved]
+    
+    // 额外清理：如果模块路径是绝对路径，也尝试清理相对路径的缓存
+    const relativePath = path.relative(process.cwd(), resolved)
+    if (relativePath !== resolved) {
+      delete require.cache[relativePath]
     }
   }
   async getInterfaces() {
@@ -77,6 +94,7 @@ export class TestCasesService {
           },
         },
       } as esbuild.TransformOptions);
+
       return result.code;
     } catch (error) {
       console.error('Failed to transform code with esbuild:', error);
@@ -163,8 +181,9 @@ export class TestCasesService {
 
       // 文件已更改，重新加载模块
       console.log(`Reloading core-lib from ${coreLibPath}`);
+      // 使用 CJS 产物，配合 require 缓存清理
       this.deepClearCache(coreLibPath);
-      const module = await import(coreLibPath);
+      const module = require(coreLibPath);
       // 更新缓存和修改时间
       this.coreModule = module;
       this.coreModuleLastUpdate = currentModifiedTime;
@@ -200,7 +219,7 @@ export class TestCasesService {
       }
 
       // 文件已更改，重新加载模块
-      console.log(`Reloading core-lib from ${gettrLibPath}`);
+      console.log(`Reloading gettr-lib from ${gettrLibPath}`);
       this.deepClearCache(gettrLibPath);
       const module = require(gettrLibPath);
       // 更新缓存和修改时间
@@ -237,6 +256,10 @@ export class TestCasesService {
     clientId && this.logger.sendTo(clientId, `gettr lib ${result}`, 'info');
     // delete the module cache,
     delete require.cache[require.resolve(indexPath)];
+    
+    // 清理构建产物的缓存
+    const distIndexPath = path.join(outputDir, 'index.js');
+    this.deepClearCache(distIndexPath);
   }
 
   async buildCoreLib(clientId?: string) {
@@ -263,6 +286,10 @@ export class TestCasesService {
 
     // delete the module cache
     delete require.cache[require.resolve(indexPath)];
+    
+    // 清理构建产物的缓存
+    const distIndexPath = path.join(outputDir, 'index.js');
+    this.deepClearCache(distIndexPath);
   }
   async generateIndexWithTsMorph(
     coreDir: string,
@@ -307,7 +334,7 @@ export class TestCasesService {
       entryPoints: [indexPath], // 从 index.ts 开始
       bundle: true,
       outdir: outputDir,
-      format: 'esm',
+      format: 'cjs', // 统一使用 CommonJS 格式，便于 require 和缓存清理
       platform: 'node',
       sourcemap: false,
       minify: false,

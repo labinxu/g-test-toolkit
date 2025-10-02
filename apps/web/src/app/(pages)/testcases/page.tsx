@@ -10,7 +10,6 @@ import { useSocket } from './socket-content';
 import { useSession } from '@/app/context/session-context';
 import NewFileOrFolder from '@/components/files/new-file-folder';
 import DirectoryTree from './files/directory-tree';
-import { FileNode } from './files/types';
 import { toast } from 'sonner';
 
 const INITIAL_CODE = `import { TestCase, Test, WithBrowser} from 'core-lib';
@@ -55,10 +54,17 @@ export default function Page() {
   }, [isAuthenticated, monacoInited]);
   const runPath = useCallback(async () => {
     clearLogs();
+    // 1) fetch csrf token first (cookie must be present and credentials included)
+    const csrfResp = await fetch(`/api/csrf-token`, { credentials: 'include' });
+    const csrf = csrfResp.ok ? ((await csrfResp.json()) as { token: string }) : null;
+    const csrfToken = csrf?.token;
+
+    // 2) then POST with X-CSRF-Token
     fetch(`/api/testcase/runpath`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       },
       body: JSON.stringify({ filePath: currentFile, clientId }),
     })

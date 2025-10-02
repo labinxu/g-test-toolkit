@@ -34,17 +34,6 @@ export function withBrowser(options: {
   retry?: number;
 }): ClassDecorator {
   return function (constructor: Function) {
-<<<<<<< HEAD
-    if (!options) {
-      (constructor as any).__headless = options.headless;
-      options = {
-        headless: false,
-        debug: true,
-        timeout: 60000,
-        domain: undefined,
-      };
-    }
-=======
     const opts = {
       headless: false,
       debug: true,
@@ -53,7 +42,6 @@ export function withBrowser(options: {
       retry: 3,
       ...options,
     };
->>>>>>> 26ec61c (add libs)
     (constructor as any).__useBrowser = true;
     (constructor as any).__headless = opts.headless;
     (constructor as any).__timeout = opts.timeout;

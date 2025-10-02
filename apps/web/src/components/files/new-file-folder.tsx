@@ -55,7 +55,7 @@ export default function NewFileOrFolder({
     resolver: zodResolver(formSchema),
     defaultValues: {
       fileName: '',
-      fileType: 'File',
+      fileType: 'file',
     },
   });
   async function handleSubmit(data: z.infer<typeof formSchema>) {
