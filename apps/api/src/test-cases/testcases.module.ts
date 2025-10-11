@@ -13,6 +13,7 @@ import { CommandService } from 'src/command/command.service';
 import { ReportService } from 'src/report/report.service';
 import { ReportModule } from 'src/report/report.module';
 import { FilesService } from 'src/files/files.service';
+import { IosModule } from 'src/mobile/ios/ios.module';
 @Module({
   imports: [
     FastifyMulterModule.register({
@@ -30,6 +31,7 @@ import { FilesService } from 'src/files/files.service';
     CommandModule,
     LoggerModule,
     AndroidModule,
+    IosModule,
     ReportModule,
   ],
   controllers: [TestCasesController],
