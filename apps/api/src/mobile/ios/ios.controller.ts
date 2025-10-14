@@ -15,6 +15,8 @@ import {
   ApiQuery,
   ApiOkResponse,
 } from '@nestjs/swagger';
+import { StartSimulatorDto, StopSimulatorDto } from './dto/simulator-control.dto';
+import { Body, Post } from '@nestjs/common';
 
 @ApiTags('ios')
 @Controller('ios')
@@ -139,6 +141,45 @@ export class IosController {
         clientId,
       });
       return { result: 'ok', devices };
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error));
+    }
+  }
+
+  @Post('simulators/start')
+  async startSimulator(@Body() dto: StartSimulatorDto) {
+    try {
+      if (!dto.udid && !dto.deviceName) {
+        throw new NotFoundException('Either udid or deviceName must be provided');
+      }
+      const result = await this.iosService.bootSimulator({
+        udid: dto.udid,
+        deviceName: dto.deviceName,
+        runtime: dto.runtime,
+      });
+      return {
+        result: 'ok',
+        started: result.started,
+        simulator: result.simulator,
+        message: `Simulator ${result.simulator?.name ?? ''} booted`.trim(),
+      };
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error));
+    }
+  }
+
+  @Post('simulators/stop')
+  async stopSimulator(@Body() dto: StopSimulatorDto) {
+    try {
+      const info = await this.iosService.shutdownSimulator({ udid: dto.udid });
+      return {
+        result: 'ok',
+        stopped: info.stopped,
+        simulator: info.simulator,
+        message: info.stopped
+          ? `Simulator ${info.simulator?.name ?? ''} stopped`.trim()
+          : 'No running simulator detected',
+      };
     } catch (error) {
       throw new NotFoundException(getErrorMessage(error));
     }

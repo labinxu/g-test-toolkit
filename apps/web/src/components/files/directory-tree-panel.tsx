@@ -3,11 +3,16 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+interface DirectoryTreePanelProps {
+  children?: React.ReactNode;
+  currentDir?: string;
+  onSelect?: (path: string) => void;
+  onDirSelect?: (path: string) => void;
+}
+
 export default function DirectoryTreePanel({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+}: DirectoryTreePanelProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   const sidebarWidth = 288;

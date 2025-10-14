@@ -7,5 +7,6 @@ import { LoggerModule } from 'src/logger/logger.module';
   imports: [LoggerModule],
   controllers: [FilesController],
   providers: [FilesService],
+  exports: [FilesService],
 })
 export class FilesModule {}

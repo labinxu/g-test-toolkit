@@ -1,8 +1,6 @@
 'use client';
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { OnMount } from '@monaco-editor/react';
-import type { Monaco } from '@monaco-editor/react';
 import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 import { ScriptEditor } from '@/components/files/script-editor';
 import io, { Socket } from 'socket.io-client';
@@ -71,21 +69,6 @@ export default function Page() {
 
     socket.emit('run-script', scripts);
   };
-  const handleEditorDidMount: OnMount = useCallback(
-    (editor, monaco: Monaco) => {
-      if (!monaco || !editor) return;
-      monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-        target: monaco.languages.typescript.ScriptTarget.ESNext,
-        allowNonTsExtensions: true,
-        moduleResolution:
-          monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-        module: monaco.languages.typescript.ModuleKind.CommonJS,
-        noEmit: true,
-        typeRoots: ['node_modules/@types'],
-      });
-    },
-    [],
-  );
   const renderLogs = () => {
     return logs.map((log, index) => {
       let color = 'black';
@@ -116,7 +99,10 @@ export default function Page() {
         />
       </div>
       <div className="flex-1 pl-4 h-full min-w-0 flex flex-col transition-all duration-300">
-        <ScriptEditor filePath={currentFile} onMount={handleEditorDidMount} />
+        <ScriptEditor
+          filePath={currentFile}
+          onContentChange={(value) => setScripts(value)}
+        />
         <div className="rounded-lg shadow-sm basis-2/5 flex flex-col min-h-0">
           <div className="flex justify-between items-center rounded-lg shadow-sm ">
             <div>

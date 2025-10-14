@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
-import {AndroidService} from './android.service';
-import { AndroidController} from './android.controller';
+import { AndroidService } from './android.service';
+import { AndroidController } from './android.controller';
 import { LoggerModule } from 'src/logger/logger.module';
 import { CommandModule } from 'src/command/command.module';
 @Module({
-  imports: [LoggerModule,CommandModule],
+  imports: [LoggerModule, CommandModule],
   controllers: [AndroidController],
-  providers: [ AndroidService],
+  providers: [AndroidService],
+  exports: [AndroidService],
 })
 export class AndroidModule {}

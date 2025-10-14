@@ -13,7 +13,6 @@ apps/api/data
 apps/api/workspace/users/labin/reports
 # testing
 /coverage
-
 # next.js
 /.next/
 /out/

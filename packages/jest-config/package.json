@@ -22,6 +22,6 @@
   "devDependencies": {
     "@jest/types": "^30.0.0",
     "jest": "^30.0.0",
-    "next": "^15.3.3"
+    "next": "^15.5.4"
   }
 }

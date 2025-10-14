@@ -1,37 +1,37 @@
 // test-case-decorator.ts
-export const __testCaseClasses: Function[] = [];
-export const __multiTaskClasses: Function[] = [];
+export const __testCaseClasses: Function[] = []
+export const __multiTaskClasses: Function[] = []
 
-export const __useBrowserStaticMethods: Record<string, Function[]> = {};
+export const __useBrowserStaticMethods: Record<string, Function[]> = {}
 
 export function Test(options?: { module?: string }): ClassDecorator {
   return function (constructor: Function, ...args: any[]) {
-    (constructor as any).module = options?.module ? options.module : 'default';
-    __testCaseClasses.push(constructor);
-    console.log('Decorator args', args);
-  };
+    ;(constructor as any).module = options?.module ? options.module : 'default'
+    __testCaseClasses.push(constructor)
+    console.log('Decorator args', args)
+  }
 }
 export function useBrowser() {
   return function (target: Function, context: ClassMethodDecoratorContext) {
     return function (this: any, ...args: any[]) {
-      const className = this.constructor.name;
-      const funcName = String(context.name);
+      const className = this.constructor.name
+      const funcName = String(context.name)
       if (funcName.startsWith('browser')) {
       }
-      const cloned = this.clone(`${className}.${String(context.name)}`);
-      cloned.setPage(args[0]);
-      __multiTaskClasses[className] = target.apply(cloned, args);
-      return __multiTaskClasses[className];
-    };
-  };
+      const cloned = this.clone(`${className}.${String(context.name)}`)
+      cloned.setPage(args[0])
+      __multiTaskClasses[className] = target.apply(cloned, args)
+      return __multiTaskClasses[className]
+    }
+  }
 }
 
 export function withBrowser(options: {
-  headless?: boolean;
-  debug?: boolean;
-  timeout?: number;
-  domain?: string;
-  retry?: number;
+  headless?: boolean
+  debug?: boolean
+  timeout?: number
+  domain?: string
+  retry?: number
 }): ClassDecorator {
   return function (constructor: Function) {
     const opts = {
@@ -41,12 +41,30 @@ export function withBrowser(options: {
       domain: undefined,
       retry: 3,
       ...options,
-    };
-    (constructor as any).__useBrowser = true;
-    (constructor as any).__headless = opts.headless;
-    (constructor as any).__timeout = opts.timeout;
-    (constructor as any).__domain = opts.domain;
-    (constructor as any).__debug = opts.debug;
-    (constructor as any).__retry = opts.retry;
-  };
+    }
+    ;(constructor as any).__useBrowser = true
+    ;(constructor as any).__headless = opts.headless
+    ;(constructor as any).__timeout = opts.timeout
+    ;(constructor as any).__domain = opts.domain
+    ;(constructor as any).__debug = opts.debug
+    ;(constructor as any).__retry = opts.retry
+  }
+}
+export function withAndroid(options: {
+  headless?: boolean
+  timeout?: number
+  retry?: number
+}): ClassDecorator {
+  return function (constructor: Function) {
+    const opts = {
+      headless: false,
+      timeout: 60000,
+      retry: 3,
+      ...options,
+    }
+    ;(constructor as any).__withAndroid = true
+    ;(constructor as any).__headless = opts.headless
+    ;(constructor as any).__timeout = opts.timeout
+    ;(constructor as any).__retry = opts.retry
+  }
 }

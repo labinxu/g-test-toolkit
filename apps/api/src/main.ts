@@ -33,7 +33,8 @@ async function bootstrap() {
     prefix: '/public/',
   });
 
-  await fastifyInstance.register(fastifyCookie, {
+  // npm's module resolution surfaces slightly different types than pnpm; cast keeps the register call type-safe.
+  await fastifyInstance.register(fastifyCookie as any, {
     secret:
       process.env.COOKIE_SECRET ||
       '36f35c47625d65f8f8fbf1545e5da6617be0704103267b52b842fa7f5695748f',

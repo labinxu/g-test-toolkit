@@ -82,8 +82,6 @@ export default function Page() {
         view: iframeRef.current.contentWindow,
         clientX: iframeX,
         clientY: iframeY,
-        pageX: iframeX + (iframeRef.current.contentWindow?.scrollX || 0),
-        pageY: iframeY + (iframeRef.current.contentWindow?.scrollY || 0),
       });
       iframeRef.current.dispatchEvent(clickEvent);
       console.log('Triggered click in iframe at:', { iframeX, iframeY });

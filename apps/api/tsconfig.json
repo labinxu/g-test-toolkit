@@ -16,13 +16,19 @@
     "strict": true,
     "useDefineForClassFields": true,
     "strictPropertyInitialization": false,
-    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "typeRoots": [
+      "../../node_modules/@types",
+      "./src/types"
+    ],
     "types": ["node"],
     "paths": {
       "@repo/*": ["../packages/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts"
+  ],
   "exclude": [
     "node_modules",
     "dist",

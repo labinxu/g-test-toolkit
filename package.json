@@ -11,19 +11,29 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "ios:doctor": "npx appium-doctor --ios",
+    "ios:version": "npx appium --version",
+    "ios:drivers": "npx appium driver list --installed"
   },
   "devDependencies": {
-    "@repo/eslint-config": "workspace:*",
-    "@repo/typescript-config": "workspace:*",
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
     "prettier": "^3.5.3",
     "turbo": "^2.5.4"
   },
-  "packageManager": "pnpm@8.15.5",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "packageManager": "npm@11.5.1",
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "dotenv": "^16.5.0"
+  },
+  "overrides": {
+    "fastify": "5.4.0"
   }
 }

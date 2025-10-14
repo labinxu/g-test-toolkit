@@ -7,12 +7,9 @@ import { TestCasesService } from './testcases.service';
 import { TestCasesController } from './testcases.controller';
 import { FastifyMulterModule } from '@nest-lab/fastify-multer';
 import { LoggerModule } from 'src/logger/logger.module';
-import { AndroidService } from 'src/mobile/android/android.service';
 import { AndroidModule } from 'src/mobile/android/android.module';
-import { CommandService } from 'src/command/command.service';
-import { ReportService } from 'src/report/report.service';
 import { ReportModule } from 'src/report/report.module';
-import { FilesService } from 'src/files/files.service';
+import { FilesModule } from 'src/files/files.module';
 import { IosModule } from 'src/mobile/ios/ios.module';
 @Module({
   imports: [
@@ -33,14 +30,11 @@ import { IosModule } from 'src/mobile/ios/ios.module';
     AndroidModule,
     IosModule,
     ReportModule,
+    FilesModule,
   ],
   controllers: [TestCasesController],
   providers: [
-    FilesService,
-    CommandService,
     TestCasesService,
-    AndroidService,
-    ReportService,
   ],
 })
 export class TestCaseModule {}

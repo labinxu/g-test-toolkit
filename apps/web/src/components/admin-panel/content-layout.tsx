@@ -5,6 +5,7 @@ import { useRef, useEffect, useState } from 'react';
 
 interface ContentLayoutProps {
   children: React.ReactNode;
+  title?: string;
 }
 
 export function ContentLayout({ children }: ContentLayoutProps) {

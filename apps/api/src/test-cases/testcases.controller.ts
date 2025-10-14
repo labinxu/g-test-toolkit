@@ -19,6 +19,7 @@ import * as fs from 'fs';
 import { FastifyRequest as Request } from 'fastify';
 import { checkPath, getErrorMessage } from 'src/common/utils';
 import { RunTestCaseDto, RunTestCaseFileDto } from './dto/run-testcase-dto';
+import { remote } from 'webdriverio';
 @Controller('testcase')
 export class TestCasesController {
   constructor(
@@ -217,6 +218,38 @@ export class TestCasesController {
       throw new NotFoundException(getErrorMessage(error));
     }
 
+    return { result: 'ok', message: 'pushing livestream' };
+  }
+  @Get('test-ios')
+  async testios() {
+    const caps = {
+      platformName: 'iOS',
+      'appium:platformVersion': '18.6',
+      'appium:deviceName': 'iPhone 16',
+      'appium:udid': '7BC31BC4-D09A-4FDD-8010-725D1295061B',
+      'appium:automationName': 'XCUITest',
+      'appium:app': '/Users/laibin/Downloads/getter.ipa',
+      'appium:xcodeSigningId': 'iPhone Developer',
+      'appium:updatedWDABundleId': 'com.gettr.WebDriverAgentRunner',
+      'appium:useNewWDA': true,
+      'appium:showXcodeLog': true,
+      'appium:wdaStartupRetries': 3,
+      'appium:autoGrantPermissions': true,
+      'appium:autoAcceptAlerts': true,
+      'appium:fullReset': true,
+      'appium:noReset': false,
+    };
+
+    const opts = {
+      path: '/',
+      port: 4723,
+      capabilities: {
+        ...caps,
+      },
+    };
+    const driver = await remote(opts);
+    // 你的测试代码
+    await driver.deleteSession();
     return { result: 'ok', message: 'pushing livestream' };
   }
 }

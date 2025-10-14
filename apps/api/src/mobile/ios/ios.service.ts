@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { spawn, ChildProcess } from 'child_process';
 import { LoggerService } from 'src/logger/logger.service';
 import { CustomLogger } from 'src/logger/logger.custom';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 type RunResult = { stdout: string; stderr: string; code: number };
 
@@ -17,6 +20,7 @@ export interface IosInitOptions {
 export class IosService {
   private logger: CustomLogger;
   private appiumProc: ChildProcess | null = null;
+  private appiumHome: string | null = null;
 
   constructor(private readonly loggerService: LoggerService) {
     this.logger = this.loggerService.createLogger('IosService');
@@ -26,21 +30,30 @@ export class IosService {
     cmd: string,
     args: string[],
     clientId?: string,
+    opts?: { cwd?: string; env?: NodeJS.ProcessEnv; silent?: boolean },
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const proc = spawn(cmd, args, { stdio: 'pipe' });
+        const proc = spawn(cmd, args, {
+          stdio: 'pipe',
+          cwd: opts?.cwd,
+          env: opts?.env ? { ...process.env, ...opts.env } : process.env,
+        });
         proc.stdout.on('data', (data) => {
-          const msg = data.toString();
-          clientId
-            ? this.logger.sendTo(clientId, msg, 'info')
-            : this.logger.info(msg);
+          if (!opts?.silent) {
+            const msg = data.toString();
+            clientId
+              ? this.logger.sendTo(clientId, msg, 'info')
+              : this.logger.info(msg);
+          }
         });
         proc.stderr.on('data', (data) => {
-          const msg = data.toString();
-          clientId
-            ? this.logger.sendTo(clientId, msg, 'error')
-            : this.logger.error(msg);
+          if (!opts?.silent) {
+            const msg = data.toString();
+            clientId
+              ? this.logger.sendTo(clientId, msg, 'error')
+              : this.logger.error(msg);
+          }
         });
         proc.on('error', (err) => {
           const msg = `Failed to start command ${cmd}: ${err.message}`;
@@ -63,29 +76,91 @@ export class IosService {
     cmd: string,
     args: string[],
     clientId?: string,
+    opts?: { cwd?: string; env?: NodeJS.ProcessEnv; silent?: boolean },
   ): Promise<RunResult> {
     return new Promise((resolve) => {
-      const proc = spawn(cmd, args, { stdio: 'pipe' });
+      const proc = spawn(cmd, args, {
+        stdio: 'pipe',
+        cwd: opts?.cwd,
+        env: opts?.env ? { ...process.env, ...opts.env } : process.env,
+      });
       let stdout = '';
       let stderr = '';
       proc.stdout.on('data', (data) => {
         const msg = data.toString();
         stdout += msg;
-        clientId
-          ? this.logger.sendTo(clientId, msg, 'info')
-          : this.logger.info(msg);
+        if (!opts?.silent) {
+          clientId
+            ? this.logger.sendTo(clientId, msg, 'info')
+            : this.logger.info(msg);
+        }
       });
       proc.stderr.on('data', (data) => {
         const msg = data.toString();
         stderr += msg;
-        clientId
-          ? this.logger.sendTo(clientId, msg, 'error')
-          : this.logger.error(msg);
+        if (!opts?.silent) {
+          clientId
+            ? this.logger.sendTo(clientId, msg, 'error')
+            : this.logger.error(msg);
+        }
       });
       proc.on('close', (code) => {
         resolve({ stdout, stderr, code: code ?? 0 });
       });
     });
+  }
+
+  private async hasPnpm(clientId?: string): Promise<boolean> {
+    try {
+      const res = await this.runCommandCapture('pnpm', ['--version'], clientId, { silent: true });
+      return res.code === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private ensureTempAppiumHome(): string {
+    if (this.appiumHome && fs.existsSync(this.appiumHome)) return this.appiumHome;
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'appium-home-'));
+    // Create minimal package.json to avoid workspace detection by npm
+    try {
+      fs.writeFileSync(
+        path.join(tmpHome, 'package.json'),
+        JSON.stringify({ name: 'appium-temp', version: '1.0.0' }),
+      );
+    } catch {}
+    this.appiumHome = tmpHome;
+    return tmpHome;
+  }
+
+  private envWithAppiumHome(): NodeJS.ProcessEnv | undefined {
+    return this.appiumHome ? { APPIUM_HOME: this.appiumHome } as any : undefined;
+  }
+
+  private async dlxRun(
+    binary: string,
+    args: string[],
+    clientId?: string,
+    opts?: { cwd?: string; env?: NodeJS.ProcessEnv; silent?: boolean },
+  ): Promise<void> {
+    if (await this.hasPnpm(clientId)) {
+      await this.runCommand('pnpm', ['dlx', binary, ...args], clientId, opts);
+    } else {
+      await this.runCommand('npx', ['--yes', binary, ...args], clientId, opts);
+    }
+  }
+
+  private async dlxCapture(
+    binary: string,
+    args: string[],
+    clientId?: string,
+    opts?: { cwd?: string; env?: NodeJS.ProcessEnv; silent?: boolean },
+  ): Promise<RunResult> {
+    if (await this.hasPnpm(clientId)) {
+      return await this.runCommandCapture('pnpm', ['dlx', binary, ...args], clientId, opts);
+    } else {
+      return await this.runCommandCapture('npx', ['--yes', binary, ...args], clientId, opts);
+    }
   }
 
   private normalizeRuntime(runtime?: string): string | null {
@@ -103,7 +178,7 @@ export class IosService {
     runtime?: string;
     udid?: string;
     clientId?: string;
-  }): Promise<void> {
+  }): Promise<{ udid: string; name?: string; runtime?: string }> {
     const { deviceName, runtime, udid, clientId } = params || {};
 
     // If UDID is provided, try it directly
@@ -131,13 +206,19 @@ export class IosService {
             '-b',
             'com.apple.iphonesimulator',
             '--args',
-            '-CurrentDeviceUDID',
-            udid,
-          ],
-          clientId,
-        );
+          '-CurrentDeviceUDID',
+          udid,
+        ],
+        clientId,
+      );
       }
-      return;
+
+      const info = await this.lookupSimulatorByUdid(udid, clientId);
+      return {
+        udid,
+        name: info?.name,
+        runtime: info?.runtime,
+      };
     }
 
     const { stdout } = await this.runCommandCapture(
@@ -236,6 +317,109 @@ export class IosService {
         clientId,
       );
     }
+
+    return {
+      udid: targetUdid,
+      name: target.dev.name,
+      runtime: target.runtimeKey,
+    };
+  }
+
+  private async lookupSimulatorByUdid(udid: string, clientId?: string) {
+    const { stdout } = await this.runCommandCapture(
+      'xcrun',
+      ['simctl', 'list', 'devices', 'available', '-j'],
+      clientId,
+    );
+    try {
+      const data = JSON.parse(stdout);
+      for (const [runtimeKey, devices] of Object.entries<any[]>(
+        data?.devices || {},
+      )) {
+        for (const dev of devices) {
+          if ((dev.udid as string)?.toLowerCase() === udid.toLowerCase()) {
+            return { name: dev.name as string, runtime: runtimeKey as string, state: dev.state as string };
+          }
+        }
+      }
+    } catch {}
+    return null;
+  }
+
+  private async installXcuiDriver(clientId?: string): Promise<boolean> {
+    // Check if installed already
+    try {
+      const env = this.envWithAppiumHome();
+      const listRes = await this.dlxCapture(
+        'appium',
+        ['driver', 'list', '--installed'],
+        clientId,
+        { silent: true, env },
+      );
+      if (listRes.code === 0 && /xcuitest/i.test(listRes.stdout)) {
+        return true;
+      }
+    } catch {
+      // continue to install attempts
+    }
+
+    // Try standard install via pnpm dlx (preferred) or npx
+    let res = await this.dlxCapture(
+      'appium',
+      ['driver', 'install', 'xcuitest'],
+      clientId,
+    );
+    if (res.code === 0) {
+      return true;
+    }
+
+    // Workspace-safe fallback: isolate APPIUM_HOME and working directory
+    try {
+      const tmpHome = this.ensureTempAppiumHome();
+      const env = { APPIUM_HOME: tmpHome };
+
+      // Install driver in isolated APPIUM_HOME and isolated cwd
+      res = await this.dlxCapture(
+        'appium',
+        ['driver', 'install', 'xcuitest'],
+        clientId,
+        { env, cwd: tmpHome },
+      );
+
+      if (res.code === 0) {
+        const verify = await this.dlxCapture(
+          'appium',
+          ['driver', 'list', '--installed'],
+          clientId,
+          { env, cwd: tmpHome, silent: true },
+        );
+        if (verify.code === 0 && /xcuitest/i.test(verify.stdout)) {
+          this.appiumHome = tmpHome;
+          return true;
+        }
+      }
+    } catch {
+      // ignore and continue to other fallbacks
+    }
+
+    // Fallback: use global appium if present
+    try {
+      const hasGlobal = await this.runCommandCapture('appium', ['--version'], clientId, { silent: true });
+      if (hasGlobal.code === 0) {
+        const env = this.appiumHome ? { APPIUM_HOME: this.appiumHome } : undefined;
+        res = await this.runCommandCapture('appium', ['driver', 'install', 'xcuitest'], clientId, { env });
+        if (res.code === 0) {
+          const verify = await this.runCommandCapture('appium', ['driver', 'list', '--installed'], clientId, { env, silent: true });
+          if (verify.code === 0 && /xcuitest/i.test(verify.stdout)) {
+            return true;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return false;
   }
 
   async initEnvironment(options: IosInitOptions = {}): Promise<void> {
@@ -256,39 +440,18 @@ export class IosService {
 
       // Appium doctor (optional but helpful)
       try {
-        await this.runCommand('npx', ['--yes', 'appium-doctor', '--ios'], clientId);
+        await this.dlxRun('appium-doctor', ['--ios'], clientId);
       } catch {
-        try {
-          // fallback to -y for older npx
-          await this.runCommand('npx', ['-y', 'appium-doctor', '--ios'], clientId);
-        } catch {
-          this.logger.warn('appium-doctor failed (non-fatal)', 'warn');
-        }
+        this.logger.warn('appium-doctor failed (non-fatal)', 'warn');
       }
 
-      // Install Appium XCUITest driver (best-effort)
-      let hasXcui = false;
-      try {
-        const res = await this.runCommandCapture('npx', ['--yes', 'appium', 'driver', 'list', '--installed'], clientId);
-        hasXcui = /xcuitest/i.test(res.stdout);
-      } catch {
-        // ignore, will try install directly
-      }
-      if (!hasXcui) {
-        try {
-          await this.runCommand('npx', ['--yes', 'appium', 'driver', 'install', 'xcuitest'], clientId);
-        } catch {
-          try {
-            // fallback to -y for older npx
-            await this.runCommand('npx', ['-y', 'appium', 'driver', 'install', 'xcuitest'], clientId);
-          } catch (e) {
-            this.logger.warn(
-              `Failed to install Appium XCUITest driver: ${
-                e instanceof Error ? e.message : String(e)
-              } (non-fatal)`,
-            );
-          }
-        }
+      // Install Appium XCUITest driver (best-effort, workspace-safe)
+      const installed = await this.installXcuiDriver(clientId);
+      if (!installed) {
+        this.logger.warn(
+          'XCUITest driver not installed. Try: pnpm dlx appium driver install xcuitest (or ensure Appium v2 is installed).',
+          'warn',
+        );
       }
 
       // Start Appium server if not already started
@@ -308,35 +471,50 @@ export class IosService {
           'info',
         );
 
-      // Determine how to launch Appium (prefer npx, fallback to global)
-      let appiumCmd = 'npx';
-      let appiumArgs = ['--yes', 'appium', '-p', String(port)];
-      try {
-        const checkNpx = await this.runCommandCapture('npx', ['--yes', 'appium', '--version'], clientId);
+      // Determine how to launch Appium (prefer pnpm dlx, then npx, then global)
+      let appiumCmd = 'pnpm';
+      let appiumArgs = ['dlx', 'appium', '-p', String(port)];
+
+      const tryPnpm = await this.runCommandCapture('pnpm', ['--version'], clientId, { silent: true });
+      if (tryPnpm.code !== 0) {
+        // fallback to npx
+        appiumCmd = 'npx';
+        appiumArgs = ['--yes', 'appium', '-p', String(port)];
+        const checkNpx = await this.runCommandCapture('npx', ['--yes', 'appium', '--version'], clientId, { silent: true });
         if (checkNpx.code !== 0) {
-          const checkGlobal = await this.runCommandCapture('appium', ['--version'], clientId);
+          const checkGlobal = await this.runCommandCapture('appium', ['--version'], clientId, { silent: true });
           if (checkGlobal.code === 0) {
             appiumCmd = 'appium';
             appiumArgs = ['-p', String(port)];
           } else {
-            this.logger.warn('Appium is not available via npx or globally. Skipping Appium server start.', 'warn');
+            this.logger.warn('Appium is not available via pnpm dlx, npx or globally. Skipping Appium server start.', 'warn');
             return;
           }
         }
-      } catch {
-        // If checks threw unexpectedly, try global appium as fallback
-        const checkGlobal = await this.runCommandCapture('appium', ['--version'], clientId);
-        if (checkGlobal.code === 0) {
-          appiumCmd = 'appium';
-          appiumArgs = ['-p', String(port)];
-        } else {
-          this.logger.warn('Appium is not available via npx or globally. Skipping Appium server start.', 'warn');
-          return;
+      } else {
+        // ensure appium is resolvable via pnpm dlx
+        const checkDlx = await this.runCommandCapture('pnpm', ['dlx', 'appium', '--version'], clientId, { silent: true });
+        if (checkDlx.code !== 0) {
+          // fallback to npx
+          appiumCmd = 'npx';
+          appiumArgs = ['--yes', 'appium', '-p', String(port)];
+          const checkNpx = await this.runCommandCapture('npx', ['--yes', 'appium', '--version'], clientId, { silent: true });
+          if (checkNpx.code !== 0) {
+            const checkGlobal = await this.runCommandCapture('appium', ['--version'], clientId, { silent: true });
+            if (checkGlobal.code === 0) {
+              appiumCmd = 'appium';
+              appiumArgs = ['-p', String(port)];
+            } else {
+              this.logger.warn('Appium is not available via pnpm dlx, npx or globally. Skipping Appium server start.', 'warn');
+              return;
+            }
+          }
         }
       }
 
       this.appiumProc = spawn(appiumCmd, appiumArgs, {
         stdio: 'pipe',
+        env: this.appiumHome ? { ...process.env, APPIUM_HOME: this.appiumHome } : process.env,
       });
 
       this.appiumProc.stdout?.on('data', (data) => {
@@ -373,7 +551,7 @@ export class IosService {
   }
 
   /**
-   * List iOS simulators via `xcrun simctl list devices`.
+   * List iOS simulators and return Appium capabilities objects for each device.
    * Use availableOnly=true to restrict to available devices.
    * Optional filters by device name substring and runtime substring.
    */
@@ -382,10 +560,26 @@ export class IosService {
     clientId?: string;
     name?: string;
     runtime?: string;
-  } = {}): Promise<
-    { name: string; udid: string; runtime: string; state: string; isAvailable: boolean }[]
-  > {
+    appPath?: string;
+    xcodeSigningId?: string;
+    wdaBundleId?: string;
+  } = {}): Promise<{
+    name: string;
+    udid: string;
+    runtime: string;
+    state: string;
+    isAvailable: boolean;
+    platformVersion?: string;
+    capabilities: Record<string, any>;
+  }[]> {
     const { availableOnly = true, clientId, name, runtime } = options;
+    const appPath =
+      options.appPath ?? process.env.IOS_APP_PATH ?? undefined;
+    const xcodeSigningId =
+      options.xcodeSigningId ?? process.env.IOS_XCODE_SIGNING_ID ?? 'iPhone Developer';
+    const wdaBundleId =
+      options.wdaBundleId ?? process.env.IOS_WDA_BUNDLE_ID ?? 'com.gettr.WebDriverAgentRunner';
+
     const args = ['simctl', 'list', 'devices'];
     if (availableOnly) {
       args.push('available');
@@ -434,6 +628,115 @@ export class IosService {
       return a.name.localeCompare(b.name);
     });
 
-    return filtered;
+    // Convert runtime label to version string like "18.6"
+    const toPlatformVersion = (runtimeKey: string): string | undefined => {
+      // Supports "iOS 18.6", "iOS-18-6", or "...iOS-18-6"
+      const m = runtimeKey.match(/iOS[\s-]?(\d+)(?:[.\-](\d+))?/i);
+      if (m) {
+        const major = m[1];
+        const minor = m[2] ?? '0';
+        return `${major}.${minor}`;
+      }
+      return undefined;
+    };
+
+    // Map to Appium capabilities shape
+    const capabilities = filtered.map((d) => {
+      const platformVersion = toPlatformVersion(d.runtime);
+      const caps: any = {
+        platformName: 'iOS',
+        'appium:platformVersion': platformVersion,
+        'appium:deviceName': d.name,
+        'appium:udid': d.udid,
+        'appium:automationName': 'XCUITest',
+        'appium:xcodeSigningId': xcodeSigningId,
+        'appium:updatedWDABundleId': wdaBundleId,
+        'appium:useNewWDA': true,
+        'appium:showXcodeLog': true,
+        'appium:wdaStartupRetries': 3,
+        'appium:autoGrantPermissions': true,
+        'appium:autoAcceptAlerts': true,
+        'appium:fullReset': true,
+        'appium:noReset': false,
+      };
+      if (appPath) {
+        caps['appium:app'] = appPath;
+      }
+      return {
+        name: d.name,
+        udid: d.udid,
+        runtime: d.runtime,
+        state: d.state,
+        isAvailable: d.isAvailable,
+        platformVersion,
+        capabilities: caps,
+      };
+    });
+
+    return capabilities;
+  }
+
+  async bootSimulator(options: {
+    udid?: string;
+    deviceName?: string;
+    runtime?: string;
+    clientId?: string;
+  } = {}) {
+    const info = await this.ensureSimulatorBooted(options);
+    const sims = await this.listSimulators({
+      availableOnly: false,
+      clientId: options.clientId,
+    });
+    const matched = sims.find(
+      (s) => s.udid.toLowerCase() === info.udid.toLowerCase(),
+    );
+    return {
+      started: true,
+      simulator:
+        matched ?? {
+          name: info.name ?? 'Unknown',
+          udid: info.udid,
+          runtime: info.runtime ?? '',
+          state: 'Booted',
+          isAvailable: true,
+          platformVersion: undefined,
+          capabilities: {},
+        },
+    };
+  }
+
+  async shutdownSimulator(options: { udid?: string; clientId?: string } = {}) {
+    const sims = await this.listSimulators({
+      availableOnly: false,
+      clientId: options.clientId,
+    });
+    const target = options.udid
+      ? sims.find((s) => s.udid.toLowerCase() === options.udid!.toLowerCase())
+      : sims.find((s) => s.state === 'Booted');
+    if (!target) {
+      this.logger.info('No running iOS simulator detected. Nothing to shutdown.');
+      return { stopped: false, simulator: null };
+    }
+
+    try {
+      await this.runCommand('xcrun', ['simctl', 'shutdown', target.udid], options.clientId);
+    } catch (err) {
+      const message = (err as Error)?.message ?? String(err);
+      this.logger.warn(`Failed to shutdown simulator ${target.udid}: ${message}`);
+    }
+
+    const updated = await this.listSimulators({
+      availableOnly: false,
+      clientId: options.clientId,
+    });
+    const refreshed = updated.find(
+      (s) => s.udid.toLowerCase() === target.udid.toLowerCase(),
+    );
+    const simulator =
+      refreshed ?? {
+        ...target,
+        state: 'Shutdown',
+      };
+    return { stopped: true, simulator };
   }
 }

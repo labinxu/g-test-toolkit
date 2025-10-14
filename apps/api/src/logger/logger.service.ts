@@ -22,6 +22,7 @@ export class LoggerService {
         clientId,
       );
       customLogger.setContext(context);
+      customLogger.debug(`createLogger ${context}`);
       return customLogger;
     } catch (err) {
       if (err instanceof Error) {

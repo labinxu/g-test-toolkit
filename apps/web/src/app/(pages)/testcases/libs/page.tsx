@@ -1,13 +1,10 @@
 'use client';
-import { useState, useRef, useCallback } from 'react';
-import { OnMount } from '@monaco-editor/react';
-import type { Monaco } from '@monaco-editor/react';
+import { useState, useCallback } from 'react';
 import DirectoryTreePanel from '@/components/files/directory-tree-panel';
 import { ScriptEditor } from '@/components/files/script-editor';
 import { Control } from '../control';
 import { OutputPanel } from '@/components/output-panel';
 import { useSocket } from '../socket-content';
-import { useSession } from '@/app/context/session-context';
 import NewFileOrFolder from '@/components/files/new-file-folder';
 import DirectoryTree from '../files/directory-tree';
 import { toast } from 'sonner';
@@ -16,12 +13,13 @@ export default function Page() {
   const [currentFile, setCurrentFile] = useState('');
   const [currentDir, setCurrentDir] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [monacoInited, setMonacoInited] = useState<boolean>(false);
   const [openLog, setOpenLog] = useState(false);
   const { logs, connected, clientId, clearLogs, running, setRunning } =
     useSocket();
-  const { isAuthenticated } = useSession();
-  const monacoRef = useRef<Monaco>(null);
+  const [fileCache, setFileCache] = useState<Record<string, {
+    content: string;
+    original: string;
+  }>>({});
 
   const buildGettrLib = useCallback(async () => {
     fetch(`/api/testcase/gettrlib?clientId=${clientId}`, {
@@ -56,24 +54,6 @@ export default function Page() {
       });
   }, [clientId]);
 
-  const handleEditorDidMount: OnMount = useCallback(
-    (editor, monaco: Monaco) => {
-      if (!monaco || !editor) return;
-      monacoRef.current = monaco;
-      setMonacoInited(true);
-
-      monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-        target: monaco.languages.typescript.ScriptTarget.ESNext,
-        allowNonTsExtensions: true,
-        moduleResolution:
-          monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-        module: monaco.languages.typescript.ModuleKind.CommonJS,
-        noEmit: true,
-        typeRoots: ['node_modules/@types'],
-      });
-    },
-    [],
-  );
   const renderLogs = () => {
     return logs.map((log, index) => {
       let color = '';
@@ -124,7 +104,33 @@ export default function Page() {
           <div className="flex-1 min-h-0">
             <ScriptEditor
               filePath={currentFile}
-              onMount={handleEditorDidMount}
+              cachedValue={currentFile ? fileCache[currentFile] : undefined}
+              onContentLoaded={({ content, original }, { filePath }) => {
+                if (!filePath) return;
+                setFileCache((prev) => ({
+                  ...prev,
+                  [filePath]: { content, original },
+                }));
+              }}
+              onContentChange={(value, info) => {
+                const fileKey = info?.filePath ?? currentFile;
+                if (!fileKey) return;
+                setFileCache((prev) => {
+                  const existing = prev[fileKey];
+                  const original = existing?.original ?? value;
+                  return {
+                    ...prev,
+                    [fileKey]: { content: value, original },
+                  };
+                });
+              }}
+              onContentSaved={({ content, original }, { filePath }) => {
+                if (!filePath) return;
+                setFileCache((prev) => ({
+                  ...prev,
+                  [filePath]: { content, original },
+                }));
+              }}
             />
           </div>
           <Control

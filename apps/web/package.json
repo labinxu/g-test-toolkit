@@ -9,8 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.2",
     "@hookform/resolvers": "^5.1.1",
-    "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.2",
@@ -31,6 +31,7 @@
     "@radix-ui/react-tooltip": "^1.2.7",
     "@tanstack/react-query": "^5.81.0",
     "@typescript/ata": "^0.9.8",
+    "@uiw/react-codemirror": "^4.23.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -38,7 +39,7 @@
     "js-cookie": "^3.0.5",
     "lodash": "^4.17.21",
     "lucide-react": "^0.522.0",
-    "next": "15.4.1",
+    "next": "15.5.4",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.6",
     "react": "^19.0.0",
@@ -53,6 +54,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@tailwindcss/language-server": "^0.14.28",
     "@tailwindcss/postcss": "^4.1.10",
     "@types/js-cookie": "^3.0.6",
     "@types/lodash": "^4.17.20",
@@ -60,8 +62,9 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.3.4",
+    "eslint-config-next": "15.5.4",
     "tailwindcss": "^4.1.10",
+    "tailwindcss-language-server": "^0.0.1",
     "tw-animate-css": "^1.3.4",
     "typescript": "^5"
   }

@@ -12,7 +12,7 @@ const loggerFormat = winston.format.printf(
 @Injectable({ scope: Scope.TRANSIENT })
 export class CustomLogger {
   private logger: winston.Logger;
-  private context = 'LOG';
+  private context = 'CustomLogger';
   private clientId: string | null;
   constructor(
     private readonly winstonLogger: winston.Logger,
@@ -32,7 +32,6 @@ export class CustomLogger {
     return `${timestamp}  ${tag} [${level}] ${message}`;
   }
   setContext(context: string) {
-    this.logger.debug(`set context: clientID:${this.clientId}`);
     this.context = context;
     this.logger = this.winstonLogger.child({
       context,
@@ -56,10 +55,11 @@ export class CustomLogger {
     this.logger.remove(transport);
   }
   sendTo(clientId: string, msg: string, level?: string) {
-    this.loggerGateway?.sendLogTo(
-      clientId,
-      this.format(level ? level : '', msg),
-    );
+    clientId &&
+      this.loggerGateway?.sendLogTo(
+        clientId,
+        this.format(level ? level : '', msg),
+      );
   }
   info(message: string, tag?: string) {
     this.logger.info(message);
