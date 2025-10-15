@@ -1,6 +1,7 @@
 import { __testCaseClasses } from './test-case-decorator'
 import { TestCase } from './test-case-base'
 import { BrowserHelper, CustomLogger } from '../../types'
+import { remote } from 'webdriverio'
 
 type TestCaseConstructor = new (logger: any) => TestCase
 export async function main({
@@ -17,6 +18,8 @@ export async function main({
   const logger = loggerService.createLogger('main', clientId) as CustomLogger
   for (const Ctor of __testCaseClasses as TestCaseConstructor[]) {
     const needBrowser = (Ctor as any).__useBrowser
+    const isAndroid = (Ctor as any).__withAndroid
+    const androidOpts = (Ctor as any).__androidOpts
     const headless = (Ctor as any).__headless
     const debug = (Ctor as any).__debug
     const domain = (Ctor as any).__domain
@@ -69,6 +72,8 @@ export async function main({
         }
       }
     }
+    if (isAndroid) {
+    }
     let rst = null
     try {
       // end for with browser methods
@@ -82,9 +87,12 @@ export async function main({
         })
         rst?.page && instance.setPage(rst?.page)
         rst?.bs && instance.setBrowser(rst.bs)
+      } else if (isAndroid) {
+        const driver = await remote(androidOpts)
+        instance.setPage(driver)
       }
     } catch (err) {
-      logger.info('Error to run test cases')
+      logger.info(`Error to run test cases ${err}`)
       logger.complete()
       __testCaseClasses.length = 0
       return

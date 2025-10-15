@@ -1,4 +1,6 @@
 // test-case-decorator.ts
+import path from 'path'
+
 export const __testCaseClasses: Function[] = []
 export const __multiTaskClasses: Function[] = []
 
@@ -51,20 +53,50 @@ export function withBrowser(options: {
   }
 }
 export function withAndroid(options: {
-  headless?: boolean
+  deviceName: string
+  udid: string
+  apk: string
+  protocol?: string
+  hostname?: string
+  port?: number
+  path?: string
   timeout?: number
   retry?: number
 }): ClassDecorator {
   return function (constructor: Function) {
     const opts = {
-      headless: false,
+      protocol: 'http',
+      hostname: 'localhost',
+      port: 4723,
+      path: '/',
       timeout: 60000,
       retry: 3,
       ...options,
     }
     ;(constructor as any).__withAndroid = true
-    ;(constructor as any).__headless = opts.headless
     ;(constructor as any).__timeout = opts.timeout
     ;(constructor as any).__retry = opts.retry
+    ;(constructor as any).__androidOpts = {
+      protocol: opts.protocol,
+      hostname: opts.hostname,
+      port: 4723,
+      path: opts.path,
+      capabilities: {
+        platformName: 'Android',
+        'appium:deviceName': opts.deviceName,
+        'appium:udid': opts.udid,
+        'appium:app': path.join(
+          __dirname,
+          '../../../../',
+          process.env.APP_DIR || 'workspace/app',
+          opts.apk
+        ),
+        'appium:automationName': 'UiAutomator2',
+        'appium:autoGrantPermissions': true,
+        'appium:autoAcceptAlerts': true,
+        'appium:disableHiddenApiPolicyPrePApp': true,
+        'appium:ignoreHiddenApiPolicyError': true,
+      },
+    }
   }
 }

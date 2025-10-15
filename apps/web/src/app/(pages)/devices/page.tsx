@@ -18,7 +18,11 @@ const headers = { 'Content-Type': 'application/json' }
 
 type AndroidEmulatorResponse = {
   avds: string[]
-  running: { serial: string; avd: string | null; deviceName: string | null } | null
+  running: {
+    serial: string
+    avd: string | null
+    deviceName: string | null
+  } | null
 }
 
 type AndroidStopResponse = {
@@ -210,7 +214,7 @@ export default function Page() {
       const isRunning = runningKey
         ? avdKey === runningKey || avdKey.includes(runningKey) || runningKey.includes(avdKey)
         : false
-      const deviceName = isRunning ? runningDeviceName ?? avd : null
+      const deviceName = isRunning ? (runningDeviceName ?? avd) : null
       return { avd, isRunning, deviceName }
     })
   }, [emulatorQuery.data?.avds, runningAvd, runningDeviceName])
@@ -322,7 +326,7 @@ export default function Page() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>DeviceName</TableHead>
+                <TableHead>UDID</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -358,7 +362,7 @@ export default function Page() {
                 return (
                   <TableRow key={avd}>
                     <TableCell>{avd}</TableCell>
-                    <TableCell>{isRunning ? deviceName ?? 'Booted' : '-'}</TableCell>
+                    <TableCell>{isRunning ? (deviceName ?? 'Booted') : '-'}</TableCell>
                     <TableCell>{statusLabel}</TableCell>
                     <TableCell className="text-right">
                       {isRunning ? (

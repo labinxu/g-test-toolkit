@@ -1,7 +1,7 @@
-'use client';
-import { Button } from '@/components/ui/button';
-import { FileNode } from './files/types';
-import { Loader2Icon } from 'lucide-react';
+'use client'
+import { Button } from '@/components/ui/button'
+import { FileNode } from './files/types'
+import { Loader2Icon } from 'lucide-react'
 export function Control({
   currentFile,
   running,
@@ -10,17 +10,19 @@ export function Control({
   run,
   buildCoreLib,
   buildCommonLib,
+  buildLibs,
 }: {
-  currentFile: string;
-  running: boolean;
-  connected: boolean;
-  setRunning?: (run: boolean) => void;
-  run?: (path?: FileNode) => Promise<void>;
-  buildCoreLib?: () => Promise<void>;
-  buildCommonLib?: () => Promise<void>;
+  currentFile: string
+  running: boolean
+  connected: boolean
+  setRunning?: (run: boolean) => void
+  run?: (path?: FileNode) => Promise<void>
+  buildCoreLib?: () => Promise<void>
+  buildCommonLib?: () => Promise<void>
+  buildLibs?: () => Promise<void>
 }) {
   return (
-    <div className="flex justify-between items-center rounded-lg shadow-sm ">
+    <div className="flex items-center justify-between rounded-lg shadow-sm">
       <div>
         {currentFile ? (
           <>
@@ -30,8 +32,8 @@ export function Control({
                 size={'sm'}
                 disabled={running}
                 onClick={() => {
-                  !running && run && run();
-                  setRunning && setRunning(!running);
+                  !running && run && run()
+                  setRunning && setRunning(!running)
                 }}
               >
                 {!running ? '' : <Loader2Icon className="animate-spin" />}
@@ -48,6 +50,11 @@ export function Control({
                 Gettrlib
               </Button>
             ) : null}
+            {buildLibs ? (
+              <Button variant={'outline'} size={'sm'} onClick={buildLibs}>
+                Build Libs
+              </Button>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -58,5 +65,5 @@ export function Control({
         </span>
       </div>
     </div>
-  );
+  )
 }

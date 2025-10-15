@@ -8,23 +8,23 @@ import {
   NotFoundException,
   Query,
   UseGuards,
-} from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-import * as path from 'path';
-import { FastifyReply as Response } from 'fastify';
-import { ApiBody, ApiConsumes } from '@nestjs/swagger';
-import { TestCasesService } from './testcases.service';
-import { FilesService } from 'src/files/files.service';
-import * as fs from 'fs';
-import { FastifyRequest as Request } from 'fastify';
-import { checkPath, getErrorMessage } from 'src/common/utils';
-import { RunTestCaseDto, RunTestCaseFileDto } from './dto/run-testcase-dto';
-import { remote } from 'webdriverio';
+} from '@nestjs/common'
+import { AuthGuard } from '@nestjs/passport'
+import * as path from 'path'
+import { FastifyReply as Response } from 'fastify'
+import { ApiBody, ApiConsumes } from '@nestjs/swagger'
+import { TestCasesService } from './testcases.service'
+import { FilesService } from 'src/files/files.service'
+import * as fs from 'fs'
+import { FastifyRequest as Request } from 'fastify'
+import { checkPath, getErrorMessage } from 'src/common/utils'
+import { RunTestCaseFileDto } from './dto/run-testcase-dto'
+import { remote } from 'webdriverio'
 @Controller('testcase')
 export class TestCasesController {
   constructor(
     private readonly testCasesService: TestCasesService,
-    private readonly filesService: FilesService,
+    private readonly filesService: FilesService
   ) {}
 
   @Post('/')
@@ -45,94 +45,84 @@ export class TestCasesController {
   })
   @Get('execute')
   @UseGuards(AuthGuard('jwt'))
-  async execute(
-    @Query('scriptpath') scriptpath: string,
-    @Query('clientId') clientId: string,
-  ) {
-    const reportDir = path.dirname(scriptpath).replace('cases', 'reports');
+  async execute(@Query('scriptpath') scriptpath: string, @Query('clientId') clientId: string) {
+    const reportDir = path.dirname(scriptpath).replace('cases', 'reports')
+    console.log(reportDir)
     try {
-      const absPath = path.resolve(process.cwd(), scriptpath);
-      const stat = fs.statSync(absPath);
-      let message = '';
+      const absPath = path.resolve(process.cwd(), scriptpath)
+      const stat = fs.statSync(absPath)
+      let message = ''
       if (stat.isFile()) {
       } else if (stat.isDirectory()) {
-        message = `execute dir ${absPath}`;
+        message = `execute dir ${absPath}`
       }
       //this.testCasesService.runDir(scriptpath);
-      return { message, clientId };
+      return { message, clientId }
     } catch (err) {
-      throw new NotFoundException(err);
+      throw new NotFoundException(err)
     }
   }
   @Get('listcore')
   @UseGuards(AuthGuard('jwt'))
   async listcore(@Query('depth') depth: 3) {
-    const absPath = path.normalize(
-      path.join(process.cwd(), 'workspace', 'shared-libs'),
-    );
-    const baseDir = path.resolve(process.cwd());
+    const absPath = path.normalize(path.join(process.cwd(), 'workspace', 'shared-libs'))
+    const baseDir = path.resolve(process.cwd())
     if (!absPath.startsWith(baseDir)) {
-      throw new Error(
-        'Access to paths outside the working directory is forbidden',
-      );
+      throw new Error('Access to paths outside the working directory is forbidden')
     }
-    return await this.filesService.getTree(absPath, depth);
+    return await this.filesService.getTree(absPath, depth)
   }
   @Get('listcases')
   @UseGuards(AuthGuard('jwt'))
   async listCases(@Req() req: Request, @Query('depth') depth: number = 3) {
-    const user = req.user;
-    const userDir = checkPath(user['username']);
-    const absPath = path.normalize(
-      path.join(process.cwd(), 'workspace/users', userDir, 'cases'),
-    );
-    const baseDir = path.resolve(process.cwd());
+    const user = req.user
+    const userDir = checkPath(user['username'])
+    const absPath = path.normalize(path.join(process.cwd(), 'workspace/users', userDir, 'cases'))
+    const baseDir = path.resolve(process.cwd())
     if (!absPath.startsWith(baseDir)) {
-      throw new Error(
-        'Access to paths outside the working directory is forbidden',
-      );
+      throw new Error('Access to paths outside the working directory is forbidden')
     }
-    return await this.filesService.getTree(absPath, depth);
+    return await this.filesService.getTree(absPath, depth)
   }
   @Get('bundle')
   @UseGuards(AuthGuard('jwt'))
   async executeBundle(
     @Query('scriptpath') scriptpath: string,
-    @Query('clientId') clientId: string,
+    @Query('clientId') clientId: string
   ) {
-    console.log('clientid', clientId);
+    console.log('clientid', clientId)
     try {
-      const absPath = path.resolve(process.cwd(), scriptpath);
-      const stat = fs.statSync(absPath);
-      let message = '';
+      const absPath = path.resolve(process.cwd(), scriptpath)
+      const stat = fs.statSync(absPath)
+      let message = ''
       if (stat.isFile()) {
-        const reportDir = path.dirname(absPath).replace('cases', 'reports');
+        const reportDir = path.dirname(absPath).replace('cases', 'reports')
         if (!fs.existsSync(reportDir)) {
-          fs.mkdirSync(reportDir, { recursive: true });
+          fs.mkdirSync(reportDir, { recursive: true })
         }
-        message = `execute file ${absPath}`;
+        message = `execute file ${absPath}`
       } else if (stat.isDirectory()) {
-        message = `execute dir ${absPath}`;
-        const reportDir = absPath.replace('cases', 'reports');
+        message = `execute dir ${absPath}`
+        const reportDir = absPath.replace('cases', 'reports')
         if (!fs.existsSync(reportDir)) {
-          fs.mkdirSync(reportDir, { recursive: true });
+          fs.mkdirSync(reportDir, { recursive: true })
         }
-        const filesContent: { [filename: string]: string } = {};
-        const files = fs.readdirSync(absPath);
+        const filesContent: { [filename: string]: string } = {}
+        const files = fs.readdirSync(absPath)
         if (files.length === 0) {
-          return { message: 'no files', clientId };
+          return { message: 'no files', clientId }
         }
         await Promise.all(
           files.map(async (file) => {
-            const fullPath = path.join(absPath, file);
-            console.log(fullPath);
-            filesContent[fullPath] = fs.readFileSync(fullPath, 'utf-8');
-          }),
-        );
+            const fullPath = path.join(absPath, file)
+            console.log(fullPath)
+            filesContent[fullPath] = fs.readFileSync(fullPath, 'utf-8')
+          })
+        )
       }
-      return { message, clientId };
+      return { message, clientId }
     } catch (err) {
-      throw new NotFoundException(err);
+      throw new NotFoundException(err)
     }
   }
 
@@ -140,11 +130,11 @@ export class TestCasesController {
   @UseGuards(AuthGuard('jwt'))
   async init(@Res() res: Response) {
     try {
-      const content = this.filesService.makeTypesFile();
-      res.type('text/plian');
-      res.send({ content });
+      const content = this.filesService.makeTypesFile()
+      res.type('text/plian')
+      res.send({ content })
     } catch (err) {
-      throw new NotFoundException('make types file failed');
+      throw new NotFoundException('make types file failed')
     }
   }
 
@@ -152,73 +142,80 @@ export class TestCasesController {
   @UseGuards(AuthGuard('jwt'))
   async interfaces(@Res() res: Response) {
     try {
-      const interfs = await this.testCasesService.getInterfaces();
-      res.type('application/json');
-      res.send(interfs);
+      const interfs = await this.testCasesService.getInterfaces()
+      res.type('application/json')
+      res.send(interfs)
     } catch (err) {
-      throw new NotFoundException('make types file failed');
+      throw new NotFoundException('make types file failed')
     }
   }
 
   @Get('corelib')
   async corelib(@Query('clientId') clientId: string) {
     try {
-      this.testCasesService.buildCoreLib(clientId);
+      this.testCasesService.buildCoreLib(clientId)
     } catch (error) {
-      throw new NotFoundException(getErrorMessage(error));
+      throw new NotFoundException(getErrorMessage(error))
     }
 
-    return { result: 'ok', message: 'building...' };
+    return { result: 'ok', message: 'building...' }
   }
 
   @Get('gettrlib')
   async gettrlib(@Query('clientId') clientId: string) {
     try {
-      this.testCasesService.buildGettrLib(clientId);
+      this.testCasesService.buildGettrLib(clientId)
     } catch (error) {
-      throw new NotFoundException(getErrorMessage(error));
+      throw new NotFoundException(getErrorMessage(error))
     }
-    return { result: 'ok', message: 'building...' };
+    return { result: 'ok', message: 'building...' }
   }
-
+  @Get('buildlibs')
+  async buildLibs(@Query('clientId') clientId: string) {
+    try {
+      await this.testCasesService.buildCoreLib(clientId)
+      await this.testCasesService.buildGettrLib(clientId)
+      await this.testCasesService.buildGettrAndroidLib(clientId)
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error))
+    }
+    return { result: 'ok', message: 'building...' }
+  }
   @Post('runpath')
   async runTestCaseFile(@Body() runTestCaseFileDto: RunTestCaseFileDto) {
-    const baseDir = path.resolve(__dirname, '../..');
-    const dir = runTestCaseFileDto.filePath;
+    const baseDir = path.resolve(__dirname, '../..')
+    const dir = runTestCaseFileDto.filePath
 
     // Sanitize the input path to prevent path traversal
-    const sanitizedDir = checkPath(dir);
+    const sanitizedDir = checkPath(dir)
 
     // Resolve the path safely
-    const absPath = path.join(baseDir, sanitizedDir);
+    const absPath = path.join(baseDir, sanitizedDir)
 
     // Ensure the resolved path stays within baseDir
     if (!absPath.startsWith(baseDir)) {
-      throw new Error('Path traversal attempt detected');
+      throw new Error('Path traversal attempt detected')
     }
 
-    console.log(absPath);
-    const code = fs.readFileSync(absPath);
+    console.log(absPath)
+    const code = fs.readFileSync(absPath)
     try {
-      this.testCasesService.runInSandbox(
-        code.toString('utf-8'),
-        runTestCaseFileDto.clientId,
-      );
+      this.testCasesService.runInSandbox(code.toString('utf-8'), runTestCaseFileDto.clientId)
     } catch (err) {
-      throw new NotFoundException(getErrorMessage(err));
+      throw new NotFoundException(getErrorMessage(err))
     }
 
-    return { result: 'ok', message: 'Running...' };
+    return { result: 'ok', message: 'Running...' }
   }
   @Get('livestream')
-  async livestream(@Query('clientId') clientId) {
+  async livestream(@Query('clientId') clientId: string) {
     try {
-      console.log(`Livestream ${clientId}`);
+      console.log(`Livestream ${clientId}`)
     } catch (error) {
-      throw new NotFoundException(getErrorMessage(error));
+      throw new NotFoundException(getErrorMessage(error))
     }
 
-    return { result: 'ok', message: 'pushing livestream' };
+    return { result: 'ok', message: 'pushing livestream' }
   }
   @Get('test-ios')
   async testios() {
@@ -238,7 +235,7 @@ export class TestCasesController {
       'appium:autoAcceptAlerts': true,
       'appium:fullReset': true,
       'appium:noReset': false,
-    };
+    }
 
     const opts = {
       path: '/',
@@ -246,10 +243,10 @@ export class TestCasesController {
       capabilities: {
         ...caps,
       },
-    };
-    const driver = await remote(opts);
+    }
+    const driver = await remote(opts)
     // 你的测试代码
-    await driver.deleteSession();
-    return { result: 'ok', message: 'pushing livestream' };
+    await driver.deleteSession()
+    return { result: 'ok', message: 'pushing livestream' }
   }
 }

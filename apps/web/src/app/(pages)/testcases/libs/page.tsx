@@ -1,25 +1,29 @@
-'use client';
-import { useState, useCallback } from 'react';
-import DirectoryTreePanel from '@/components/files/directory-tree-panel';
-import { ScriptEditor } from '@/components/files/script-editor';
-import { Control } from '../control';
-import { OutputPanel } from '@/components/output-panel';
-import { useSocket } from '../socket-content';
-import NewFileOrFolder from '@/components/files/new-file-folder';
-import DirectoryTree from '../files/directory-tree';
-import { toast } from 'sonner';
+'use client'
+import { useState, useCallback } from 'react'
+import DirectoryTreePanel from '@/components/files/directory-tree-panel'
+import { ScriptEditor } from '@/components/files/script-editor'
+import { Control } from '../control'
+import { OutputPanel } from '@/components/output-panel'
+import { useSocket } from '../socket-content'
+import NewFileOrFolder from '@/components/files/new-file-folder'
+import DirectoryTree from '../files/directory-tree'
+import { toast } from 'sonner'
 
 export default function Page() {
-  const [currentFile, setCurrentFile] = useState('');
-  const [currentDir, setCurrentDir] = useState('');
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [openLog, setOpenLog] = useState(false);
-  const { logs, connected, clientId, clearLogs, running, setRunning } =
-    useSocket();
-  const [fileCache, setFileCache] = useState<Record<string, {
-    content: string;
-    original: string;
-  }>>({});
+  const [currentFile, setCurrentFile] = useState('')
+  const [currentDir, setCurrentDir] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [openLog, setOpenLog] = useState(false)
+  const { logs, connected, clientId, clearLogs, running, setRunning } = useSocket()
+  const [fileCache, setFileCache] = useState<
+    Record<
+      string,
+      {
+        content: string
+        original: string
+      }
+    >
+  >({})
 
   const buildGettrLib = useCallback(async () => {
     fetch(`/api/testcase/gettrlib?clientId=${clientId}`, {
@@ -30,13 +34,13 @@ export default function Page() {
     })
       .then((resp) => {
         if (resp.ok) {
-          toast.message('building...');
+          toast.message('building...')
         }
       })
       .catch((err) => {
-        toast.error(`${err}`);
-      });
-  }, [clientId]);
+        toast.error(`${err}`)
+      })
+  }, [clientId])
   const buildCoreLib = useCallback(async () => {
     fetch(`/api/testcase/corelib?clientId=${clientId}`, {
       method: 'GET',
@@ -46,42 +50,57 @@ export default function Page() {
     })
       .then((resp) => {
         if (resp.ok) {
-          toast.message('Building...');
+          toast.message('Building...')
         }
       })
       .catch((err) => {
-        toast.error(`${err}`);
-      });
-  }, [clientId]);
-
+        toast.error(`${err}`)
+      })
+  }, [clientId])
+  const buildLibs = useCallback(async () => {
+    fetch(`/api/testcase/buildlibs?clientId=${clientId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+      .then((resp) => {
+        if (resp.ok) {
+          toast.message('Building...')
+        }
+      })
+      .catch((err) => {
+        toast.error(`${err}`)
+      })
+  }, [clientId])
   const renderLogs = () => {
     return logs.map((log, index) => {
-      let color = '';
+      let color = ''
       try {
         if (log.includes('error') || log.includes('Error')) {
-          color = 'red';
+          color = 'red'
         } else if (
           log.includes('success') ||
           log.includes('Success') ||
           log.includes('finished') ||
           log.includes('passed')
         ) {
-          color = 'green';
+          color = 'green'
         }
       } catch (err) {
-        console.log(logs);
-        console.log(err);
+        console.log(logs)
+        console.log(err)
       }
       return (
         <div key={index} style={{ color, margin: 0 }}>
           {log}
         </div>
-      );
-    });
-  };
+      )
+    })
+  }
   return (
-    <div className="flex w-full gap-0  rounded-lg flex-1">
-      <div className="h-full flex flex-col" style={{ minWidth: 0 }}>
+    <div className="flex w-full flex-1 gap-0 rounded-lg">
+      <div className="flex h-full flex-col" style={{ minWidth: 0 }}>
         <DirectoryTreePanel>
           <NewFileOrFolder
             key={currentDir}
@@ -99,37 +118,37 @@ export default function Page() {
           />
         </DirectoryTreePanel>
       </div>
-      <div className="flex-1 pl-4 h-full min-w-0 flex flex-col transition-all duration-300 min-h-0">
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 min-h-0">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pl-4 transition-all duration-300">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1">
             <ScriptEditor
               filePath={currentFile}
               cachedValue={currentFile ? fileCache[currentFile] : undefined}
               onContentLoaded={({ content, original }, { filePath }) => {
-                if (!filePath) return;
+                if (!filePath) return
                 setFileCache((prev) => ({
                   ...prev,
                   [filePath]: { content, original },
-                }));
+                }))
               }}
               onContentChange={(value, info) => {
-                const fileKey = info?.filePath ?? currentFile;
-                if (!fileKey) return;
+                const fileKey = info?.filePath ?? currentFile
+                if (!fileKey) return
                 setFileCache((prev) => {
-                  const existing = prev[fileKey];
-                  const original = existing?.original ?? value;
+                  const existing = prev[fileKey]
+                  const original = existing?.original ?? value
                   return {
                     ...prev,
                     [fileKey]: { content: value, original },
-                  };
-                });
+                  }
+                })
               }}
               onContentSaved={({ content, original }, { filePath }) => {
-                if (!filePath) return;
+                if (!filePath) return
                 setFileCache((prev) => ({
                   ...prev,
                   [filePath]: { content, original },
-                }));
+                }))
               }}
             />
           </div>
@@ -138,16 +157,11 @@ export default function Page() {
             running={running}
             connected={connected}
             setRunning={setRunning}
-            buildCoreLib={buildCoreLib}
-            buildCommonLib={buildGettrLib}
+            buildLibs={buildLibs}
           />
-          <OutputPanel
-            renderLogs={renderLogs}
-            open={openLog}
-            setOpen={setOpenLog}
-          />
+          <OutputPanel renderLogs={renderLogs} open={openLog} setOpen={setOpenLog} />
         </div>
       </div>
     </div>
-  );
+  )
 }
