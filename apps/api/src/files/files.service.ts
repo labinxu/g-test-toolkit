@@ -17,6 +17,7 @@ import {
   combineDtsFiles,
   findFilesByExtname,
 } from 'src/common/utils';
+import { getErrorMessage } from 'src/common/utils';
 
 // 匹配函数声明（不包含 constructor）
 const methodRegex =
@@ -157,23 +158,127 @@ export class FilesService {
     const files = await fs.readdir(currentPath, { withFileTypes: true });
     const result = [];
     for (const file of files) {
+      if (file.name === '.DS_Store') {
+        continue;
+      }
       const fullPath = path.join(currentPath, file.name);
-      if (file.isDirectory()) {
+      const stat = await fs.lstat(fullPath);
+      const baseEntry = {
+        name: file.name,
+        path: path.relative(process.cwd(), fullPath),
+        isDirectory: stat.isDirectory(),
+        createdAt: stat.birthtime?.toISOString?.() ?? null,
+      };
+      if (stat.isDirectory()) {
         result.push({
-          name: file.name,
-          path: path.relative(process.cwd(), fullPath),
-          isDirectory: true,
+          ...baseEntry,
           children: await this.getTree(fullPath, depthLeft - 1),
         });
       } else {
-        result.push({
-          name: file.name,
-          path: path.relative(process.cwd(), fullPath),
-          isDirectory: false,
-        });
+        result.push(baseEntry);
       }
     }
     return result;
+  }
+
+  private getAppRootDir() {
+    return path.resolve(process.cwd(), 'workspace', 'app');
+  }
+
+  private sanitizeAppRelativePath(inputPath: string) {
+    if (!inputPath) {
+      throw new Error('File path is required');
+    }
+    let sanitized = inputPath.trim();
+    sanitized = sanitized.replace(/\\/g, '/');
+    if (sanitized.startsWith('workspace/app/')) {
+      sanitized = sanitized.slice('workspace/app/'.length);
+    }
+    if (sanitized.startsWith('./')) {
+      sanitized = sanitized.slice(2);
+    }
+    if (sanitized.startsWith('/')) {
+      sanitized = sanitized.slice(1);
+    }
+    if (!sanitized) {
+      throw new Error('File path is required');
+    }
+    return checkPath(sanitized);
+  }
+
+  private sanitizeAppFilename(filename: string) {
+    if (!filename) {
+      throw new Error('Filename is required');
+    }
+    const baseName = path.basename(filename);
+    let normalized = baseName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    normalized = normalized.replace(/^[.-]+/, '');
+    if (!normalized) {
+      throw new Error('Filename is not valid after sanitization');
+    }
+    return checkPath(normalized);
+  }
+
+  private resolveAppPath(relativePath: string) {
+    const appRoot = this.getAppRootDir();
+    const safeRelativePath = this.sanitizeAppRelativePath(relativePath);
+    return path.resolve(appRoot, safeRelativePath);
+  }
+
+  async getAppFileAbsolutePath(relativePath: string) {
+    const appRoot = this.getAppRootDir();
+    const targetPath = this.resolveAppPath(relativePath);
+    if (!targetPath.startsWith(appRoot)) {
+      throw new Error('Resolved path is outside of the app workspace');
+    }
+    try {
+      const stat = await fs.stat(targetPath);
+      if (!stat.isFile()) {
+        throw new Error('The specified path is not a file');
+      }
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+    return targetPath;
+  }
+
+  async deleteAppEntry(relativePath: string) {
+    const appRoot = this.getAppRootDir();
+    const targetPath = this.resolveAppPath(relativePath);
+    if (!targetPath.startsWith(appRoot)) {
+      throw new Error('Resolved path is outside of the app workspace');
+    }
+    try {
+      const stat = await fs.lstat(targetPath);
+      if (stat.isDirectory()) {
+        await fs.rm(targetPath, { recursive: true, force: true });
+      } else {
+        await fs.unlink(targetPath);
+      }
+      return {
+        path: path.relative(process.cwd(), targetPath),
+      };
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  }
+
+  async saveAppFile(buffer: Buffer | undefined, originalName: string) {
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Uploaded file buffer is empty');
+    }
+    const appRoot = this.getAppRootDir();
+    await fs.mkdir(appRoot, { recursive: true });
+    const fileName = this.sanitizeAppFilename(originalName);
+    const targetPath = path.resolve(appRoot, fileName);
+    if (!targetPath.startsWith(appRoot)) {
+      throw new Error('Resolved path is outside of the app workspace');
+    }
+    await fs.writeFile(targetPath, buffer);
+    return {
+      filename: fileName,
+      path: path.relative(process.cwd(), targetPath),
+    };
   }
 
   async generateModule() {

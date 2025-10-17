@@ -16,7 +16,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 async function bootstrap() {
   const fastifyAdapter = new FastifyAdapter({
-    bodyLimit: 1024 * 1024,
+    bodyLimit: 200 * 1024 * 1024,
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -44,20 +44,27 @@ async function bootstrap() {
     cookieKey: '_csrf',
     cookieOpts: { signed: true },
   });
+  if (!fastifyInstance.hasContentTypeParser('multipart/form-data')) {
+    fastifyInstance.addContentTypeParser(
+      'multipart/form-data',
+      (_req, _payload, done) => done(null),
+    );
+  }
 
   // Expose a CSRF token endpoint for SPA clients
-  fastifyInstance.get('/api/csrf-token', async (request, reply) => {
-    const raw = (request as any).cookies?._csrf
-    if (!raw) {
-      return reply.code(400).send({ error: 'CSRF cookie not found' })
+  const csrfHandler = async (_request: any, reply: any) => {
+    try {
+      const token = reply.generateCsrf()
+      reply.header('Cache-Control', 'no-store')
+      return { token }
+    } catch (error) {
+      reply.log.error({ err: error }, 'Failed to generate CSRF token')
+      return reply.code(500).send({ error: 'Failed to generate CSRF token' })
     }
-    // If cookie is signed, unsign to get the actual token
-    const unsignResult = (fastifyInstance as any).unsignCookie
-      ? (fastifyInstance as any).unsignCookie(raw)
-      : { valid: false, value: raw }
-    const token = unsignResult && unsignResult.valid ? unsignResult.value : raw
-    return { token }
-  })
+  }
+
+  fastifyInstance.get('/api/csrf-token', csrfHandler)
+  fastifyInstance.get('/csrf-token', csrfHandler)
 
   // Rest of the code remains the same
   app.enableCors({

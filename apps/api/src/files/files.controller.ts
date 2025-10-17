@@ -1,14 +1,17 @@
 import {
-  Controller,
-  Get,
-  Query,
-  Put,
+  BadRequestException,
   Body,
+  Controller,
+  Delete,
+  Get,
   Post,
+  Put,
+  Query,
   Req,
   Res,
+  UploadedFile,
   UseGuards,
-  Delete,
+  UseInterceptors,
   NotFoundException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -19,6 +22,21 @@ import { FilesService } from './files.service';
 import { existsSync } from 'fs';
 import * as dotenv from 'dotenv';
 import { sanitizeUsername, checkPath } from 'src/common/utils';
+import { FileInterceptor } from '@nest-lab/fastify-multer';
+import { memoryStorage } from 'fastify-multer';
+import type {
+  File as FastifyMulterFile,
+  FileFilter,
+  FileFilterCallback,
+} from 'fastify-multer/lib/interfaces';
+
+const allowAllFileFilter: FileFilter = (
+  _req,
+  _file,
+  cb: FileFilterCallback,
+) => {
+  cb(null, true);
+};
 dotenv.config();
 
 @Controller('files')
@@ -172,6 +190,46 @@ export class FilesController {
         errorMsg = String(error);
       }
       return { success: false, error: errorMsg };
+    }
+  }
+
+  @Delete('apps')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteAppFile(@Body() body: { path?: string }) {
+    if (!body?.path) {
+      throw new BadRequestException('File path is required');
+    }
+    try {
+      const result = await this.filesService.deleteAppEntry(body.path);
+      return { success: true, ...result };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException(message);
+    }
+  }
+
+  @Post('apps/upload')
+  @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 200 * 1024 * 1024 },
+      fileFilter: allowAllFileFilter,
+    }),
+  )
+  async uploadAppFile(@UploadedFile() file: FastifyMulterFile) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    try {
+      const result = await this.filesService.saveAppFile(
+        file.buffer,
+        file.originalname,
+      );
+      return { success: true, ...result };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException(message);
     }
   }
 

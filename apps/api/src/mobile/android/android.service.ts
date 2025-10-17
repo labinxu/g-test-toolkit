@@ -6,6 +6,7 @@ import { readFileSync } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
 import { FastifyReply as Response } from 'fastify';
 import { spawn, ChildProcess } from 'child_process';
+import * as path from 'path';
 
 @Injectable()
 export class AndroidService {
@@ -224,6 +225,44 @@ export class AndroidService {
 
   async listEmulators(): Promise<string[]> {
     return await this.listAvds();
+  }
+
+  async installAppOnEmulators(serials: string[], apkPath: string) {
+    if (!serials || serials.length === 0) {
+      throw new Error('No emulator serials provided');
+    }
+    const uniqueSerials = Array.from(
+      new Set(
+        serials
+          .map((serial) => serial?.trim())
+          .filter((serial): serial is string => !!serial),
+      ),
+    );
+    if (uniqueSerials.length === 0) {
+      throw new Error('No valid emulator serials provided');
+    }
+    const installed: string[] = [];
+    for (const serial of uniqueSerials) {
+      try {
+        this.logger.info(`Installing ${apkPath} on ${serial}`);
+        await this.run(`adb -s ${serial} install -r "${apkPath}"`);
+        installed.push(serial);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to install APK on ${serial}: ${message}`,
+        );
+      }
+    }
+    const apkLabel = path.basename(apkPath);
+    return {
+      installed: installed.length,
+      serials: installed,
+      message: `Installed ${apkLabel} on ${installed.length} emulator${
+        installed.length === 1 ? '' : 's'
+      }`,
+    };
   }
 
   private async adbDevices(force = false): Promise<string> {

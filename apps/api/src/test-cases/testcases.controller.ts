@@ -8,6 +8,7 @@ import {
   NotFoundException,
   Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import * as path from 'path'
@@ -19,12 +20,15 @@ import * as fs from 'fs'
 import { FastifyRequest as Request } from 'fastify'
 import { checkPath, getErrorMessage } from 'src/common/utils'
 import { RunTestCaseFileDto } from './dto/run-testcase-dto'
+import { InstallAppDto } from './dto/install-app.dto'
 import { remote } from 'webdriverio'
+import { AndroidService } from 'src/mobile/android/android.service'
 @Controller('testcase')
 export class TestCasesController {
   constructor(
     private readonly testCasesService: TestCasesService,
-    private readonly filesService: FilesService
+    private readonly filesService: FilesService,
+    private readonly androidService: AndroidService
   ) {}
 
   @Post('/')
@@ -68,7 +72,7 @@ export class TestCasesController {
     const absPath = path.normalize(path.join(process.cwd(), 'workspace', 'shared-libs'))
     const baseDir = path.resolve(process.cwd())
     if (!absPath.startsWith(baseDir)) {
-      throw new Error('Access to paths outside the working directory is forbidden')
+      throw new Error(`Access to paths outside the working directory is forbidden ${absPath}`)
     }
     return await this.filesService.getTree(absPath, depth)
   }
@@ -80,9 +84,47 @@ export class TestCasesController {
     const absPath = path.normalize(path.join(process.cwd(), 'workspace/users', userDir, 'cases'))
     const baseDir = path.resolve(process.cwd())
     if (!absPath.startsWith(baseDir)) {
-      throw new Error('Access to paths outside the working directory is forbidden')
+      throw new Error(`Access to paths outside the working directory is forbidden ${absPath}`)
     }
     return await this.filesService.getTree(absPath, depth)
+  }
+  @Get('listapps')
+  async listApps(@Req() req: Request, @Query('depth') depth: number = 3) {
+    const absPath = path.normalize(path.join(process.cwd(), 'workspace/app'))
+    const baseDir = path.resolve(process.cwd())
+    if (!absPath.startsWith(baseDir)) {
+      throw new Error(`Access to paths outside the working directory is forbidden ${absPath}`)
+    }
+    return await this.filesService.getTree(absPath, depth)
+  }
+
+  @Post('apps/install')
+  @UseGuards(AuthGuard('jwt'))
+  async installApp(
+    @Body() installAppDto: InstallAppDto
+  ): Promise<{ result: string; installed: number; serials: string[]; message: string }> {
+    const serials = Array.from(
+      new Set(
+        (installAppDto.serials ?? [])
+          .map((serial) => serial?.trim())
+          .filter((serial): serial is string => !!serial)
+      )
+    )
+    if (serials.length === 0) {
+      throw new BadRequestException('At least one emulator serial is required')
+    }
+    try {
+      const absolutePath = await this.filesService.getAppFileAbsolutePath(installAppDto.filePath)
+      const result = await this.androidService.installAppOnEmulators(serials, absolutePath)
+      return {
+        result: 'ok',
+        installed: result.installed,
+        serials: result.serials,
+        message: result.message,
+      }
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error))
+    }
   }
   @Get('bundle')
   @UseGuards(AuthGuard('jwt'))
@@ -153,7 +195,7 @@ export class TestCasesController {
   @Get('corelib')
   async corelib(@Query('clientId') clientId: string) {
     try {
-      this.testCasesService.buildCoreLib(clientId)
+      await this.testCasesService.buildCoreLib(clientId)
     } catch (error) {
       throw new NotFoundException(getErrorMessage(error))
     }
@@ -164,7 +206,7 @@ export class TestCasesController {
   @Get('gettrlib')
   async gettrlib(@Query('clientId') clientId: string) {
     try {
-      this.testCasesService.buildGettrLib(clientId)
+      await this.testCasesService.buildGettrLib(clientId)
     } catch (error) {
       throw new NotFoundException(getErrorMessage(error))
     }
