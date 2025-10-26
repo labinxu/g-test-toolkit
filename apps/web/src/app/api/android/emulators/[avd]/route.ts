@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getBackendBase } from '../../_utils';
 
-export async function DELETE(req: NextRequest, { params }: { params: { avd: string } }) {
+// Next 15 expects the second argument to be a generic route context shape.
+// Use the standard Request type and a generic params record to satisfy the signature.
+export async function DELETE(req: Request, context: any) {
   const base = getBackendBase();
   if (!base) return NextResponse.json({ error: 'API_BASE_URL not set' }, { status: 503 });
-  const avd = params.avd;
+  const avd = context?.params?.avd as string;
   const url = `${base.replace(/\/$/, '')}/android/emulators/${encodeURIComponent(avd)}`;
   const headers: HeadersInit = {};
   const cookie = req.headers.get('cookie');

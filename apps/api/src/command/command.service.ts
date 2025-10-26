@@ -15,7 +15,6 @@ export class CommandService {
   async runCommand(command: string): Promise<{ stdout: string; stderr: string }> {
     try {
       const { stdout, stderr } = await execPromise(command)
-      this.logger.info(`Run command: ${command}`)
       return { stdout, stderr }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)

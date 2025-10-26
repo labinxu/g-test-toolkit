@@ -28,7 +28,7 @@ export async function main({
 
     let instance = new Ctor(loggerService.createLogger(Ctor.name, clientId), clientId, workspace)
     const allMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(instance))
-
+    logger.info(`browser:${needBrowser},isAndroid:${isAndroid}`)
     const withBrowserMethods: string[] = []
     const testMethods: string[] = []
 
@@ -47,32 +47,28 @@ export async function main({
     )
 
     // start browser for test with new browser
-    if (needBrowser) {
-      const browserPromises: Promise<void>[] = []
-      for (const method of withBrowserMethods) {
-        let tempins = null
-        try {
-          tempins = instance.clone()
-          const { bs, page } = await browserHelper.newBrowser({
-            logger,
-            headless,
-            timeout,
-            domain,
-            retry,
-          })
-          tempins.setPage(page)
-          tempins.setBrowser(bs)
-          tempins.tearUp()
-          const ret = await (tempins as any)[method](page)
-          browserPromises.push(ret)
-        } catch (err) {
-          logger.error(`${err}`)
-        } finally {
-          tempins?.tearDown()
-        }
+    const browserPromises: Promise<void>[] = []
+    for (const method of withBrowserMethods) {
+      let tempins = null
+      try {
+        tempins = instance.clone()
+        const { bs, page } = await browserHelper.newBrowser({
+          logger,
+          headless,
+          timeout,
+          domain,
+          retry,
+        })
+        tempins.setPage(page)
+        tempins.setBrowser(bs)
+        tempins.tearUp()
+        const ret = await (tempins as any)[method](page)
+        browserPromises.push(ret)
+      } catch (err) {
+        logger.error(`${err}`)
+      } finally {
+        tempins?.tearDown()
       }
-    }
-    if (isAndroid) {
     }
     let rst = null
     try {
@@ -92,6 +88,8 @@ export async function main({
         if (!driver) {
           throw new Error(`remote driver initailize failed ${JSON.stringify(androidOpts)}`)
         }
+        logger.info('create android driver')
+
         instance.setPage(driver)
       }
     } catch (err) {

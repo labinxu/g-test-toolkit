@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { RefreshCwIcon, Power, ChevronRight, ChevronLeft } from 'lucide-react'
+import { RefreshCwIcon, Power, ChevronRight, ChevronLeft, SlidersHorizontal } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import AndroidInspector from '@/components/android-inspector'
 
 type Bounds = { x1: number; y1: number; x2: number; y2: number }
 type NodeInfo = {
@@ -593,7 +595,8 @@ export default function AndroidInspectorPage() {
       if (!res.ok) throw new Error(await res.text())
       return res.json()
     },
-    staleTime: 3000,
+    staleTime: 5000,
+    refetchOnWindowFocus: false,
   })
 
   const startEmulatorMutation = useMutation<any, Error, { avd: string }>({
@@ -678,19 +681,26 @@ export default function AndroidInspectorPage() {
     }
   }
 
+  // Emit toast for errors instead of occupying page space
+  useEffect(() => {
+    if (error) {
+      toast.error(error)
+    }
+  }, [error])
+
   return (
     <div className="flex w-full flex-1 flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowFilters((v) => !v)}>
-            {showFilters ? '收起筛选' : '筛选'}
+            {showFilters ? 'Collasper' : 'Filter'}
           </Button>
           {showFilters && (
             <>
-              <Label htmlFor="filter">筛选:</Label>
+              <Label htmlFor="filter">FilterBy:</Label>
               <Input
                 id="filter"
-                placeholder="Search by text / id / desc"
+                placeholder="Search by text/id/desc"
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
                 className="w-64"
@@ -732,11 +742,18 @@ export default function AndroidInspectorPage() {
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={refresh} disabled={loading} size={'icon'}>
-            <RefreshCwIcon />
-          </Button>
-          <Button
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" onClick={refresh} disabled={loading} size={'icon'} className="h-8 w-8 rounded-full p-0">
+                <RefreshCwIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>Refresh snapshot</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
             onClick={() =>
               appiumStatusQuery.data?.running
                 ? stopAppiumMutation.mutate()
@@ -744,27 +761,39 @@ export default function AndroidInspectorPage() {
             }
             disabled={startAppiumMutation.isPending || stopAppiumMutation.isPending}
             size={'icon'}
-            className={cn(
-              'h-9 w-9 rounded-full p-0',
-              appiumStatusQuery.data?.running ? 'bg-green-600 text-white hover:bg-green-700' : ''
-            )}
+            variant={'ghost'}
+            className={cn('h-8 w-8 rounded-full p-0')}
             aria-label={
               appiumStatusQuery.data?.running ? 'Stop Appium Server' : 'Start Appium Server'
             }
-            title={
-              startAppiumMutation.isPending || stopAppiumMutation.isPending
-                ? '处理中…'
-                : appiumStatusQuery.data?.running
-                  ? 'Appium running. 点击停止'
-                  : 'Start Appium'
-            }
           >
-            <Power className="h-4 w-4" />
-          </Button>
+            <Power className={`h-4 w-4 ${appiumStatusQuery.data?.running ? 'text-green-600' : 'text-red-600'}`} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>
+              {startAppiumMutation.isPending || stopAppiumMutation.isPending
+                ? 'Handling'
+                : appiumStatusQuery.data?.running
+                ? 'Appium running. Click to stop'
+                : 'Start Appium'}
+            </TooltipContent>
+          </Tooltip>
           <Collapsible>
-            <CollapsibleTrigger asChild>
-              <Button variant="outline">高级设置</Button>
-            </CollapsibleTrigger>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-full"
+                    aria-label="Advanced settings"
+                  >
+                    <SlidersHorizontal className="h-4 w-4" />
+                  </Button>
+                </CollapsibleTrigger>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={6}>Advanced settings</TooltipContent>
+            </Tooltip>
             <CollapsibleContent>
               <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border p-2">
                 <div className="flex items-center gap-2">
@@ -774,11 +803,11 @@ export default function AndroidInspectorPage() {
                     onCheckedChange={(v) => setAutoRefresh(!!v)}
                   />
                   <label htmlFor="auto-refresh" className="cursor-pointer text-xs select-none">
-                    自动刷新
+                    AutoRefresh
                   </label>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <Label htmlFor="poll-interval">短轮询间隔(ms)</Label>
+                  <Label htmlFor="poll-interval">intervals(ms)</Label>
                   <Input
                     id="poll-interval"
                     className="h-8 w-20"
@@ -788,7 +817,7 @@ export default function AndroidInspectorPage() {
                     max={3000}
                     onChange={(e) => setPollIntervalMs(Number(e.target.value) || 400)}
                   />
-                  <Label htmlFor="poll-attempts">次数</Label>
+                  <Label htmlFor="poll-attempts">times</Label>
                   <Input
                     id="poll-attempts"
                     className="h-8 w-16"
@@ -804,177 +833,49 @@ export default function AndroidInspectorPage() {
           </Collapsible>
           {(paramDeviceId || paramAvd) && (
             <div className="text-muted-foreground ml-2 text-xs">
-              目标: {paramAvd ? `AVD ${paramAvd}` : ''}{' '}
+              Dest: {paramAvd ? `AVD ${paramAvd}` : ''}{' '}
               {paramDeviceId ? `(DeviceId ${paramDeviceId})` : ''}
             </div>
           )}
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-          加载失败: {error}
-          {(/no running device/i.test(error) || /emulator/i.test(error)) && (
-            <div className="mt-2">
-              请先在 Devices 页面启动 Android 模拟器与 Appium 服务。
-              <a href="/devices" className="ml-2 underline">
-                前往 Devices
-              </a>
-              <Button
-                className="ml-3"
-                size="sm"
-                variant="secondary"
-                onClick={startAppiumNow}
-                disabled={startingAppium}
-              >
-                {startingAppium ? '正在启动 Appium…' : '一键启动 Appium'}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Error messages are shown via toasts */}
 
-      <div className="flex gap-4">
-        {/* Canvas side with zoom/pan */}
-        <div className="flex flex-col gap-2 select-none">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={zoomOut}>
-              -
-            </Button>
-            <div className="w-16 text-center text-sm">{Math.round(zoom * 100)}%</div>
-            <Button variant="outline" size="sm" onClick={zoomIn}>
-              +
-            </Button>
-            <Button variant="outline" size="sm" onClick={zoomReset}>
-              重置
-            </Button>
-            <div
-              className={`ml-2 text-xs ${spaceDown ? 'text-blue-600' : 'text-muted-foreground'}`}
-            >
-              按住空格拖拽
-            </div>
-            <div className="ml-4 flex items-center gap-2 text-xs">
-              <input
-                id="toggle-center"
-                type="checkbox"
-                className="h-4 w-4"
-                checked={autoCenterOnClick}
-                onChange={(e) => setAutoCenterOnClick(e.target.checked)}
-              />
-              <label htmlFor="toggle-center" className="cursor-pointer select-none">
-                点击居中
-              </label>
-            </div>
-          </div>
-          <div
-            ref={viewportRef}
-            className={`relative h-[640px] w-[380px] overflow-hidden rounded-md border ${spaceDown ? (dragging ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
+        <div className="flex gap-2">
+          {/* Canvas side with zoom/pan */}
+          <AndroidInspector
+            zoom={zoom}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            onZoomReset={zoomReset}
+            autoCenterOnClick={autoCenterOnClick}
+            setAutoCenterOnClick={setAutoCenterOnClick}
+            viewportRef={viewportRef}
+            spaceDown={spaceDown}
+            dragging={dragging}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
-          >
-            {data ? (
-              <>
-                <div
-                  className="absolute top-0 left-0"
-                  style={{
-                    width: viewportSize.w * zoom,
-                    height: viewportSize.h * zoom,
-                    transform: `translate(${pan.x}px, ${pan.y}px)`,
-                  }}
-                >
-                  <img
-                    alt="screenshot"
-                    src={
-                      data.screenshotUrl
-                        ? data.screenshotUrl
-                        : data.screenshotBase64
-                          ? `data:image/png;base64,${data.screenshotBase64}`
-                          : null
-                    }
-                    className="h-full w-full select-none"
-                    draggable={false}
-                  />
-                  {/* Overlay */}
-                  <div className="pointer-events-none absolute top-0 left-0 h-full w-full">
-                    {filteredNodes.map((n) => {
-                      const left = Math.round(n.bounds.x1 * scale.sx * zoom)
-                      const top = Math.round(n.bounds.y1 * scale.sy * zoom)
-                      const width = Math.max(
-                        2,
-                        Math.round((n.bounds.x2 - n.bounds.x1) * scale.sx * zoom)
-                      )
-                      const height = Math.max(
-                        2,
-                        Math.round((n.bounds.y2 - n.bounds.y1) * scale.sy * zoom)
-                      )
-                      const selected = selectedId === n.nodeId
-                      const hovered = hoveredId === n.nodeId
-                      return (
-                        <div
-                          key={n.nodeId}
-                          className={
-                            'absolute box-border rounded-sm ' +
-                            (selected
-                              ? 'border-2 border-blue-500 bg-blue-500/10'
-                              : hovered
-                                ? 'border-2 border-amber-500 bg-amber-500/10'
-                                : 'border border-emerald-500 bg-emerald-500/10')
-                          }
-                          style={{ left, top, width, height }}
-                        />
-                      )
-                    })}
-                  </div>
-                  {/* Click layer */}
-                  <div className="absolute top-0 left-0 h-full w-full">
-                    {filteredNodes.map((n) => {
-                      const left = Math.round(n.bounds.x1 * scale.sx * zoom)
-                      const top = Math.round(n.bounds.y1 * scale.sy * zoom)
-                      const width = Math.max(
-                        2,
-                        Math.round((n.bounds.x2 - n.bounds.x1) * scale.sx * zoom)
-                      )
-                      const height = Math.max(
-                        2,
-                        Math.round((n.bounds.y2 - n.bounds.y1) * scale.sy * zoom)
-                      )
-                      return (
-                        <button
-                          key={n.nodeId}
-                          type="button"
-                          className="absolute cursor-pointer border-transparent bg-transparent p-0"
-                          style={{ left, top, width, height }}
-                          onClick={() => {
-                            setSelectedId(n.nodeId)
-                            if (autoCenterOnClick) {
-                              centerOn(n)
-                            }
-                          }}
-                          title={`${n.class} ${n.text || ''}`.trim()}
-                          onMouseEnter={() => setHoveredId(n.nodeId)}
-                          onMouseLeave={() => setHoveredId((id) => (id === n.nodeId ? null : id))}
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="text-muted-foreground flex h-[640px] w-full items-center justify-center rounded-md border text-sm">
-                {loading ? '加载中…' : '暂无快照'}
-              </div>
-            )}
-          </div>
-        </div>
+            data={data}
+            viewportSize={viewportSize}
+            scale={scale}
+            pan={pan}
+            filteredNodes={filteredNodes}
+            selectedId={selectedId}
+            hoveredId={hoveredId}
+            setSelectedId={setSelectedId}
+            setHoveredId={setHoveredId}
+            centerOn={centerOn}
+            loading={loading}
+          />
 
         {/* Tree view with compact right-side toggle */}
-        <div className="flex min-h-[640px] items-center rounded-lg border">
+        <div className="flex items-center rounded-lg border">
           {showTree && (
-            <div className="ml-2 min-h-[640px] w-[320px] overflow-auto text-sm">
+            <div className="ml-2 min-h-[640px] w-[320px] overflow-auto rounded-lg text-sm">
               <div className="mb-2 flex items-center justify-between">
-                <div className="font-semibold">元素树</div>
+                <div className="font-semibold">Elements:</div>
               </div>
               {data ? (
                 <Tree
@@ -983,7 +884,7 @@ export default function AndroidInspectorPage() {
                   onSelect={(id) => {
                     setSelectedId(id)
                     const n = data.nodes.find((x) => x.nodeId === id)
-                    if (n) centerOn(n)
+                    if (n && autoCenterOnClick) centerOn(n)
                   }}
                 />
               ) : (
@@ -991,37 +892,42 @@ export default function AndroidInspectorPage() {
               )}
             </div>
           )}
-          <div className="flex h-[640px] items-center">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setShowTree((v) => !v)}
-              title={showTree ? '收起元素树' : '展开元素树'}
-              aria-label={showTree ? 'Collapse tree' : 'Expand tree'}
-            >
-              {showTree ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
-                <ChevronLeft className="h-4 w-4" />
-              )}
-            </Button>
+          <div className="z-40">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-7 w-7 rounded-full border p-0 shadow"
+                  onClick={() => setShowTree((v) => !v)}
+                  tabIndex={-1}
+                  type="button"
+                  aria-label={showTree ? 'Collapse element tree' : 'Expand element tree'}
+                >
+                  {showTree ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={6}>
+                {showTree ? 'Collapse element tree' : 'Expand element tree'}
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
         {/* Side panel */}
-        <div className="flex min-h-[640px] flex-1 flex-col gap-3 rounded-lg border p-4">
-          <div className="scroll-auto text-base font-semibold">元素详情</div>
+        <div className="flex flex-1 flex-col overflow-auto rounded-lg border p-2">
+          <div className="scroll-auto text-base font-semibold">Element Details</div>
           {selectedNode ? (
-            <div className="flex flex-col gap-2 text-sm">
+            <div className="flex flex-col text-sm">
               <div>nodeId: {selectedNode.nodeId}</div>
               <div>class: {selectedNode.class}</div>
-              <div>text: {selectedNode.text || '(空)'}</div>
-              <div>resource-id: {selectedNode.resourceId || '(空)'}</div>
-              <div>content-desc: {selectedNode.contentDesc || '(空)'}</div>
-              <div>clickable: {selectedNode.clickable ? '是' : '否'}</div>
+              <div>text: {selectedNode.text || '(Empty)'}</div>
+              <div>resource-id: {selectedNode.resourceId || '(Empty)'}</div>
+              <div>content-desc: {selectedNode.contentDesc || '(Empty)'}</div>
+              <div>clickable: {selectedNode.clickable ? 'Yes' : 'No'}</div>
               <div>bounds: {formatBounds(selectedNode.bounds)}</div>
-              <div className="mt-2 flex items-center justify-between">
-                <div className="text-base font-semibold">定位建议</div>
+              <div className="flex items-center justify-between">
+                <div className="text-base font-semibold">Suggest</div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1030,25 +936,25 @@ export default function AndroidInspectorPage() {
                       .map((s) => s.code)
                       .join('\n')
                     navigator.clipboard.writeText(all)
-                    toast.success('已复制全部定位')
+                    toast.success('Copied')
                   }}
                 >
-                  复制全部
+                  CopyAll
                 </Button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center">
                 <Button variant="secondary" onClick={tapSelected} disabled={tapping}>
-                  {tapping ? '点击中…' : '在设备上点击选中元素'}
+                  {tapping ? 'Clicking...' : 'Selected on Device'}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => {
                     const c = centerOf(selectedNode.bounds)
                     navigator.clipboard.writeText(`${c.x},${c.y}`)
-                    toast.success('已复制中心坐标')
+                    toast.success('Coordination Copied')
                   }}
                 >
-                  复制中心坐标
+                  CopyCenter
                 </Button>
               </div>
 
@@ -1067,10 +973,10 @@ export default function AndroidInspectorPage() {
                         variant="outline"
                         onClick={() => {
                           navigator.clipboard.writeText(s.code)
-                          toast.success('已复制')
+                          toast.success('Copied')
                         }}
                       >
-                        复制
+                        Copy
                       </Button>
                       {s.using && s.value && (
                         <Button
@@ -1091,9 +997,9 @@ export default function AndroidInspectorPage() {
                               })
                               if (!res.ok) {
                                 const msg = await res.text()
-                                toast.error(`验证失败: ${msg}`)
+                                toast.error(`Verify Failed: ${msg}`)
                               } else {
-                                toast.success('验证点击成功')
+                                toast.success('Verify successful')
                                 const prevAt = data?.takenAt
                                 const maxAttempts = Math.max(1, Math.min(20, pollMaxAttempts | 0))
                                 const delay = Math.max(100, Math.min(3000, pollIntervalMs | 0))
@@ -1104,11 +1010,11 @@ export default function AndroidInspectorPage() {
                                 }
                               }
                             } catch (e: any) {
-                              toast.error(`验证失败: ${e?.message || e}`)
+                              toast.error(`Verify Failed: ${e?.message || e}`)
                             }
                           }}
                         >
-                          验证
+                          Verify
                         </Button>
                       )}
                     </div>
@@ -1118,7 +1024,7 @@ export default function AndroidInspectorPage() {
             </div>
           ) : (
             <div className="text-muted-foreground text-sm">
-              点击左侧元素高亮框查看详情与定位代码
+              Click the highlighted box to locate the position.
             </div>
           )}
         </div>

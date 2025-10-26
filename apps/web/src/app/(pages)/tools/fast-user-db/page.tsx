@@ -116,8 +116,11 @@ export default function FastUserDbToolPage() {
   const [fetchedUserRaw, setFetchedUserRaw] = useState('')
   const { theme } = useTheme()
 
-  const environments = useMemo(() => {
-    return {
+  type EnvKey = 'qa1x' | 'qa4'
+  type Env = { label: string; uinf: string; fastUserApi: string }
+
+  const environments = useMemo<Record<EnvKey, Env>>(
+    () => ({
       qa1x: {
         label: 'QA1X',
         uinf: 'https://qa1-prod.gettr-qa.com/api/s/uinf/',
@@ -128,9 +131,10 @@ export default function FastUserDbToolPage() {
         uinf: 'https://qa4.gettr-qa.com/api/s/uinf/',
         fastUserApi: 'https://next-backend-notif.qa4.ue1.oke.gettr-qa.com/api/v1/fast-user',
       },
-    }
-  }, [])
-  const [qaEnv, setQaEnv] = useState(environments.qa1x)
+    }),
+    []
+  )
+  const [qaEnv, setQaEnv] = useState<Env>(environments.qa1x)
 
   useEffect(() => {
     let cancelled = false
@@ -316,7 +320,8 @@ export default function FastUserDbToolPage() {
             <Select
               defaultValue="qa1x"
               onValueChange={(value) => {
-                setQaEnv(environments[value])
+                const key = value as EnvKey
+                setQaEnv(environments[key])
               }}
             >
               <SelectTrigger
@@ -326,7 +331,7 @@ export default function FastUserDbToolPage() {
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
               <SelectContent className="max-h-[160px] w-[160px] overflow-y-auto">
-                {Object.keys(environments).map((key) => (
+                {(Object.keys(environments) as EnvKey[]).map((key) => (
                   <SelectItem key={key} value={key}>
                     {environments[key].label}
                   </SelectItem>

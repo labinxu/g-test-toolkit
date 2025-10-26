@@ -100,9 +100,12 @@ export class TestCasesController {
 
   @Post('apps/install')
   @UseGuards(AuthGuard('jwt'))
-  async installApp(
-    @Body() installAppDto: InstallAppDto
-  ): Promise<{ result: string; installed: number; serials: string[]; message: string }> {
+  async installApp(@Body() installAppDto: InstallAppDto): Promise<{
+    result: string
+    installed: number
+    serials: string[]
+    message: string
+  }> {
     const serials = Array.from(
       new Set(
         (installAppDto.serials ?? [])
@@ -212,6 +215,7 @@ export class TestCasesController {
     }
     return { result: 'ok', message: 'building...' }
   }
+
   @Get('buildlibs')
   async buildLibs(@Query('clientId') clientId: string) {
     try {

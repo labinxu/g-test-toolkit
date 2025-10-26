@@ -65,12 +65,23 @@ export class TestCasesService {
       process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr',
       'index.ts'
     )
+    const androidLibPath = path.join(
+      __dirname,
+      '../..',
+      process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android',
+      'index.ts'
+    )
+
     this.logger.info(`corelib:${coreLibPath}\ngettrlib:${gettrLibPath}`)
     try {
       const coreInterface = fs.readFileSync(coreLibPath, 'utf-8')
       const gettrInterface = fs.readFileSync(gettrLibPath, 'utf-8')
-      console.log(coreInterface)
-      return [{ 'core-lib': coreInterface }, { 'gettr-lib': gettrInterface }]
+      const gettrAndroidInterface = fs.readFileSync(androidLibPath, 'utf-8')
+      return [
+        { 'core-lib': coreInterface },
+        { 'gettr-lib': gettrInterface },
+        { 'android-lib': gettrAndroidInterface },
+      ]
     } catch (err) {
       this.logger.error(getErrorMessage(err))
       throw err
@@ -125,7 +136,7 @@ export class TestCasesService {
         if (moduleName === 'gettr-lib') {
           return gettrLib
         }
-        if (moduleName === 'gettr-android-lib') {
+        if (moduleName === 'android-lib') {
           return gettrAndroidLib
         }
         return require(moduleName)
@@ -230,7 +241,7 @@ export class TestCasesService {
     const gettrLibPath = path.join(
       __dirname,
       '../..',
-      process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr-android',
+      process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android',
       '/dist/index.js'
     )
     try {
@@ -321,21 +332,21 @@ export class TestCasesService {
   }
   async buildGettrAndroidLib(clientId?: string) {
     console.log('libdir:', process.env.CORE_LIB_DIR)
-    const coreDir = path.join(
+    const androidLibPath = path.join(
       __dirname,
       '../..',
-      process.env.CORE_LIB_DIR || 'workspace/shared-libs/gettr-android'
+      process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android'
     )
-    const outputDir = path.join(coreDir, 'dist')
-    const srcDir = path.join(coreDir, 'src')
-    const indexPath = path.join(coreDir, 'index.ts')
+    const outputDir = path.join(androidLibPath, 'dist')
+    const srcDir = path.join(androidLibPath, 'src')
+    const indexPath = path.join(androidLibPath, 'index.ts')
     // 清空输出目录
-    this.logger.debug(`coredir: ${coreDir}, outDir:${outputDir}, indexPath:${indexPath}`)
+    this.logger.debug(`lib path: ${androidLibPath}, outDir:${outputDir}, indexPath:${indexPath}`)
     if (fs.existsSync(outputDir)) {
       fs.rmSync(outputDir, { recursive: true, force: true })
     }
     fs.mkdirSync(outputDir, { recursive: true })
-    await this.generateIndexWithTsMorph(coreDir, srcDir, indexPath)
+    await this.generateIndexWithTsMorph(androidLibPath, srcDir, indexPath)
     const result = await this.buildWithEsbuild(indexPath, outputDir)
     clientId && this.logger.sendTo(clientId, `gettr-android lib ${result}`, 'info')
 

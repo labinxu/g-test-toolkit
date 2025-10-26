@@ -12,7 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
-import { Power } from 'lucide-react'
+import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Power, Play, Square, Search, Trash2 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -146,6 +147,25 @@ export default function Page() {
   const queryClient = useQueryClient()
   const router = useRouter()
 
+  // Restore cached selected device ID on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('gtt:selectedDeviceId')
+      if (cached) setSelectDeviceId(cached)
+    } catch {}
+  }, [])
+
+  // Persist selected device ID when it changes
+  useEffect(() => {
+    try {
+      if (selectedDeviceId) {
+        localStorage.setItem('gtt:selectedDeviceId', selectedDeviceId)
+      } else {
+        localStorage.removeItem('gtt:selectedDeviceId')
+      }
+    } catch {}
+  }, [selectedDeviceId])
+
   // Appium server status
   type AppiumStatus = { running: boolean; port?: number }
   const appiumStatusQuery = useQuery<AppiumStatus>({
@@ -158,7 +178,8 @@ export default function Page() {
       }
       return res.json()
     },
-    staleTime: 3000,
+    staleTime: 5000,
+    refetchOnWindowFocus: false,
   })
 
   const startAppiumMutation = useMutation<{ result: string; started?: boolean; port?: number }, Error, { port?: number }>({
@@ -209,6 +230,8 @@ export default function Page() {
         }
         return res.json()
       }),
+    staleTime: 5000,
+    refetchOnWindowFocus: false,
   })
 
   useEffect(() => {
@@ -602,13 +625,13 @@ export default function Page() {
 
   const iosIsStarting = iosStartMutation.isPending
   const iosIsStopping = iosStopMutation.isPending
-  const actionButtonWidthClass = 'min-w-[96px] justify-center'
 
   return (
+    <TooltipProvider>
     <div className="flex flex-1 flex-col gap-6 rounded-lg border-2 p-4 shadow-lg">
       <div>
         <span className="text-lg font-medium">Android Simulators</span>
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
           <div className="text-muted-foreground flex items-center gap-2">
             <Switch
               id="android-headless"
@@ -702,32 +725,34 @@ export default function Page() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <Button
-            size="icon"
-            onClick={() => {
-              const running = !!appiumStatusQuery.data?.running
-              if (running) {
-                stopAppiumMutation.mutate()
-              } else {
-                startAppiumMutation.mutate({})
-              }
-            }}
-            className={cn(
-              'h-9 w-9 p-0 rounded-full',
-              appiumStatusQuery.data?.running ? 'bg-green-600 text-white hover:bg-green-700' : ''
-            )}
-            aria-label={appiumStatusQuery.data?.running ? 'Stop Appium Server' : 'Start Appium Server'}
-            title={
-              startAppiumMutation.isPending || stopAppiumMutation.isPending
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  const running = !!appiumStatusQuery.data?.running
+                  if (running) {
+                    stopAppiumMutation.mutate()
+                  } else {
+                    startAppiumMutation.mutate({})
+                  }
+                }}
+                className={cn('h-8 w-8 p-0 rounded-full')}
+                aria-label={appiumStatusQuery.data?.running ? 'Stop Appium Server' : 'Start Appium Server'}
+                disabled={startAppiumMutation.isPending || stopAppiumMutation.isPending}
+              >
+                <Power className={cn('h-4 w-4', appiumStatusQuery.data?.running ? 'text-green-600' : 'text-red-600')} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>
+              {startAppiumMutation.isPending || stopAppiumMutation.isPending
                 ? 'Processing...'
                 : appiumStatusQuery.data?.running
                   ? 'Appium running. Click to stop'
-                  : 'Start Appium Server'
-            }
-            disabled={startAppiumMutation.isPending || stopAppiumMutation.isPending}
-          >
-            <Power className="h-4 w-4" />
-          </Button>
+                  : 'Start Appium Server'}
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="mt-2 rounded-lg border">
           <Table className="w-full table-fixed">
@@ -738,7 +763,7 @@ export default function Page() {
                 <TableHead className="w-[200px]">Device ID</TableHead>
                 <TableHead className="w-[160px] text-center">Reset</TableHead>
                 <TableHead className="w-[160px]">Status</TableHead>
-                <TableHead className="w-[220px] text-right">Actions</TableHead>
+                <TableHead className="w-[140px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -791,52 +816,77 @@ export default function Page() {
                       />
                     </TableCell>
                     <TableCell className="w-[160px]">{statusLabel}</TableCell>
-                    <TableCell className="w-[220px]">
-                      <div className="flex justify-end gap-2">
+                    <TableCell className="w-[140px]">
+                      <div className="flex justify-end gap-1">
                         {isRunning ? (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={isStopping || isDeletingCurrent}
-                            onClick={() => handleStop(avd)}
-                            className={cn(actionButtonWidthClass)}
-                          >
-                            {stopLabel}
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                              variant="destructive"
+                                size="icon"
+                                className="h-8 w-8 rounded-full"
+                                disabled={isStopping || isDeletingCurrent}
+                                onClick={() => handleStop(avd)}
+                                aria-label={`Stop emulator ${avd}`}
+                              >
+                                <Square className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>{stopLabel}</TooltipContent>
+                          </Tooltip>
                         ) : (
-                          <Button
-                            size="sm"
-                            disabled={isStarting || isDeletingCurrent}
-                            onClick={() => handleStart(avd)}
-                            className={cn(actionButtonWidthClass)}
-                          >
-                            {startLabel}
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="default"
+                                className="h-8 w-8 rounded-full"
+                                disabled={isStarting || isDeletingCurrent}
+                                onClick={() => handleStart(avd)}
+                                aria-label={`Start emulator ${avd}`}
+                              >
+                                <Play className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>{startLabel}</TooltipContent>
+                          </Tooltip>
                         )}
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={!isRunning}
-                          onClick={() => {
-                            const dId = deviceIds[avdKey] || (avdKeysMatch(avd, runningAvd) ? (runningSerial ?? '') : '');
-                            const params = new URLSearchParams();
-                            if (dId) params.set('deviceId', dId);
-                            if (avd) params.set('avd', avd);
-                            router.push(`/tools/android-inspector${params.toString() ? `?${params}` : ''}`)
-                          }}
-                          className={cn(actionButtonWidthClass)}
-                        >
-                          Inspect
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={isRunning || isDeletingCurrent || isStarting || isStopping}
-                          onClick={() => handleDelete(avd)}
-                          className={cn(actionButtonWidthClass)}
-                        >
-                          {deleteLabel}
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8 rounded-full"
+                              disabled={!isRunning}
+                              onClick={() => {
+                                const dId = deviceIds[avdKey] || (avdKeysMatch(avd, runningAvd) ? (runningSerial ?? '') : '');
+                                const params = new URLSearchParams();
+                                if (dId) params.set('deviceId', dId);
+                                if (avd) params.set('avd', avd);
+                                router.push(`/tools/android-inspector${params.toString() ? `?${params}` : ''}`)
+                              }}
+                              aria-label={`Inspect emulator ${avd}`}
+                            >
+                              <Search className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>Inspect</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="h-8 w-8 rounded-full"
+                              disabled={isRunning || isDeletingCurrent || isStarting || isStopping}
+                              onClick={() => handleDelete(avd)}
+                              aria-label={`Delete emulator ${avd}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>{deleteLabel}</TooltipContent>
+                        </Tooltip>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -895,24 +945,37 @@ export default function Page() {
                     <TableCell className="w-[160px]">{statusLabel}</TableCell>
                     <TableCell className="w-[140px] text-right">
                       {isRunning ? (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={iosIsStopping}
-                          onClick={() => handleIosStop(udid)}
-                          className={cn(actionButtonWidthClass)}
-                        >
-                          {stopLabel}
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="h-8 w-8 rounded-full"
+                              disabled={iosIsStopping}
+                              onClick={() => handleIosStop(udid)}
+                              aria-label={`Stop iOS simulator ${device.name}`}
+                            >
+                              <Square className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>{stopLabel}</TooltipContent>
+                        </Tooltip>
                       ) : (
-                        <Button
-                          size="sm"
-                          disabled={iosIsStarting}
-                          onClick={() => handleIosStart(udid)}
-                          className={cn(actionButtonWidthClass)}
-                        >
-                          {startLabel}
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="default"
+                              className="h-8 w-8 rounded-full"
+                              disabled={iosIsStarting}
+                              onClick={() => handleIosStart(udid)}
+                              aria-label={`Start iOS simulator ${device.name}`}
+                            >
+                              <Play className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>{startLabel}</TooltipContent>
+                        </Tooltip>
                       )}
                     </TableCell>
                   </TableRow>
@@ -923,5 +986,6 @@ export default function Page() {
         </div>
       </div>
     </div>
+    </TooltipProvider>
   )
 }

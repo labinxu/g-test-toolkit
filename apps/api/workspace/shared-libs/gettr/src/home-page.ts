@@ -5,6 +5,7 @@ import { ProfilePage } from './profile-page'
 export class HomePage extends IPage {
   constructor(instance: any) {
     super(instance)
+    this.logger.info('create web homepage')
   }
   async gotoLoginPage() {
     const loginButton = await this.page.$(

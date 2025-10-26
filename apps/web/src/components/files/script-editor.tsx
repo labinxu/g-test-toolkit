@@ -3,9 +3,11 @@ import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { FileText, Save, Loader2 } from 'lucide-react'
+import { FileText, Save, Loader2, RotateCcw } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSession } from '@/app/context/session-context'
 import CodeMirror from '@uiw/react-codemirror'
+import { EditorView } from '@codemirror/view'
 import { javascript } from '@codemirror/lang-javascript'
 import { useTheme } from 'next-themes'
 
@@ -46,6 +48,14 @@ export function ScriptEditor({
     }
     return [javascript({ typescript: true })]
   }, [language])
+  const roundedTheme = useMemo(
+    () =>
+      EditorView.theme({
+        '&': { borderRadius: 'var(--radius-lg, 0.5rem)', overflow: 'hidden' },
+        '.cm-scroller': { borderRadius: 'var(--radius-lg, 0.5rem)' },
+      }),
+    []
+  )
   const fetchServerContent = useCallback(
     async (options?: { showSkeleton?: boolean }) => {
       if (!filePath || !isAuthenticated) return
@@ -155,52 +165,67 @@ export function ScriptEditor({
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col rounded-xl shadow-lg">
-      <div className="ml-2 flex items-center gap-2 pb-2">
+    <div className="flex h-full w-full flex-col rounded-lg border shadow-lg">
+      <div className="flex items-center gap-1 p-2">
         <Badge variant="outline" className="flex items-center px-2 py-1 font-mono text-xs">
           <FileText className="mr-1 h-4 w-4 text-gray-500" />
           {filePath}
         </Badge>
-        <Button
-          className="ml-2 flex items-center gap-1"
-          onClick={save}
-          disabled={saving || !changed}
-          variant={changed ? 'default' : 'outline'}
-          size="sm"
-          style={{ minWidth: '92px' }}
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {saving ? 'Saving...' : changed ? 'Save' : 'Saved'}
-        </Button>
-        <Button
-          className="flex items-center gap-1"
-          onClick={async () => {
-            if (!filePath) return
-            setResetting(true)
-            try {
-              await fetchServerContent({ showSkeleton: false })
-            } finally {
-              setResetting(false)
-            }
-          }}
-          disabled={!changed || loading || saving || resetting}
-          variant={changed ? 'destructive' : 'outline'}
-          size="sm"
-          style={{ minWidth: '92px' }}
-        >
-          {resetting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reset'}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              className="ml-2 h-8 w-8 rounded-full p-0"
+              onClick={save}
+              disabled={saving || !changed}
+              variant={changed ? 'default' : 'outline'}
+              size="icon"
+              aria-label={saving ? 'Saving...' : changed ? 'Save' : 'Saved'}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={6}>
+            {saving ? 'Saving...' : changed ? 'Save' : 'Saved'}
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              className="h-8 w-8 rounded-full p-0"
+              onClick={async () => {
+                if (!filePath) return
+                setResetting(true)
+                try {
+                  await fetchServerContent({ showSkeleton: false })
+                } finally {
+                  setResetting(false)
+                }
+              }}
+              disabled={!changed || loading || saving || resetting}
+              variant={changed ? 'destructive' : 'outline'}
+              size="icon"
+              aria-label={resetting ? 'Resetting...' : 'Reset'}
+            >
+              {resetting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent sideOffset={6}>{resetting ? 'Resetting...' : 'Reset'}</TooltipContent>
+        </Tooltip>
         {error && <span className="ml-4 text-xs text-red-500">{error}</span>}
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 rounded-lg">
         {loading ? (
-          <Skeleton className="h-[60vh] w-full rounded-xl" />
+          <Skeleton className="h-[60vh] w-full rounded-lg" />
         ) : (
-          <div className="mr-1 flex h-full rounded-xl shadow-lg">
+          <div className="flex h-full rounded-lg p-1 shadow-lg">
             <CodeMirror
               height="100%"
               value={content}
-              extensions={extensions}
+              extensions={[...extensions, roundedTheme]}
               theme={theme === 'dark' ? 'dark' : 'light'}
               editable={!(loading || saving)}
               basicSetup={{
