@@ -9,13 +9,18 @@ import {
   Body,
   Query,
   UseGuards,
+  Delete,
 } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { AndroidService } from './android.service'
 import { createReadStream } from 'fs'
 import { FastifyReply as Response } from 'fastify'
 import { ScreenOnDto } from './dto/screenon.dto'
-import { StartEmulatorDto, StopEmulatorDto } from './dto/emulator-control.dto'
+import {
+  StartEmulatorDto,
+  StopEmulatorDto,
+  CreateEmulatorDto,
+} from './dto/emulator-control.dto'
 @Controller('android')
 export class AndroidController {
   constructor(private readonly androidService: AndroidService) {}
@@ -71,7 +76,12 @@ export class AndroidController {
   @UseGuards(AuthGuard('jwt'))
   async startEmulator(@Body() body: StartEmulatorDto) {
     try {
-      const result = await this.androidService.startStandaloneEmulator(body.avd, body.headless)
+      const result = await this.androidService.startStandaloneEmulator({
+        avd: body.avd,
+        headless: body.headless,
+        reset: body.reset,
+        randomizeDeviceId: body.randomizeDeviceId,
+      })
       return {
         result: 'ok',
         started: true,
@@ -100,6 +110,51 @@ export class AndroidController {
       }
     } catch (err) {
       throw new NotFoundException((err && (err as Error).message) || 'Failed to stop emulator')
+    }
+  }
+
+  @Get('/emulators/creatable')
+  @UseGuards(AuthGuard('jwt'))
+  async getCreatableEmulators() {
+    try {
+      const templates = await this.androidService.listCreatableEmulators()
+      return { templates }
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to fetch emulator templates'
+      )
+    }
+  }
+
+  @Post('/emulators/create')
+  @UseGuards(AuthGuard('jwt'))
+  async createEmulator(@Body() body: CreateEmulatorDto) {
+    try {
+      const result = await this.androidService.createEmulatorFromTemplate(body.templateId, body.name)
+      return {
+        result: 'ok',
+        ...result,
+        message: `Created emulator ${result.avd}`,
+      }
+    } catch (err) {
+      throw new NotFoundException((err && (err as Error).message) || 'Failed to create emulator')
+    }
+  }
+
+  @Delete('/emulators/:avd')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteEmulator(@Param('avd') avd: string) {
+    try {
+      const result = await this.androidService.deleteEmulator(avd)
+      return {
+        result: 'ok',
+        ...result,
+        message: result.deleted
+          ? `Deleted emulator ${result.avd}`
+          : `Emulator ${avd} not deleted`,
+      }
+    } catch (err) {
+      throw new NotFoundException((err && (err as Error).message) || 'Failed to delete emulator')
     }
   }
 

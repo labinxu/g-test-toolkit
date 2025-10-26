@@ -12,9 +12,42 @@ import {
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { GTable } from './components/g-table'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-const headers = { 'Content-Type': 'application/json' }
+
+const defaultHeaders = { Accept: 'application/json' }
+const jsonHeaders = { ...defaultHeaders, 'Content-Type': 'application/json' }
+
+const normalizeAvdKey = (value: string | null | undefined) =>
+  value?.replace(/[\s_-]/g, '').toLowerCase() ?? ''
+
+const avdKeysMatch = (source: string | null | undefined, target: string | null | undefined) => {
+  const sourceKey = normalizeAvdKey(source)
+  const targetKey = normalizeAvdKey(target)
+  if (!sourceKey || !targetKey) return false
+  return sourceKey === targetKey || sourceKey.includes(targetKey) || targetKey.includes(sourceKey)
+}
 
 type AndroidEmulatorResponse = {
   avds: string[]
@@ -40,6 +73,34 @@ type AndroidStartResponse = {
   serial: string
   avd: string | null
   deviceName?: string | null
+  message?: string
+  randomizedDeviceId?: string | null
+  deviceId?: string | null
+}
+
+type AndroidDeleteResponse = {
+  result: string
+  deleted: boolean
+  avd: string
+  message?: string
+}
+
+type AndroidCreatableTemplate = {
+  id: string
+  label: string
+  description?: string
+  defaultName: string
+}
+
+type AndroidCreatableResponse = {
+  templates: AndroidCreatableTemplate[]
+}
+
+type AndroidCreateResponse = {
+  result: string
+  created: boolean
+  avd: string
+  templateId: string
   message?: string
 }
 
@@ -72,6 +133,13 @@ export default function Page() {
   const [selectedDeviceId, setSelectDeviceId] = useState<string>('')
   const [actionAvd, setActionAvd] = useState<string | null>(null)
   const [iosActionUdid, setIosActionUdid] = useState<string | null>(null)
+  const [pendingStopAvd, setPendingStopAvd] = useState<string | null>(null)
+  const [deletingAvd, setDeletingAvd] = useState<string | null>(null)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+  const [customAvdName, setCustomAvdName] = useState<string>('')
+  const [resetSelections, setResetSelections] = useState<Record<string, boolean>>({})
+  const [deviceIds, setDeviceIds] = useState<Record<string, string>>({})
   const [androidHeadless, setAndroidHeadless] = useState(false)
   const queryClient = useQueryClient()
 
@@ -80,7 +148,7 @@ export default function Page() {
     queryFn: () =>
       fetch(`/api/android/devices`, {
         method: 'GET',
-        headers: { ...headers },
+        headers: defaultHeaders,
       }).then((res) => {
         if (!res.ok) {
           throw new Error('Failed to fetch devices')
@@ -115,13 +183,30 @@ export default function Page() {
     queryFn: async () => {
       const res = await fetch('/api/android/emulators', {
         method: 'GET',
-        headers,
+        headers: defaultHeaders,
       })
       if (!res.ok) {
         throw new Error('Failed to fetch emulators')
       }
       return res.json()
     },
+  })
+
+  const creatableTemplatesQuery = useQuery<AndroidCreatableResponse>({
+    queryKey: ['android-emulators-creatable'],
+    queryFn: async () => {
+      const res = await fetch('/api/android/emulators/creatable', {
+        method: 'GET',
+        headers: defaultHeaders,
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || 'Failed to load templates')
+      }
+      return res.json()
+    },
+    enabled: createDialogOpen,
+    staleTime: 60_000,
   })
 
   const runningInfo = emulatorQuery.data?.running ?? null
@@ -132,13 +217,18 @@ export default function Page() {
   const startMutation = useMutation<
     AndroidStartResponse,
     Error,
-    { avd: string; headless: boolean }
+    { avd: string; headless: boolean; reset?: boolean }
   >({
-    mutationFn: async ({ avd, headless }) => {
+    mutationFn: async ({ avd, headless, reset }) => {
       const res = await fetch('/api/android/emulators/start', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ avd, headless }),
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          avd,
+          headless,
+          reset,
+          randomizeDeviceId: reset,
+        }),
       })
       if (!res.ok) {
         const text = await res.text()
@@ -147,10 +237,19 @@ export default function Page() {
 
       return res.json()
     },
-    onSuccess: (data) => {
-      toast.success(
+    onSuccess: (data, variables) => {
+      const baseMessage =
         data?.message ?? (data?.avd ? `Emulator ${data.avd} started` : 'Emulator started')
-      )
+      const deviceIdValue = data?.deviceId || data?.randomizedDeviceId || null
+      const suffix = deviceIdValue ? ` (Device ID: ${deviceIdValue})` : ''
+      toast.success(`${baseMessage}${suffix}`)
+      const avdKey = normalizeAvdKey(variables?.avd ?? data?.avd ?? '')
+      if (avdKey) {
+        const nextDeviceId = deviceIdValue || data?.serial || ''
+        if (nextDeviceId) {
+          setDeviceIds((current) => ({ ...current, [avdKey]: nextDeviceId }))
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['android-emulators'] })
     },
     onError: (error: any) => {
@@ -164,7 +263,7 @@ export default function Page() {
     mutationFn: async () => {
       const res = await fetch('/api/android/emulators/stop', {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
         body: JSON.stringify({ serial: runningSerial }),
       })
       if (!res.ok) {
@@ -179,18 +278,92 @@ export default function Page() {
     },
     onError: (error: any) => {
       toast.error(error?.message ?? 'Failed to stop emulator')
-    },
-    onSettled: () => {
+      setPendingStopAvd(null)
       setActionAvd(null)
     },
   })
 
+  const deleteMutation = useMutation<AndroidDeleteResponse, Error, { avd: string }>({
+    mutationFn: async ({ avd }) => {
+      const res = await fetch(`/api/android/emulators/${encodeURIComponent(avd)}`, {
+        method: 'DELETE',
+        headers: defaultHeaders,
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || 'Failed to delete emulator')
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message ?? `Deleted emulator ${data.avd}`)
+      queryClient.invalidateQueries({ queryKey: ['android-emulators'] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.message ?? 'Failed to delete emulator')
+    },
+    onSettled: () => {
+      setDeletingAvd(null)
+    },
+  })
+
+  const createMutation = useMutation<
+    AndroidCreateResponse,
+    Error,
+    { templateId: string; name?: string }
+  >({
+    mutationFn: async ({ templateId, name }) => {
+      const res = await fetch('/api/android/emulators/create', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ templateId, name }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || 'Failed to create emulator')
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message ?? `Created emulator ${data.avd}`)
+      queryClient.invalidateQueries({ queryKey: ['android-emulators'] })
+      setCreateDialogOpen(false)
+    },
+    onError: (error: any) => {
+      toast.error(error?.message ?? 'Failed to create emulator')
+    },
+  })
+
+  useEffect(() => {
+    if (!pendingStopAvd) return
+    const stillRunning = avdKeysMatch(pendingStopAvd, runningAvd)
+    if (!stillRunning) {
+      setPendingStopAvd(null)
+      setActionAvd((current) => (avdKeysMatch(current, pendingStopAvd) ? null : current))
+    }
+  }, [pendingStopAvd, runningAvd])
+
+  useEffect(() => {
+    if (!createDialogOpen) return
+    const templates = creatableTemplatesQuery.data?.templates ?? []
+    if (templates.length === 0) return
+    if (!selectedTemplateId || !templates.some((tpl) => tpl.id === selectedTemplateId)) {
+      setSelectedTemplateId(templates[0].id)
+    }
+  }, [createDialogOpen, creatableTemplatesQuery.data?.templates, selectedTemplateId])
+
   const handleStart = useCallback(
     (avd: string) => {
       setActionAvd(avd)
-      startMutation.mutate({ avd, headless: androidHeadless })
+      const avdKey = normalizeAvdKey(avd)
+      const shouldReset = !!resetSelections[avdKey]
+      startMutation.mutate({
+        avd,
+        headless: androidHeadless,
+        reset: shouldReset,
+      })
     },
-    [startMutation, androidHeadless]
+    [startMutation, androidHeadless, resetSelections]
   )
 
   const handleStop = useCallback(
@@ -200,34 +373,103 @@ export default function Page() {
         return
       }
       setActionAvd(avd)
+      setPendingStopAvd(avd)
       stopMutation.mutate()
     },
     [runningSerial, stopMutation]
   )
 
+  const handleCreateDialogOpenChange = useCallback(
+    (open: boolean) => {
+      setCreateDialogOpen(open)
+      if (!open) {
+        setSelectedTemplateId('')
+        setCustomAvdName('')
+        createMutation.reset()
+      }
+    },
+    [createMutation]
+  )
+
+  const handleDelete = useCallback(
+    (avd: string) => {
+      if (avdKeysMatch(avd, runningAvd)) {
+        toast.error('Stop the emulator before deleting it')
+        return
+      }
+      setDeletingAvd(avd)
+      deleteMutation.mutate({ avd })
+    },
+    [deleteMutation, runningAvd]
+  )
+
+  const handleResetToggle = useCallback((avd: string, checked: boolean) => {
+    const key = normalizeAvdKey(avd)
+    setResetSelections((current) => ({ ...current, [key]: checked }))
+  }, [])
+
+  const handleCreateEmulator = useCallback(() => {
+    if (!selectedTemplateId) {
+      toast.error('Please choose a template')
+      return
+    }
+    createMutation.mutate({
+      templateId: selectedTemplateId,
+      name: customAvdName.trim() || undefined,
+    })
+  }, [createMutation, selectedTemplateId, customAvdName])
+
+  const selectedTemplate = useMemo(() => {
+    return (
+      (creatableTemplatesQuery.data?.templates ?? []).find(
+        (template) => template.id === selectedTemplateId
+      ) ?? null
+    )
+  }, [creatableTemplatesQuery.data?.templates, selectedTemplateId])
+
   const emulatorRows = useMemo(() => {
-    const normalize = (value: string | null | undefined) =>
-      value?.replace(/[\s_-]/g, '').toLowerCase() ?? ''
-    const runningKey = normalize(runningAvd)
     return (emulatorQuery.data?.avds ?? []).map((avd) => {
-      const avdKey = normalize(avd)
-      const isRunning = runningKey
-        ? avdKey === runningKey || avdKey.includes(runningKey) || runningKey.includes(avdKey)
-        : false
+      const isRunning = avdKeysMatch(avd, runningAvd)
       const deviceName = isRunning ? (runningDeviceName ?? avd) : null
       return { avd, isRunning, deviceName }
     })
   }, [emulatorQuery.data?.avds, runningAvd, runningDeviceName])
 
   const isStarting = startMutation.isPending
-  const isStopping = stopMutation.isPending
+  const isStopping = stopMutation.isPending || !!pendingStopAvd
+  const isCreating = createMutation.isPending
+  useEffect(() => {
+    const keys = new Set((emulatorQuery.data?.avds ?? []).map((avd) => normalizeAvdKey(avd)))
+    setResetSelections((current) => {
+      const filteredEntries = Object.entries(current).filter(([key]) => keys.has(key))
+      if (filteredEntries.length === Object.keys(current).length) {
+        return current
+      }
+      const next: Record<string, boolean> = {}
+      for (const [key, value] of filteredEntries) {
+        next[key] = value
+      }
+      return next
+    })
+    setDeviceIds((current) => {
+      const filteredEntries = Object.entries(current).filter(([key]) => keys.has(key))
+      if (filteredEntries.length === Object.keys(current).length) {
+        return current
+      }
+      const next: Record<string, string> = {}
+      for (const [key, value] of filteredEntries) {
+        next[key] = value
+      }
+      return next
+    })
+  }, [emulatorQuery.data?.avds])
 
   const iosQuery = useQuery<IosListResponse>({
     queryKey: ['ios-simulators'],
     queryFn: async () => {
       const res = await fetch('/api/ios/devices?availableOnly=false', {
         method: 'GET',
-        headers,
+        headers: defaultHeaders,
       })
       if (!res.ok) {
         const text = await res.text()
@@ -241,7 +483,7 @@ export default function Page() {
     mutationFn: async ({ udid }) => {
       const res = await fetch('/api/ios/simulators/start', {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
         body: JSON.stringify({ udid }),
       })
       if (!res.ok) {
@@ -266,7 +508,7 @@ export default function Page() {
     mutationFn: async ({ udid }) => {
       const res = await fetch('/api/ios/simulators/stop', {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
         body: JSON.stringify({ udid }),
       })
       if (!res.ok) {
@@ -306,44 +548,134 @@ export default function Page() {
 
   const iosIsStarting = iosStartMutation.isPending
   const iosIsStopping = iosStopMutation.isPending
+  const actionButtonWidthClass = 'min-w-[96px] justify-center'
 
   return (
     <div className="flex flex-1 flex-col gap-6 rounded-lg border-2 p-4 shadow-lg">
       <div>
         <span className="text-lg font-medium">Android Simulators</span>
-        <div className="text-muted-foreground mt-2 flex items-center gap-2 text-sm">
-          <Switch
-            id="android-headless"
-            checked={androidHeadless}
-            onCheckedChange={(checked) => setAndroidHeadless(!!checked)}
-          />
-          <label htmlFor="android-headless" className="cursor-pointer select-none">
-            Headless mode
-          </label>
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+          <div className="text-muted-foreground flex items-center gap-2">
+            <Switch
+              id="android-headless"
+              checked={androidHeadless}
+              onCheckedChange={(checked) => setAndroidHeadless(!!checked)}
+            />
+            <label htmlFor="android-headless" className="cursor-pointer select-none">
+              Headless mode
+            </label>
+          </div>
+          <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline">
+                Create
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Android Emulator</DialogTitle>
+                <DialogDescription>
+                  Select a template to create a new Android emulator.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                {creatableTemplatesQuery.isLoading ? (
+                  <p className="text-muted-foreground text-sm">Loading templates...</p>
+                ) : creatableTemplatesQuery.isError ? (
+                  <p className="text-destructive text-sm">
+                    {creatableTemplatesQuery.error instanceof Error
+                      ? creatableTemplatesQuery.error.message
+                      : 'Failed to load templates.'}
+                  </p>
+                ) : (creatableTemplatesQuery.data?.templates?.length ?? 0) === 0 ? (
+                  <p className="text-muted-foreground text-sm">No templates available.</p>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="android-emulator-template">Template</Label>
+                      <Select
+                        value={selectedTemplateId || undefined}
+                        onValueChange={(value) => setSelectedTemplateId(value)}
+                      >
+                        <SelectTrigger id="android-emulator-template">
+                          <SelectValue placeholder="Select a template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(creatableTemplatesQuery.data?.templates ?? []).map((template) => (
+                            <SelectItem key={template.id} value={template.id}>
+                              {template.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedTemplate?.description && (
+                        <p className="text-muted-foreground text-xs">
+                          {selectedTemplate.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="android-emulator-name">Custom Name (optional)</Label>
+                      <Input
+                        id="android-emulator-name"
+                        value={customAvdName}
+                        onChange={(event) => setCustomAvdName(event.target.value)}
+                        placeholder={selectedTemplate?.defaultName ?? 'pixel-avd'}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline" disabled={isCreating}>
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="button"
+                  onClick={handleCreateEmulator}
+                  disabled={
+                    isCreating ||
+                    creatableTemplatesQuery.isLoading ||
+                    !selectedTemplateId ||
+                    (creatableTemplatesQuery.data?.templates?.length ?? 0) === 0 ||
+                    creatableTemplatesQuery.isError
+                  }
+                >
+                  {isCreating ? 'Creating...' : 'Create'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
         <div className="mt-2 rounded-lg border">
-          <Table>
+          <Table className="w-full table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>UDID</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="w-[240px]">Name</TableHead>
+                <TableHead className="w-[220px]">UDID</TableHead>
+                <TableHead className="w-[200px]">Device ID</TableHead>
+                <TableHead className="w-[160px] text-center">Reset</TableHead>
+                <TableHead className="w-[160px]">Status</TableHead>
+                <TableHead className="w-[220px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {emulatorQuery.isLoading && (
                 <TableRow>
-                  <TableCell colSpan={3}>Loading emulators...</TableCell>
+                  <TableCell colSpan={6}>Loading emulators...</TableCell>
                 </TableRow>
               )}
               {!emulatorQuery.isLoading && emulatorRows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3}>No Android simulators found.</TableCell>
+                  <TableCell colSpan={6}>No Android simulators found.</TableCell>
                 </TableRow>
               )}
               {emulatorRows.map(({ avd, isRunning, deviceName }) => {
-                const isActionTarget = actionAvd === avd
+                const isActionTarget = actionAvd === avd || deletingAvd === avd
+                const avdKey = normalizeAvdKey(avd)
+                const resetChecked = !!resetSelections[avdKey]
                 const statusLabel = isActionTarget
                   ? isStarting
                     ? 'Starting...'
@@ -357,34 +689,60 @@ export default function Page() {
                     : 'Stopped'
                 const startLabel = isActionTarget && isStarting ? 'Starting...' : 'Start'
                 const stopLabel = isActionTarget && isStopping ? 'Stopping...' : 'Stop'
-                const buttonStyle = { minWidth: '84px' }
-
+                const isDeletingCurrent = deleteMutation.isPending && deletingAvd === avd
+                const deleteLabel = isDeletingCurrent ? 'Deleting...' : 'Delete'
                 return (
-                  <TableRow key={avd}>
-                    <TableCell>{avd}</TableCell>
-                    <TableCell>{isRunning ? (deviceName ?? 'Booted') : '-'}</TableCell>
-                    <TableCell>{statusLabel}</TableCell>
-                    <TableCell className="text-right">
-                      {isRunning ? (
+                  <TableRow
+                    key={avd}
+                    className={cn('odd:bg-muted/20 even:bg-muted/40 transition-colors', {
+                      'bg-muted/60': isActionTarget,
+                    })}
+                  >
+                    <TableCell className="w-[240px] truncate">{avd}</TableCell>
+                    <TableCell className="w-[220px] truncate">
+                      {isRunning ? (deviceName ?? 'Booted') : '-'}
+                    </TableCell>
+                    <TableCell className="w-[200px] truncate">{deviceIds[avdKey] ?? '-'}</TableCell>
+                    <TableCell className="w-[160px] text-center">
+                      <Checkbox
+                        checked={resetChecked}
+                        onCheckedChange={(checked) => handleResetToggle(avd, checked === true)}
+                        aria-label={`Reset emulator ${avd} before starting`}
+                      />
+                    </TableCell>
+                    <TableCell className="w-[160px]">{statusLabel}</TableCell>
+                    <TableCell className="w-[220px]">
+                      <div className="flex justify-end gap-2">
+                        {isRunning ? (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={isStopping || isDeletingCurrent}
+                            onClick={() => handleStop(avd)}
+                            className={cn(actionButtonWidthClass)}
+                          >
+                            {stopLabel}
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            disabled={isStarting || isDeletingCurrent}
+                            onClick={() => handleStart(avd)}
+                            className={cn(actionButtonWidthClass)}
+                          >
+                            {startLabel}
+                          </Button>
+                        )}
                         <Button
                           variant="destructive"
                           size="sm"
-                          disabled={isStopping}
-                          onClick={() => handleStop(avd)}
-                          style={buttonStyle}
+                          disabled={isRunning || isDeletingCurrent || isStarting || isStopping}
+                          onClick={() => handleDelete(avd)}
+                          className={cn(actionButtonWidthClass)}
                         >
-                          {stopLabel}
+                          {deleteLabel}
                         </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          disabled={isStarting}
-                          onClick={() => handleStart(avd)}
-                          style={buttonStyle}
-                        >
-                          {startLabel}
-                        </Button>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
@@ -397,13 +755,13 @@ export default function Page() {
       <div>
         <span className="text-lg font-medium">iOS Simulators</span>
         <div className="mt-2 rounded-lg border">
-          <Table>
+          <Table className="w-full table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Runtime</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="w-[240px]">Name</TableHead>
+                <TableHead className="w-[220px]">Runtime</TableHead>
+                <TableHead className="w-[160px]">State</TableHead>
+                <TableHead className="w-[140px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -430,21 +788,24 @@ export default function Page() {
                   : device.state
                 const startLabel = isActionTarget && iosIsStarting ? 'Starting...' : 'Start'
                 const stopLabel = isActionTarget && iosIsStopping ? 'Stopping...' : 'Stop'
-                const buttonStyle = { minWidth: '84px' }
-
                 return (
-                  <TableRow key={udid}>
-                    <TableCell>{device.name}</TableCell>
-                    <TableCell>{device.runtime}</TableCell>
-                    <TableCell>{statusLabel}</TableCell>
-                    <TableCell className="text-right">
+                  <TableRow
+                    key={udid}
+                    className={cn('odd:bg-muted/20 even:bg-muted/40 transition-colors', {
+                      'bg-muted/60': isActionTarget,
+                    })}
+                  >
+                    <TableCell className="w-[240px] truncate">{device.name}</TableCell>
+                    <TableCell className="w-[220px] truncate">{device.runtime}</TableCell>
+                    <TableCell className="w-[160px]">{statusLabel}</TableCell>
+                    <TableCell className="w-[140px] text-right">
                       {isRunning ? (
                         <Button
                           variant="destructive"
                           size="sm"
                           disabled={iosIsStopping}
                           onClick={() => handleIosStop(udid)}
-                          style={buttonStyle}
+                          className={cn(actionButtonWidthClass)}
                         >
                           {stopLabel}
                         </Button>
@@ -453,7 +814,7 @@ export default function Page() {
                           size="sm"
                           disabled={iosIsStarting}
                           onClick={() => handleIosStart(udid)}
-                          style={buttonStyle}
+                          className={cn(actionButtonWidthClass)}
                         >
                           {startLabel}
                         </Button>

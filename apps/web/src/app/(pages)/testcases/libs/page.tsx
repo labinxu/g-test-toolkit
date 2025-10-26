@@ -108,7 +108,7 @@ export default function Page() {
             onCreated={() => setRefreshKey((k) => k + 1)}
           />
           <DirectoryTree
-            api={'/api/testcase/listcore?&depth=3'}
+            api={'/api/testcase/listcore?depth=3'}
             currentDir={currentDir}
             refreshKey={refreshKey}
             setRefreshKey={setRefreshKey}

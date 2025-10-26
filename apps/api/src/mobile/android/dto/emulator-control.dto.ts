@@ -15,10 +15,41 @@ export class StartEmulatorDto {
   })
   @IsBoolean()
   headless?: boolean = false;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      return /^(1|true|yes|on)$/i.test(value);
+    }
+    return false;
+  })
+  @IsBoolean()
+  reset?: boolean = false;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      return /^(1|true|yes|on)$/i.test(value);
+    }
+    return false;
+  })
+  @IsBoolean()
+  randomizeDeviceId?: boolean = false;
 }
 
 export class StopEmulatorDto {
   @IsOptional()
   @IsString()
   serial?: string;
+}
+
+export class CreateEmulatorDto {
+  @IsString()
+  templateId: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
 }

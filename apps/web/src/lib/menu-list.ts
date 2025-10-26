@@ -64,14 +64,12 @@ export function getMenuList(pathname: string): Group[] {
               href: '/reports',
               label: 'Report',
             },
+            {
+              href: '/testcases/app',
+              label: 'APP',
+            },
           ],
         },
-        {
-          href: '/recorder',
-          label: 'PageRecorder',
-          icon: LucideCassetteTape,
-        },
-
         {
           href: '',
           label: 'Commands',
@@ -103,6 +101,10 @@ export function getMenuList(pathname: string): Group[] {
             {
               label: 'Account',
               href: '/tools/account',
+            },
+            {
+              label: 'FastUserInfo',
+              href: '/tools/fast-user-db',
             },
           ],
         },

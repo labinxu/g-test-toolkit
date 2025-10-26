@@ -21,7 +21,7 @@ import * as path from 'path';
 import { FilesService } from './files.service';
 import { existsSync } from 'fs';
 import * as dotenv from 'dotenv';
-import { sanitizeUsername, checkPath } from 'src/common/utils';
+import { sanitizeUsername, checkPath, getErrorMessage } from 'src/common/utils';
 import { FileInterceptor } from '@nest-lab/fastify-multer';
 import { memoryStorage } from 'fastify-multer';
 import type {
@@ -122,6 +122,28 @@ export class FilesController {
     const absPath = path.resolve(process.cwd(), body.path);
     await fs.writeFile(absPath, body.content, 'utf-8');
     return { success: true };
+  }
+
+  @Get('fast-user-db/script')
+  @UseGuards(AuthGuard('jwt'))
+  async getFastUserDbScript() {
+    try {
+      const content = await this.filesService.readFastUserDbScript();
+      return { content };
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error));
+    }
+  }
+
+  @Post('fast-user-db/script')
+  @UseGuards(AuthGuard('jwt'))
+  async saveFastUserDbScript(@Body() body: { content: string }) {
+    try {
+      const result = await this.filesService.saveFastUserDbScript(body?.content ?? '');
+      return { success: true, path: result.path };
+    } catch (error) {
+      throw new BadRequestException(getErrorMessage(error));
+    }
   }
   @Post('mkdir')
   @UseGuards(AuthGuard('jwt'))

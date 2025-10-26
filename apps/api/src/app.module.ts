@@ -13,9 +13,6 @@ import { User } from './auth/entities/user.entity';
 import { TestCase } from './report/entities/testcase.entity';
 import { ReportModule } from './report/report.module';
 import { LoggerModule } from './logger/logger.module';
-import { ReplayGateway } from './replay/replay.gateway';
-import { ReplayModule } from './replay/replay.module';
-import { ProxyModule } from './proxy/proxy.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -31,10 +28,8 @@ import { ProxyModule } from './proxy/proxy.module';
     AuthModule,
     ReportModule,
     LoggerModule,
-    ReplayModule,
-    ProxyModule,
   ],
   controllers: [AppController],
-  providers: [AppService, LoggerService, LoggerGateway, ReplayGateway],
+  providers: [AppService, LoggerService, LoggerGateway],
 })
 export class AppModule {}

@@ -225,6 +225,36 @@ export class FilesService {
     return path.resolve(appRoot, safeRelativePath);
   }
 
+  private getScriptsRootDir() {
+    return path.resolve(process.cwd(), 'workspace', 'scripts');
+  }
+
+  private getFastUserDbScriptPath() {
+    return path.resolve(this.getScriptsRootDir(), 'fast-user-db.js');
+  }
+
+  async readFastUserDbScript() {
+    const scriptsDir = this.getScriptsRootDir();
+    if (!existsSync(scriptsDir)) {
+      await fs.mkdir(scriptsDir, { recursive: true });
+    }
+    const scriptPath = this.getFastUserDbScriptPath();
+    if (!existsSync(scriptPath)) {
+      return '';
+    }
+    return await fs.readFile(scriptPath, 'utf-8');
+  }
+
+  async saveFastUserDbScript(content: string) {
+    const scriptsDir = this.getScriptsRootDir();
+    await fs.mkdir(scriptsDir, { recursive: true });
+    const scriptPath = this.getFastUserDbScriptPath();
+    await fs.writeFile(scriptPath, content ?? '', 'utf-8');
+    return {
+      path: path.relative(process.cwd(), scriptPath),
+    };
+  }
+
   async getAppFileAbsolutePath(relativePath: string) {
     const appRoot = this.getAppRootDir();
     const targetPath = this.resolveAppPath(relativePath);

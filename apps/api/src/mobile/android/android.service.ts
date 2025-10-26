@@ -10,6 +10,17 @@ import * as path from 'path';
 
 @Injectable()
 export class AndroidService {
+  private readonly creatableAvdTemplates = [
+    {
+      id: 'pixel8-android15',
+      label: 'Pixel 8 - Android 15 (API 36)',
+      description:
+        'Google Play image, Android 15 (API level 36), arm64-v8a architecture, Pixel 8 profile.',
+      deviceId: 'pixel_8',
+      systemImage: 'system-images;android-36;google_apis_playstore;arm64-v8a',
+      defaultName: 'pixel8-api36',
+    },
+  ];
   private logger: CustomLogger;
   private dumpedObj: any;
   private appiumProc: ChildProcess | null = null;
@@ -210,6 +221,70 @@ export class AndroidService {
     return await this.commandService.runCommand(cmd);
   }
 
+  private normalizeAvdKey(value: string | null | undefined) {
+    if (!value) return '';
+    return value.replace(/[\s_-]/g, '').toLowerCase();
+  }
+
+  private sanitizeAvdName(value: string) {
+    const cleaned = value
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+/, '')
+      .replace(/-+$/, '');
+    return cleaned || 'android-avd';
+  }
+
+  private generateRandomDeviceId(length = 16) {
+    const alphabet = '0123456789abcdef';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return result;
+  }
+
+  private async randomizeAndroidDeviceId(serial: string): Promise<string | null> {
+    const randomId = this.generateRandomDeviceId();
+    try {
+      await this.run(`adb -s ${serial} shell settings put secure android_id ${randomId}`);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to set android_id for ${serial}: ${(err as Error)?.message ?? err}`,
+      );
+      return null;
+    }
+
+    try {
+      await this.run(`adb -s ${serial} shell settings put global device_name ${randomId}`);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to set device_name for ${serial}: ${(err as Error)?.message ?? err}`,
+      );
+      // proceed even if device_name update fails
+    }
+
+    return randomId;
+  }
+
+  private async getAndroidDeviceId(serial: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.run(
+        `adb -s ${serial} shell settings get secure android_id`,
+      );
+      const value = stdout.toString().trim();
+      if (!value || value.toLowerCase() === 'null') {
+        return null;
+      }
+      return value;
+    } catch (err) {
+      this.logger.warn(
+        `Failed to read device ID for ${serial}: ${(err as Error)?.message ?? err}`,
+      );
+      return null;
+    }
+  }
+
   private async listAvds(): Promise<string[]> {
     try {
       const { stdout } = await this.run('emulator -list-avds');
@@ -225,6 +300,64 @@ export class AndroidService {
 
   async listEmulators(): Promise<string[]> {
     return await this.listAvds();
+  }
+
+  async deleteEmulator(avd: string) {
+    const input = avd?.trim();
+    if (!input) {
+      throw new Error('AVD name is required');
+    }
+    const candidates = await this.listAvds();
+    const target =
+      candidates.find(
+        (name) => this.normalizeAvdKey(name) === this.normalizeAvdKey(input),
+      ) ?? null;
+    if (!target) {
+      throw new Error(`Emulator ${input} not found`);
+    }
+    const running = await this.getRunningEmulator();
+    if (
+      running?.avd &&
+      this.normalizeAvdKey(running.avd) === this.normalizeAvdKey(target)
+    ) {
+      throw new Error(
+        `Emulator ${target} is currently running. Stop it before deleting.`,
+      );
+    }
+    const escaped = target.replace(/(["$`\\])/g, '\\$1');
+    await this.run(`yes | avdmanager delete avd -n "${escaped}"`);
+    return { deleted: true, avd: target };
+  }
+
+  async listCreatableEmulators() {
+    return this.creatableAvdTemplates.map((template) => ({
+      id: template.id,
+      label: template.label,
+      description: template.description,
+      defaultName: template.defaultName,
+    }));
+  }
+
+  async createEmulatorFromTemplate(templateId: string, requestedName?: string) {
+    const template = this.creatableAvdTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      throw new Error(`Template ${templateId} not found`);
+    }
+    const desiredName = requestedName?.trim() || template.defaultName;
+    if (!desiredName) {
+      throw new Error('AVD name is required');
+    }
+    const sanitizedBase = this.sanitizeAvdName(desiredName);
+    let finalName = sanitizedBase;
+    const existing = await this.listAvds();
+    const normalizedExisting = existing.map((name) => this.normalizeAvdKey(name));
+    let counter = 1;
+    while (normalizedExisting.includes(this.normalizeAvdKey(finalName))) {
+      finalName = `${sanitizedBase}-${counter++}`;
+    }
+    const command = `printf 'no\\n' | avdmanager create avd -n "${finalName}" -k "${template.systemImage}" --device "${template.deviceId}" --force`;
+    await this.run(command);
+    return { created: true, avd: finalName, templateId: template.id };
   }
 
   async installAppOnEmulators(serials: string[], apkPath: string) {
@@ -330,7 +463,11 @@ export class AndroidService {
     }
   }
 
-  async startEmulator(avd: string, headless = false) {
+  async startEmulator(
+    avd: string,
+    options: { headless?: boolean; wipeData?: boolean } = {},
+  ) {
+    const { headless = false, wipeData = false } = options;
     const args = [
       '-avd',
       avd,
@@ -342,6 +479,9 @@ export class AndroidService {
     ];
     if (headless) {
       args.push('-no-window');
+    }
+    if (wipeData) {
+      args.push('-wipe-data');
     }
     this.logger.info(`Starting Android emulator: emulator ${args.join(' ')}`);
     const env: NodeJS.ProcessEnv = {
@@ -381,10 +521,23 @@ export class AndroidService {
     );
   }
 
-  async startStandaloneEmulator(
-    avd: string,
+  async startStandaloneEmulator({
+    avd,
     headless = false,
-  ): Promise<{ serial: string; avd: string | null; deviceName: string | null }> {
+    reset = false,
+    randomizeDeviceId = false,
+  }: {
+    avd: string;
+    headless?: boolean;
+    reset?: boolean;
+    randomizeDeviceId?: boolean;
+  }): Promise<{
+    serial: string
+    avd: string | null
+    deviceName: string | null
+    randomizedDeviceId?: string | null
+    deviceId?: string | null
+  }> {
     await this.run('adb start-server').catch(() => {});
 
     const avds = await this.listAvds();
@@ -398,7 +551,7 @@ export class AndroidService {
       return running;
     }
 
-    await this.startEmulator(avd, headless);
+    await this.startEmulator(avd, { headless, wipeData: reset });
 
     let serial: string | null = null;
     for (let i = 0; i < 90; i++) {
@@ -417,12 +570,24 @@ export class AndroidService {
     } catch {}
     await this.waitForBootCompleted(serial);
 
+    const shouldRandomize = reset || randomizeDeviceId;
+
+    let randomizedDeviceId: string | null = null;
+    if (shouldRandomize) {
+      randomizedDeviceId = await this.randomizeAndroidDeviceId(serial);
+    }
+
+    const deviceId =
+      randomizedDeviceId ?? (await this.getAndroidDeviceId(serial)) ?? null;
+
     const runningInfo = await this.getRunningEmulator(true);
     await this.ensureAppiumServer(this.appiumPort ?? 4723);
     return {
       serial,
       avd: runningInfo?.avd ?? avd,
       deviceName: runningInfo?.deviceName ?? serial,
+      randomizedDeviceId,
+      deviceId,
     };
   }
 
@@ -593,7 +758,7 @@ export class AndroidService {
     // Start emulator if not already running
     let serial = await this.getBootedEmulatorSerial();
     if (!serial) {
-      await this.startEmulator(targetAvd, headless);
+      await this.startEmulator(targetAvd, { headless });
       // Wait for emulator to appear
       for (let i = 0; i < 90; i++) {
         serial = await this.getBootedEmulatorSerial();
