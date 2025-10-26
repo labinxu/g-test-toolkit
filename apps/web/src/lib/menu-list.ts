@@ -6,30 +6,27 @@ import {
   TabletSmartphone,
   CommandIcon,
   UtensilsCrossedIcon,
-  LucideCassetteTape,
-  FileUserIcon,
-  LibrarySquareIcon,
-} from 'lucide-react';
+} from 'lucide-react'
 
 type Submenu = {
-  href: string;
-  label: string;
-  active?: boolean;
-  icon?: any;
-};
+  href: string
+  label: string
+  active?: boolean
+  icon?: any
+}
 
 type Menu = {
-  href: string;
-  label: string;
-  active?: boolean;
-  icon: LucideIcon;
-  submenus?: Submenu[];
-};
+  href: string
+  label: string
+  active?: boolean
+  icon: LucideIcon
+  submenus?: Submenu[]
+}
 
 type Group = {
-  groupLabel: string;
-  menus: Menu[];
-};
+  groupLabel: string
+  menus: Menu[]
+}
 
 export function getMenuList(pathname: string): Group[] {
   return [
@@ -99,6 +96,10 @@ export function getMenuList(pathname: string): Group[] {
               href: '/tools/trans-datetime',
             },
             {
+              label: 'Android Inspector',
+              href: '/tools/android-inspector',
+            },
+            {
               label: 'Account',
               href: '/tools/account',
             },
@@ -125,5 +126,5 @@ export function getMenuList(pathname: string): Group[] {
         },
       ],
     },
-  ];
+  ]
 }

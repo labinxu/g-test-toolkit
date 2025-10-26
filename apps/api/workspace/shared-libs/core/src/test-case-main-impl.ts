@@ -89,6 +89,9 @@ export async function main({
         rst?.bs && instance.setBrowser(rst.bs)
       } else if (isAndroid) {
         const driver = await remote(androidOpts)
+        if (!driver) {
+          throw new Error(`remote driver initailize failed ${JSON.stringify(androidOpts)}`)
+        }
         instance.setPage(driver)
       }
     } catch (err) {

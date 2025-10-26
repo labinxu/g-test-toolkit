@@ -113,6 +113,39 @@ export class AndroidController {
     }
   }
 
+  // Appium server controls
+  @Get('/appium/status')
+  @UseGuards(AuthGuard('jwt'))
+  async appiumStatus() {
+    try {
+      return this.androidService.getAppiumStatus()
+    } catch (err) {
+      throw new NotFoundException('Failed to get Appium status')
+    }
+  }
+
+  @Post('/appium/start')
+  @UseGuards(AuthGuard('jwt'))
+  async appiumStart(@Body() body: { port?: number }) {
+    try {
+      const { started, port } = await this.androidService.startAppiumServerOnly(body?.port ?? 4723)
+      return { result: 'ok', started, port, message: `Appium server ${started ? 'started' : 'already running'} on port ${port}` }
+    } catch (err) {
+      throw new NotFoundException((err && (err as Error).message) || 'Failed to start Appium server')
+    }
+  }
+
+  @Post('/appium/stop')
+  @UseGuards(AuthGuard('jwt'))
+  async appiumStop() {
+    try {
+      const { stopped } = await this.androidService.stopAppiumServerOnly()
+      return { result: 'ok', stopped, message: stopped ? 'Appium server stopped' : 'Appium server was not running' }
+    } catch (err) {
+      throw new NotFoundException((err && (err as Error).message) || 'Failed to stop Appium server')
+    }
+  }
+
   @Get('/emulators/creatable')
   @UseGuards(AuthGuard('jwt'))
   async getCreatableEmulators() {

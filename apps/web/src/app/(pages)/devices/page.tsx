@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Table,
@@ -11,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { Power } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -142,6 +144,58 @@ export default function Page() {
   const [deviceIds, setDeviceIds] = useState<Record<string, string>>({})
   const [androidHeadless, setAndroidHeadless] = useState(false)
   const queryClient = useQueryClient()
+  const router = useRouter()
+
+  // Appium server status
+  type AppiumStatus = { running: boolean; port?: number }
+  const appiumStatusQuery = useQuery<AppiumStatus>({
+    queryKey: ['appium-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/android/appium/status', { method: 'GET', headers: defaultHeaders })
+      if (!res.ok) {
+        const t = await res.text()
+        throw new Error(t || 'Failed to fetch appium status')
+      }
+      return res.json()
+    },
+    staleTime: 3000,
+  })
+
+  const startAppiumMutation = useMutation<{ result: string; started?: boolean; port?: number }, Error, { port?: number }>({
+    mutationFn: async ({ port }) => {
+      const res = await fetch('/api/android/appium/start', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ port }),
+      })
+      if (!res.ok) {
+        const t = await res.text()
+        throw new Error(t || 'Failed to start appium')
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      toast.success(data?.port ? `Appium server started on ${data.port}` : 'Appium server started')
+      queryClient.invalidateQueries({ queryKey: ['appium-status'] })
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to start appium'),
+  })
+
+  const stopAppiumMutation = useMutation<{ result: string; stopped?: boolean }, Error, void>({
+    mutationFn: async () => {
+      const res = await fetch('/api/android/appium/stop', { method: 'POST', headers: defaultHeaders })
+      if (!res.ok) {
+        const t = await res.text()
+        throw new Error(t || 'Failed to stop appium')
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      toast.success(data?.stopped ? 'Appium server stopped' : 'Appium not running')
+      queryClient.invalidateQueries({ queryKey: ['appium-status'] })
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to stop appium'),
+  })
 
   const devicesQuery = useQuery({
     queryKey: ['devices'],
@@ -648,6 +702,32 @@ export default function Page() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <Button
+            size="icon"
+            onClick={() => {
+              const running = !!appiumStatusQuery.data?.running
+              if (running) {
+                stopAppiumMutation.mutate()
+              } else {
+                startAppiumMutation.mutate({})
+              }
+            }}
+            className={cn(
+              'h-9 w-9 p-0 rounded-full',
+              appiumStatusQuery.data?.running ? 'bg-green-600 text-white hover:bg-green-700' : ''
+            )}
+            aria-label={appiumStatusQuery.data?.running ? 'Stop Appium Server' : 'Start Appium Server'}
+            title={
+              startAppiumMutation.isPending || stopAppiumMutation.isPending
+                ? 'Processing...'
+                : appiumStatusQuery.data?.running
+                  ? 'Appium running. Click to stop'
+                  : 'Start Appium Server'
+            }
+            disabled={startAppiumMutation.isPending || stopAppiumMutation.isPending}
+          >
+            <Power className="h-4 w-4" />
+          </Button>
         </div>
         <div className="mt-2 rounded-lg border">
           <Table className="w-full table-fixed">
@@ -733,6 +813,21 @@ export default function Page() {
                             {startLabel}
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!isRunning}
+                          onClick={() => {
+                            const dId = deviceIds[avdKey] || (avdKeysMatch(avd, runningAvd) ? (runningSerial ?? '') : '');
+                            const params = new URLSearchParams();
+                            if (dId) params.set('deviceId', dId);
+                            if (avd) params.set('avd', avd);
+                            router.push(`/tools/android-inspector${params.toString() ? `?${params}` : ''}`)
+                          }}
+                          className={cn(actionButtonWidthClass)}
+                        >
+                          Inspect
+                        </Button>
                         <Button
                           variant="destructive"
                           size="sm"

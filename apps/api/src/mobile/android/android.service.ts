@@ -722,6 +722,22 @@ export class AndroidService {
     return true;
   }
 
+  // Public helpers for Appium control via controller
+  async startAppiumServerOnly(port = 4723) {
+    await this.ensureUiAutomator2Installed();
+    return await this.ensureAppiumServer(port);
+  }
+
+  async stopAppiumServerOnly() {
+    const stopped = this.stopAppiumServer();
+    return { stopped };
+  }
+
+  getAppiumStatus() {
+    const running = !!this.appiumProc && !this.appiumProc.killed;
+    return { running, port: this.appiumPort ?? undefined };
+  }
+
   /**
    * Initialize Android emulator and Appium test environment.
    * Steps:

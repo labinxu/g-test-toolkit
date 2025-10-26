@@ -15,6 +15,7 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\""
   },
   "dependencies": {
+    "@appium/base-driver": "^10.1.0",
     "@fastify/cookie": "11.0.2",
     "@fastify/cors": "^11.1.0",
     "@fastify/csrf-protection": "^7.1.0",
@@ -63,7 +64,8 @@
     "ts-morph": "^26.0.0",
     "typeorm": "^0.3.25",
     "undici": "^7.13.0",
-    "winston": "^3.17.0"
+    "winston": "^3.17.0",
+    "xml2js": "^0.6.2"
   },
   "overrides": {
     "fastify": "5.4.0"

@@ -13,6 +13,7 @@ import { User } from './auth/entities/user.entity';
 import { TestCase } from './report/entities/testcase.entity';
 import { ReportModule } from './report/report.module';
 import { LoggerModule } from './logger/logger.module';
+import { InspectorModule } from './mobile/inspector/inspector.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -28,6 +29,7 @@ import { LoggerModule } from './logger/logger.module';
     AuthModule,
     ReportModule,
     LoggerModule,
+    InspectorModule,
   ],
   controllers: [AppController],
   providers: [AppService, LoggerService, LoggerGateway],
