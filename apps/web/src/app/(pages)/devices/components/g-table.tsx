@@ -43,7 +43,6 @@ export function GTable({
             <TableHead key={`head-${index}`}>{v}</TableHead>
           ))}
           <TableHead>Status</TableHead>
-          <TableHead>Action</TableHead>
           <TableHead>Preview</TableHead>
         </TableRow>
       </TableHeader>
@@ -51,7 +50,10 @@ export function GTable({
         {dataRow.map((row: string[], rowIndex: number) => (
           <TableRow
             key={`row-${rowIndex}`}
-            className={cn("cursor-pointer", selectedRow === rowIndex ? 'bg-blue-300' : 'bg-blue-50')}
+            className={cn(
+              'cursor-pointer odd:bg-muted/20 even:bg-muted/40 transition-colors',
+              selectedRow === rowIndex && 'bg-primary/10 outline outline-2 outline-primary/60'
+            )}
             onClick={() => {
               setSelectedRow(rowIndex);
             }}

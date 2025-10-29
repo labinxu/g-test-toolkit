@@ -14,12 +14,42 @@ import { randomUUID } from 'crypto'
 import * as dotenv from 'dotenv'
 dotenv.config()
 
+// Resolve CORS origins for Socket.IO from env, fallback to local dev origins
+const rawCors = process.env.WS_CORS_ORIGIN
+let corsOrigin: true | string[] = ['http://localhost:3000', 'http://127.0.0.1:3000']
+if (rawCors && rawCors.trim().length > 0) {
+  const v = rawCors.trim()
+  if (v === '*' || v.toLowerCase() === 'true' || /^(1|yes|on)$/i.test(v)) {
+    corsOrigin = true
+  } else {
+    corsOrigin = v
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+  }
+}
+
+// Optional ping tuning (in milliseconds)
+const pingTimeout = (() => {
+  const raw = process.env.WS_PING_TIMEOUT_MS
+  const n = raw ? parseInt(raw, 10) : NaN
+  return Number.isFinite(n) && n > 0 ? n : undefined
+})()
+const pingInterval = (() => {
+  const raw = process.env.WS_PING_INTERVAL_MS
+  const n = raw ? parseInt(raw, 10) : NaN
+  return Number.isFinite(n) && n > 0 ? n : undefined
+})()
+
 @WebSocketGateway({
   path: '/socket.io',
   cors: {
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: corsOrigin,
     credentials: true,
   },
+  // Socket.IO engine options (optional; rely on defaults if env not set)
+  ...(pingTimeout ? { pingTimeout } : {}),
+  ...(pingInterval ? { pingInterval } : {}),
   namespace: '/log', // 可选，命名空间
 })
 export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {

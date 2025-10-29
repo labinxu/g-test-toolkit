@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Table,
@@ -30,6 +30,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Switch } from '@/components/ui/switch'
 
 type FileNode = {
   name: string
@@ -97,6 +98,21 @@ export default function AppTestCasesPage() {
   const [installDialogOpen, setInstallDialogOpen] = useState(false)
   const [pendingInstallFile, setPendingInstallFile] = useState<FileNode | null>(null)
   const [selectedSerials, setSelectedSerials] = useState<string[]>([])
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      const v = localStorage.getItem('gtt:testcases-app:autoRefresh')
+      return v == null ? true : v === '1' || v === 'true'
+    } catch {}
+    return true
+  })
+  const AUTO_REFRESH_MS = 3000
+  // Persist auto-refresh setting
+  useEffect(() => {
+    try {
+      localStorage.setItem('gtt:testcases-app:autoRefresh', autoRefresh ? '1' : '0')
+    } catch {}
+  }, [autoRefresh])
 
   const appsQuery = useQuery<FileNode[]>({
     queryKey: APP_FILES_QUERY_KEY,
@@ -116,6 +132,8 @@ export default function AppTestCasesPage() {
       }
       return []
     },
+    refetchOnWindowFocus: false,
+    refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
   })
 
   const androidDevicesQuery = useQuery({
@@ -129,7 +147,8 @@ export default function AppTestCasesPage() {
       }
       return res.json() as Promise<{ devices: string }>
     },
-    refetchInterval: 5000,
+    refetchOnWindowFocus: false,
+    refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
   })
 
   const deleteMutation = useMutation<{ success: boolean }, Error, string>({
@@ -332,6 +351,10 @@ export default function AppTestCasesPage() {
             <p className="text-sm text-muted-foreground">Manage uploaded app test packages</p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="text-muted-foreground mr-2 flex items-center gap-2">
+              <Switch id="apps-auto-refresh" checked={autoRefresh} onCheckedChange={(v) => setAutoRefresh(!!v)} />
+              <label htmlFor="apps-auto-refresh" className="cursor-pointer select-none text-sm">Auto refresh</label>
+            </div>
             <Button
               variant="outline"
               size="sm"

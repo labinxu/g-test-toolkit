@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsBoolean, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class StartTestCaseDto {
@@ -36,4 +36,13 @@ export class RunTestCaseFileDto {
   @IsString()
   @IsNotEmpty()
   clientId: string;
+  @IsOptional()
+  @IsBoolean()
+  keepAppOpen?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  shareSession?: boolean;
+  @IsOptional()
+  @IsString()
+  sessionKey?: string;
 }

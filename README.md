@@ -118,3 +118,32 @@ Learn more about the power of Turborepo:
 - [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
 - [Configuration Options](https://turborepo.com/docs/reference/configuration)
 - [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+## WebSocket configuration
+
+The Web app (Next.js) streams logs over Socket.IO to the API (NestJS). To avoid connection instability and ease local setup, configure these environment variables:
+
+- Web (.env in `apps/web`)
+  - `NEXT_PUBLIC_API_BASE_URL` — Base URL of the API (defaults to `http://localhost:3001`). Used by socket clients to connect to `${BASE}/log`.
+
+- API (.env in `apps/api`)
+  - `WS_CORS_ORIGIN` — Allowed origins for Socket.IO CORS.
+    - Set to `true` (or `1`, `yes`, `on`, `*`) to allow all (recommended for local dev).
+    - Or provide a comma‑separated list: `http://localhost:3000,http://127.0.0.1:3000`.
+  - `WS_PING_TIMEOUT_MS` — Optional Socket.IO `pingTimeout` (ms).
+  - `WS_PING_INTERVAL_MS` — Optional Socket.IO `pingInterval` (ms).
+
+Examples:
+
+```
+# apps/web/.env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+
+# apps/api/.env
+WS_CORS_ORIGIN=true
+# WS_PING_TIMEOUT_MS=30000
+# WS_PING_INTERVAL_MS=25000
+```
+
+Notes:
+- In development, React Strict Mode may cause double mounting of effects which can print duplicate connect/disconnect logs. This does not occur in production builds.
+- The web socket client is configured to prefer `websocket` transport to reduce unnecessary polling/upgrade cycles.

@@ -9,11 +9,13 @@ export async function main({
   workspace,
   loggerService,
   browserHelper,
+  options,
 }: {
   clientId: string
   workspace: string
   loggerService: any
   browserHelper: BrowserHelper
+  options?: { keepAppOpen?: boolean; shareSession?: boolean; sessionKey?: string }
 }) {
   const logger = loggerService.createLogger('main', clientId) as CustomLogger
   for (const Ctor of __testCaseClasses as TestCaseConstructor[]) {
@@ -22,6 +24,10 @@ export async function main({
     const androidOpts = (Ctor as any).__androidOpts
     const headless = (Ctor as any).__headless
     const debug = (Ctor as any).__debug
+    const keepAndroidOpen =
+      (Ctor as any).__keepAppOpen ?? options?.keepAppOpen ?? (process.env.ANDROID_KEEP_APP_OPEN === '1')
+    const shareSession = !!options?.shareSession
+    const sessionKey = options?.sessionKey || clientId
     const domain = (Ctor as any).__domain
     const timeout = (Ctor as any).__timeout
     const retry = (Ctor as any).__retry
@@ -84,12 +90,24 @@ export async function main({
         rst?.page && instance.setPage(rst?.page)
         rst?.bs && instance.setBrowser(rst.bs)
       } else if (isAndroid) {
-        const driver = await remote(androidOpts)
-        if (!driver) {
-          throw new Error(`remote driver initailize failed ${JSON.stringify(androidOpts)}`)
-        }
-        logger.info('create android driver')
+        ;(globalThis as any).__androidDrivers = (globalThis as any).__androidDrivers || new Map()
+        const store: Map<string, any> = (globalThis as any).__androidDrivers
+        const key = shareSession ? `share:${sessionKey || 'default'}` : `${clientId || 'default'}:${Ctor.name}`
 
+        let driver = shareSession ? store.get(key) : undefined
+        if (driver) {
+          logger.info(`reusing android driver session for key: ${key}`)
+        } else {
+          driver = await remote(androidOpts)
+          if (!driver) {
+            throw new Error(`remote driver initailize failed ${JSON.stringify(androidOpts)}`)
+          }
+          logger.info('create android driver')
+          if (shareSession || keepAndroidOpen) {
+            store.set(key, driver)
+            logger.info(`driver stored with key: ${key}`)
+          }
+        }
         instance.setPage(driver)
       }
     } catch (err) {
@@ -118,6 +136,22 @@ export async function main({
     await instance.tearDown()
     if (!debug) {
       needBrowser && browserHelper.close()
+    }
+    if (isAndroid) {
+      try {
+        if (shareSession) {
+          logger.info('android driver kept alive (shareSession=true)')
+        } else if (!keepAndroidOpen) {
+          // 主动结束会话，避免残留；当 keepAppOpen=true 时不结束会话，从而保持 App 运行
+          const drv: any = (instance as any).page
+          await drv?.deleteSession?.()
+          logger.info('android driver session closed')
+        } else {
+          logger.info('android driver kept alive (keepAppOpen=true)')
+        }
+      } catch (e) {
+        logger.error(`android driver cleanup error: ${e}`)
+      }
     }
     //end for testMethods
     logger.info('All TestCase Completed!')

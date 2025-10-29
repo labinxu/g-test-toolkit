@@ -6,6 +6,7 @@ import {
   TabletSmartphone,
   CommandIcon,
   UtensilsCrossedIcon,
+  Users,
 } from 'lucide-react'
 
 type Submenu = {
@@ -120,9 +121,14 @@ export function getMenuList(pathname: string): Group[] {
           icon: TabletSmartphone,
         },
         {
+          href: '/settings/parameters',
+          label: 'Parameters',
+          icon: Settings,
+        },
+        {
           href: '/account',
           label: 'Account',
-          icon: Settings,
+          icon: Users,
         },
       ],
     },

@@ -2,6 +2,7 @@ import { ModeToggle } from '@/components/mode-toggle';
 import { UserNav } from '@/components/admin-panel/user-nav';
 import { SheetMenu } from '@/components/admin-panel/sheet-menu';
 import { usePathname } from 'next/navigation';
+import { GlobalCacheControls } from '@/components/global-cache-controls';
 
 export function Navbar() {
   const pathName = usePathname();
@@ -12,7 +13,8 @@ export function Navbar() {
           <SheetMenu />
           <h1 className="font-bold">{pathName}</h1>
         </div>
-        <div className="flex flex-1 items-center justify-end">
+        <div className="flex flex-1 items-center justify-end gap-2">
+          <GlobalCacheControls />
           <ModeToggle />
           <UserNav />
         </div>

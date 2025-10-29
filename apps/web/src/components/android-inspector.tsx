@@ -208,6 +208,7 @@ export default function AndroidInspector(props: AndroidInspectorProps) {
                         if (autoCenterOnClick) {
                           centerOn(n)
                         }
+                        onNodeClick?.(n)
                       }}
                       onDoubleClick={() => {
                         // For future: double-click could zoom or other action

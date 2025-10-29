@@ -216,6 +216,21 @@ export class TestCasesController {
     return { result: 'ok', message: 'building...' }
   }
 
+  @Post('cleanup-android')
+  @UseGuards(AuthGuard('jwt'))
+  async cleanupAndroid(@Body('clientId') clientId?: string, @Body('sessionKey') sessionKey?: string) {
+    try {
+      const result = sessionKey
+        ? await this.testCasesService.cleanupSharedSessionByKey(sessionKey)
+        : clientId
+        ? await this.testCasesService.cleanupKeptAndroidSessionsFor(clientId)
+        : await this.testCasesService.cleanupKeptAndroidSessions()
+      return { result: 'ok', ...result }
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error))
+    }
+  }
+
   @Get('buildlibs')
   async buildLibs(@Query('clientId') clientId: string) {
     try {
@@ -246,7 +261,15 @@ export class TestCasesController {
     console.log(absPath)
     const code = fs.readFileSync(absPath)
     try {
-      this.testCasesService.runInSandbox(code.toString('utf-8'), runTestCaseFileDto.clientId)
+      this.testCasesService.runInSandbox(
+        code.toString('utf-8'),
+        runTestCaseFileDto.clientId,
+        {
+          keepAppOpen: !!runTestCaseFileDto.keepAppOpen,
+          shareSession: !!runTestCaseFileDto.shareSession,
+          sessionKey: runTestCaseFileDto.sessionKey,
+        }
+      )
     } catch (err) {
       throw new NotFoundException(getErrorMessage(err))
     }

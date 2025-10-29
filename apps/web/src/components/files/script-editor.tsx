@@ -1,5 +1,14 @@
 'use client'
-import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
+import {
+  useEffect,
+  useState,
+  useRef,
+  useMemo,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+  type ReactNode,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,21 +25,35 @@ type CachedFileEntry = {
   original: string
 }
 
+export type ScriptEditorHandle = {
+  insertAtCursor: (text: string, opts?: { ensureNewLine?: boolean }) => void
+  getCursor: () => number | null
+  setCursor: (pos: number) => void
+}
+
 interface ScriptEditorProps {
   filePath: string
   cachedValue?: CachedFileEntry
   onContentChange?: (value: string, info?: { dirty: boolean; filePath: string }) => void
   onContentLoaded?: (payload: CachedFileEntry, context: { filePath: string }) => void
   onContentSaved?: (payload: CachedFileEntry, context: { filePath: string }) => void
+  extraActions?: ReactNode
+  /** Soft wrap at given column (visual only). If provided, editor wraps lines at this column. */
+  wrapAtColumn?: number
 }
 
-export function ScriptEditor({
-  filePath,
-  cachedValue,
-  onContentChange,
-  onContentLoaded,
-  onContentSaved,
-}: ScriptEditorProps) {
+export const ScriptEditor = forwardRef<ScriptEditorHandle, ScriptEditorProps>(function ScriptEditor(
+  {
+    filePath,
+    cachedValue,
+    onContentChange,
+    onContentLoaded,
+    onContentSaved,
+    extraActions,
+    wrapAtColumn,
+  }: ScriptEditorProps,
+  ref
+) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -56,6 +79,37 @@ export function ScriptEditor({
       }),
     []
   )
+  const rulerTheme = useMemo(() => {
+    const col = typeof wrapAtColumn === 'number' ? wrapAtColumn : 80
+    const W = Math.max(10, Math.min(240, col | 0))
+    return EditorView.theme({
+      '.cm-content': { position: 'relative' },
+      '.cm-content::after': {
+        content: '""',
+        position: 'absolute',
+        top: '0',
+        bottom: '0',
+        left: `${W}ch`,
+        width: '1px',
+        background: 'rgba(127,127,127,0.25)',
+        pointerEvents: 'none',
+      },
+    })
+  }, [wrapAtColumn])
+  const makeWrapTheme = useCallback((col: number) => {
+    const W = Math.max(10, Math.min(240, col | 0))
+    return EditorView.theme({
+      '.cm-content': {
+        // Limit content width so lineWrapping wraps at this column, but not smaller than viewport
+        maxWidth: `${W}ch`,
+      },
+    })
+  }, [])
+  const viewRef = useRef<EditorView | null>(null)
+  const lastCursorRef = useRef<number>(0)
+  const pendingCursorRef = useRef<number | null>(null)
+  const appliedCursorForFileRef = useRef<string | null>(null)
+  // No content clamping — visual soft wrap is applied in the editor when requested
   const fetchServerContent = useCallback(
     async (options?: { showSkeleton?: boolean }) => {
       if (!filePath || !isAuthenticated) return
@@ -112,6 +166,33 @@ export function ScriptEditor({
     fetchServerContent({ showSkeleton: true })
   }, [filePath, cachedValue, isAuthenticated, fetchServerContent])
 
+  // Restore caret position per file from localStorage
+  useEffect(() => {
+    if (!filePath) return
+    if (appliedCursorForFileRef.current === filePath) return
+    try {
+      const raw = localStorage.getItem(`gtt:cursor:${filePath}`)
+      if (!raw) {
+        appliedCursorForFileRef.current = filePath
+        return
+      }
+      const pos = parseInt(raw, 10)
+      if (Number.isFinite(pos)) {
+        const clamped = Math.max(0, Math.min(pos, content.length))
+        lastCursorRef.current = clamped
+        // If view exists, move now; else apply on first update
+        if (viewRef.current) {
+          try {
+            viewRef.current.dispatch({ selection: { anchor: clamped } })
+          } catch {}
+        } else {
+          pendingCursorRef.current = clamped
+        }
+      }
+    } catch {}
+    appliedCursorForFileRef.current = filePath
+  }, [filePath, content])
+
   // Save file
   async function save() {
     if (!filePath) return
@@ -136,6 +217,51 @@ export function ScriptEditor({
       setSaving(false)
     }
   }
+
+  // Expose imperative API
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertAtCursor: (text: string, opts?: { ensureNewLine?: boolean }) => {
+        const view = viewRef.current
+        const needsLF = !!opts?.ensureNewLine
+        const insertText = needsLF ? `${text}\n` : text
+        if (view) {
+          // Use live selection from view to avoid stale cursor
+          const head = view.state?.selection?.main?.head ?? lastCursorRef.current ?? 0
+          const pos = Math.max(0, Math.min(head, view.state.doc.length))
+          const nextPos = pos + insertText.length
+          view.dispatch({ changes: { from: pos, to: pos, insert: insertText }, selection: { anchor: nextPos } })
+          // Focus after dispatch and again on next frame to ensure focus sticks
+          try { view.focus() } catch {}
+          try { requestAnimationFrame(() => { try { view.focus(); view.dispatch({ selection: { anchor: nextPos } }) } catch {} }) } catch {}
+          lastCursorRef.current = nextPos
+          try { localStorage.setItem(`gtt:cursor:${filePath}`, String(nextPos)) } catch {}
+        } else {
+          const currentPos = typeof lastCursorRef.current === 'number' ? lastCursorRef.current : 0
+          const pos = Math.max(0, Math.min(currentPos, content.length))
+          const next = content.slice(0, pos) + insertText + content.slice(pos)
+          setContent(next)
+          const dirty = next !== originalContentRef.current
+          setChanged(dirty)
+          onContentChange?.(next, { dirty, filePath })
+          const nextPos = pos + insertText.length
+          lastCursorRef.current = nextPos
+          pendingCursorRef.current = nextPos
+        }
+      },
+      getCursor: () => (typeof lastCursorRef.current === 'number' ? lastCursorRef.current : null),
+      setCursor: (pos: number) => {
+        const nextPos = Math.max(0, Math.min(pos, content.length))
+        lastCursorRef.current = nextPos
+        try {
+          viewRef.current?.focus()
+          viewRef.current?.dispatch({ selection: { anchor: nextPos } })
+        } catch {}
+      },
+    }),
+    [content, filePath, onContentChange]
+  )
 
   // Ctrl+S/Cmd+S 快捷保存
   useEffect(() => {
@@ -167,9 +293,14 @@ export function ScriptEditor({
   return (
     <div className="flex h-full w-full flex-col rounded-lg border shadow-lg">
       <div className="flex items-center gap-1 p-2">
-        <Badge variant="outline" className="flex items-center px-2 py-1 font-mono text-xs">
-          <FileText className="mr-1 h-4 w-4 text-gray-500" />
-          {filePath}
+        <Badge
+          variant="outline"
+          className="flex w-80 shrink-0 items-center gap-1 overflow-hidden px-2 py-1 font-mono text-xs"
+        >
+          <FileText className="h-4 w-4 flex-none text-gray-500" />
+          <span className="truncate" title={filePath}>
+            {filePath}
+          </span>
         </Badge>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -215,6 +346,8 @@ export function ScriptEditor({
           </TooltipTrigger>
           <TooltipContent sideOffset={6}>{resetting ? 'Resetting...' : 'Reset'}</TooltipContent>
         </Tooltip>
+        {/* Extra actions injected by parent, placed after Reset */}
+        {extraActions ? <div className="ml-2 flex items-center gap-1">{extraActions}</div> : null}
         {error && <span className="ml-4 text-xs text-red-500">{error}</span>}
       </div>
       <div className="min-h-0 flex-1 rounded-lg">
@@ -225,7 +358,16 @@ export function ScriptEditor({
             <CodeMirror
               height="100%"
               value={content}
-              extensions={[...extensions, roundedTheme]}
+              extensions={
+                [
+                  ...extensions,
+                  roundedTheme,
+                  rulerTheme,
+                  ...(typeof wrapAtColumn === 'number'
+                    ? [EditorView.lineWrapping, makeWrapTheme(wrapAtColumn)]
+                    : []),
+                ]
+              }
               theme={theme === 'dark' ? 'dark' : 'light'}
               editable={!(loading || saving)}
               basicSetup={{
@@ -235,6 +377,27 @@ export function ScriptEditor({
               }}
               className="h-full w-full flex-1"
               style={{ height: '100%', width: '100%' }}
+              onUpdate={(vu) => {
+                // Track view instance and caret
+                // @ts-ignore view exists on update
+                const v: EditorView | undefined = (vu as any)?.view
+                if (v) viewRef.current = v
+                try {
+                  const head = vu.state?.selection?.main?.head
+                  if (typeof head === 'number') {
+                    lastCursorRef.current = head
+                    try {
+                      if (filePath) localStorage.setItem(`gtt:cursor:${filePath}`, String(head))
+                    } catch {}
+                  }
+                  // Apply pending cursor for this file once view is ready
+                  if (pendingCursorRef.current != null) {
+                    const pos = Math.max(0, Math.min(pendingCursorRef.current, vu.state.doc.length))
+                    viewRef.current?.dispatch({ selection: { anchor: pos } })
+                    pendingCursorRef.current = null
+                  }
+                } catch {}
+              }}
               onChange={(value) => {
                 const nextValue = value ?? ''
                 setContent(nextValue)
@@ -248,4 +411,4 @@ export function ScriptEditor({
       </div>
     </div>
   )
-}
+})

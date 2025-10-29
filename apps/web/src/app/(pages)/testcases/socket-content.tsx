@@ -35,8 +35,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const socket = io('http://localhost:3001/log', {
-      transports: ['polling', 'websocket'],
+    // Prefer WebSocket directly to avoid extra polling handshake; use env for base URL
+    const base = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+    const socket = io(`${base.replace(/\/$/, '')}/log`, {
+      transports: ['websocket'],
       path: '/socket.io',
       reconnection: true,
       reconnectionAttempts: 10,
@@ -52,7 +54,6 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       socket.emit('hello', 'Hello from client!');
     });
 
-    socket.on('disconnect', () => setConnected(false));
     socket.on('log', (msg: string) => setLogs((prev) => [...prev, msg]));
     socket.on('close', (msg: string) => {
       setLogs((prev) => [...prev, msg]);
@@ -72,6 +73,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => {
+      try {
+        socket.removeAllListeners();
+      } catch {}
       socket.disconnect();
     };
   }, []);

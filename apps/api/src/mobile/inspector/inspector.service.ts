@@ -20,6 +20,7 @@ type NodeInfo = {
 @Injectable()
 export class InspectorService {
   private logger: CustomLogger;
+  private lastSnapshotCache: Map<string, { at: number; data: any }> = new Map();
   constructor(
     private readonly commandService: CommandService,
     private readonly loggerService: LoggerService,
@@ -62,30 +63,94 @@ export class InspectorService {
 
   private async ensureSerial(deviceId?: string): Promise<string> {
     if (deviceId) return deviceId;
+    // Prefer running emulator if present
     const emu = await this.androidService.getRunningEmulator(true);
-    if (!emu?.serial) throw new NotFoundException('No running device/emulator');
-    return emu.serial;
+    if (emu?.serial) return emu.serial;
+    // Fallback: pick any connected device in 'device' state
+    try {
+      const { stdout } = await this.commandService.runCommand('adb devices');
+      const lines = stdout
+        .toString()
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const line of lines) {
+        // ignore header line
+        if (line.toLowerCase().startsWith('list of devices')) continue;
+        const m = line.match(/^(\S+)\s+device$/);
+        if (m) {
+          return m[1];
+        }
+      }
+    } catch {}
+    throw new NotFoundException('No connected Android device/emulator detected');
   }
 
-  async snapshot(params: { deviceId?: string }) {
+  async snapshot(params: {
+    deviceId?: string;
+    autoWake?: boolean;
+    autoUnlock?: boolean;
+    unlockPassword?: string;
+    unlockSwipe?: string;
+    unlockKeywords?: string;
+    minIntervalMs?: number;
+  }) {
     const serial = await this.ensureSerial(params.deviceId);
-    const filePath = await this.androidService.getScreen(serial);
-    const screenshotBase64 = readFileSync(filePath).toString('base64');
-    await this.commandService.dumpxml(serial);
-    const xmlPath = `./tmp/window_dump-${serial}.xml`;
-    await this.commandService.pullDumpedXml(serial, xmlPath);
-    const xmlContent = readFileSync(xmlPath);
-    const parser = new XMLParser({ ignoreAttributes: false });
-    const obj = parser.parse(xmlContent);
-    const nodes = this.flattenNodes(obj?.hierarchy?.node ?? obj?.hierarchy);
-    const width = nodes.reduce((mx, n) => Math.max(mx, n.bounds.x2), 0);
-    const height = nodes.reduce((mx, n) => Math.max(mx, n.bounds.y2), 0);
-    return {
-      screenshotBase64,
-      screen: { width, height },
-      nodes,
-      takenAt: Date.now(),
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const minMs = Math.max(0, Number(params.minIntervalMs ?? process.env.INSPECTOR_SNAPSHOT_MIN_MS ?? 0));
+    const now = Date.now();
+    const cached = this.lastSnapshotCache.get(serial);
+    if (minMs > 0 && cached && now - cached.at < minMs) {
+      return cached.data;
+    }
+    // Optional pre-unlock step
+    if (params.autoUnlock) {
+      try {
+        const pwd = params.unlockPassword ?? '125698';
+        const swipe = params.unlockSwipe ?? '';
+        const keywords = params.unlockKeywords ?? 'holding display';
+        if (swipe) {
+          await this.commandService.unlockScreen(serial, keywords, pwd, swipe);
+          await wait(500);
+        }
+      } catch {}
+    }
+    const attempt = async () => {
+      const filePath = await this.androidService.getScreen(serial);
+      const screenshotBase64 = readFileSync(filePath).toString('base64');
+      await this.commandService.dumpxml(serial);
+      const xmlPath = `./tmp/window_dump-${serial}.xml`;
+      // ensure device flushed the dump file on some devices
+      await wait(120);
+      await this.commandService.pullDumpedXml(serial, xmlPath);
+      const xmlContent = readFileSync(xmlPath);
+      const parser = new XMLParser({ ignoreAttributes: false });
+      const obj = parser.parse(xmlContent);
+      const nodes = this.flattenNodes(obj?.hierarchy?.node ?? obj?.hierarchy);
+      const width = nodes.reduce((mx, n) => Math.max(mx, n.bounds.x2), 0);
+      const height = nodes.reduce((mx, n) => Math.max(mx, n.bounds.y2), 0);
+      return {
+        screenshotBase64,
+        screen: { width, height },
+        nodes,
+        takenAt: Date.now(),
+      };
     };
+    const allowWake = params.autoWake !== false;
+    try {
+      const res = await attempt();
+      if (minMs > 0) this.lastSnapshotCache.set(serial, { at: Date.now(), data: res });
+      return res;
+    } catch (e) {
+      if (!allowWake) throw e;
+      try {
+        await this.commandService.wakeDevice(serial);
+        await wait(500);
+      } catch {}
+      const res = await attempt();
+      if (minMs > 0) this.lastSnapshotCache.set(serial, { at: Date.now(), data: res });
+      return res;
+    }
   }
 
   private findByUsing(nodes: NodeInfo[], using: string, value: string): NodeInfo | null {
@@ -136,4 +201,3 @@ export class InspectorService {
     return { ok: true, tapped: { x, y }, nodeId: node.nodeId };
   }
 }
-

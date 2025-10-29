@@ -41,26 +41,11 @@ export class AndroidService {
       if (!/^[a-zA-Z0-9_-]+$/.test(deviceId)) {
         throw new Error('Invalid device ID');
       }
-      // await this.commandService.runCommand(
-      //   `adb -s ${deviceId} shell wm density ${240}`,
-      // );
-      // this.logger.log(`Set density to ${density} for device ${deviceId}`);
       const tmpfile = `./tmp/imgs/screenshot-${deviceId}.png`;
-      this.logger.debug(
-        `execute:adb -s ${deviceId} shell screencap -p /sdcard/screenshot-${deviceId}.png`,
-      );
-      await this.commandService.runCommand(
-        `adb -s ${deviceId} shell screencap -p /sdcard/screenshot-${deviceId}.png`,
-      );
-      this.logger.debug(
-        `execute: adb -s ${deviceId} pull /scard/screenshot.png ./tmp/imgs`,
-      );
-      await this.commandService.runCommand(
-        `adb -s ${deviceId} pull /sdcard/screenshot-${deviceId}.png ./tmp/imgs/screenshot-${deviceId}.png`,
-      );
-      this.logger.debug(
-        `screenshot saved to ./tmp/imgs/screenshot-${deviceId}.png`,
-      );
+      const debugAdb = process.env.DEBUG_ADB === '1'
+      debugAdb && this.logger.debug(`exec-out: adb -s ${deviceId} exec-out screencap -p > ${tmpfile}`)
+      await this.commandService.captureScreenToFile(deviceId, tmpfile)
+      debugAdb && this.logger.debug(`screenshot saved to ${tmpfile}`)
 
       // Reset density
       // await this.commandService.runCommand(

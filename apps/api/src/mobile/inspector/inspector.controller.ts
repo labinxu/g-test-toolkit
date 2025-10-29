@@ -6,9 +6,27 @@ export class InspectorController {
   constructor(private readonly inspector: InspectorService) {}
 
   @Get('snapshot')
-  async snapshot(@Query('deviceId') deviceId?: string) {
+  async snapshot(
+    @Query('deviceId') deviceId?: string,
+    @Query('autoWake') autoWake?: string,
+    @Query('autoUnlock') autoUnlock?: string,
+    @Query('unlockPassword') unlockPassword?: string,
+    @Query('unlockSwipe') unlockSwipe?: string,
+    @Query('unlockKeywords') unlockKeywords?: string,
+    @Query('minMs') minMs?: string,
+  ) {
     try {
-      return await this.inspector.snapshot({ deviceId });
+      const aw = autoWake ? /^(1|true|yes|on)$/i.test(autoWake) : true;
+      const au = autoUnlock ? /^(1|true|yes|on)$/i.test(autoUnlock) : false;
+      return await this.inspector.snapshot({
+        deviceId,
+        autoWake: aw,
+        autoUnlock: au,
+        unlockPassword: unlockPassword || undefined,
+        unlockSwipe: unlockSwipe || undefined,
+        unlockKeywords: unlockKeywords || undefined,
+        minIntervalMs: minMs ? Math.max(0, parseInt(minMs, 10) || 0) : undefined,
+      });
     } catch (e: any) {
       throw new NotFoundException(e?.message ?? 'Snapshot failed');
     }
@@ -40,4 +58,3 @@ export class InspectorController {
     }
   }
 }
-

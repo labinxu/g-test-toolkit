@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import { exec } from 'child_process'
+import { exec, spawn } from 'child_process'
+import * as fs from 'fs'
+import * as path from 'path'
 import { CustomLogger } from 'src/logger/logger.custom'
 import { LoggerService } from 'src/logger/logger.service'
 import { promisify } from 'util'
@@ -27,19 +29,56 @@ export class CommandService {
   }
 
   async powerOn(deviceId: string) {
-    await this.runCommand(`adb -s ${deviceId} shell input keyevent 26`)
+    // Use WAKEUP (224) instead of POWER (26) to avoid toggling screen off when it's already on
+    await this.runCommand(`adb -s ${deviceId} shell input keyevent 224`)
   }
   async unlock(deviceId: string) {
     await this.runCommand(`adb -s ${deviceId} shell input keyevent 66`)
     await sleep(3000)
   }
+  async wakeDevice(deviceId: string) {
+    try {
+      await this.powerOn(deviceId)
+    } catch {}
+    await sleep(200)
+    try {
+      await this.home(deviceId)
+    } catch {}
+    await sleep(200)
+  }
   async dumpxml(deviceId: string) {
-    const dumpcommand = `adb -s ${deviceId} shell uiautomator dump`
-    return await this.runCommand(dumpcommand)
+    // Try a couple of variants with light retries to improve reliability
+    const cmds = [
+      `adb -s ${deviceId} shell uiautomator dump /sdcard/window_dump.xml`,
+      `adb -s ${deviceId} shell uiautomator dump --compressed /sdcard/window_dump.xml`,
+      `adb -s ${deviceId} shell uiautomator dump`, // fallback to default path
+      `adb -s ${deviceId} shell uiautomator dump --compressed`,
+    ]
+    let lastErr: any = null
+    for (let attempt = 0; attempt < cmds.length; attempt++) {
+      try {
+        const cmd = cmds[attempt]
+        const res = await this.runCommand(cmd)
+        return res
+      } catch (err) {
+        lastErr = err
+        await sleep(150)
+      }
+    }
+    throw new NotFoundException(
+      `Failed to dump UI hierarchy for device ${deviceId}: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`
+    )
   }
   async pullDumpedXml(deviceId: string, outPath: string) {
     const pullcommand = `adb -s ${deviceId} pull /sdcard/window_dump.xml ${outPath}`
-    await this.runCommand(pullcommand)
+    // In some devices the file may not be immediately flushed; add a quick retry
+    try {
+      await this.runCommand(pullcommand)
+      return
+    } catch {
+      await sleep(150)
+      await this.runCommand(pullcommand)
+    }
   }
   async unlockScreen(
     deviceId: string,
@@ -48,18 +87,20 @@ export class CommandService {
     swipeData: string
   ) {
     const displaycommand = `adb -s ${deviceId} shell dumpsys power`
+    const contains = (s: string, k: string) => {
+      try { return s.toLowerCase().includes((k || '').toLowerCase()) } catch { return false }
+    }
     let result = await this.runCommand(displaycommand)
-    let goon = result.stdout.search(keywords)
-    if (goon != -1) {
+    if (contains(result.stdout, keywords)) {
       await this.home(deviceId)
       return
     }
     let counter = 3
-    while (goon === -1 && counter > 0) {
+    while (!contains(result.stdout, keywords) && counter > 0) {
       counter -= 1
       await this.powerOn(deviceId)
+      await sleep(200)
       result = await this.runCommand(displaycommand)
-      goon = result.stdout.search(keywords)
     }
     const swipeOn = `adb -s ${deviceId} shell input swipe ${swipeData}`
     await this.runCommand(swipeOn)
@@ -89,8 +130,29 @@ export class CommandService {
     await this.runCommand(command)
   }
   async pullSnapshot(deviceId: string, outfile: string) {
-    const command = `adb -s ${deviceId} pull /sdcardscreenshot.png ${outfile}`
+    // Fix pull path: missing slash between sdcard and filename
+    const command = `adb -s ${deviceId} pull /sdcard/screenshot.png ${outfile}`
     await this.runCommand(command)
+  }
+
+  async captureScreenToFile(deviceId: string, outfile: string): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      try {
+        const dir = path.dirname(outfile)
+        try { fs.mkdirSync(dir, { recursive: true }) } catch {}
+        const out = fs.createWriteStream(outfile)
+        const proc = spawn('adb', ['-s', deviceId, 'exec-out', 'screencap', '-p'])
+        proc.stdout.pipe(out)
+        proc.on('error', (err) => reject(err))
+        proc.on('close', (code) => {
+          out.close()
+          if (code === 0) resolve()
+          else reject(new Error(`exec-out screencap exited with code ${code}`))
+        })
+      } catch (e) {
+        reject(e as any)
+      }
+    })
   }
 
   async addFastUser(body: { url: string; userId: string }) {

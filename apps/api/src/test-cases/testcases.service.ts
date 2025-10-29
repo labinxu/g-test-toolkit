@@ -18,6 +18,8 @@ export class TestCasesService {
   private coreModuleLastUpdate = null
   private gettrModule = null
   private gettrModuleLastUpdate = null
+  private gettrAndroidModule: any = null
+  private gettrAndroidModuleLastUpdate: number | null = null
   constructor(
     private readonly loggerService: LoggerService,
     private readonly androidService: AndroidService,
@@ -112,7 +114,11 @@ export class TestCasesService {
       throw error
     }
   }
-  async runInSandbox(code: string, clientId?: string): Promise<any> {
+  async runInSandbox(
+    code: string,
+    clientId?: string,
+    options?: { keepAppOpen?: boolean; shareSession?: boolean; sessionKey?: string }
+  ): Promise<any> {
     let transformedCode = ''
     let coreLib: any
     let gettrLib: any
@@ -149,6 +155,11 @@ export class TestCasesService {
         clientId,
         loggerService: this.loggerService,
         browserHelper: new BrowserHelper(),
+        options: {
+          keepAppOpen: options?.keepAppOpen,
+          shareSession: options?.shareSession,
+          sessionKey: options?.sessionKey,
+        },
       }, // 注入传入的参数
       console, // 注入 console 以支持 console.log
       coreMain: coreLib.main,
@@ -171,6 +182,7 @@ export class TestCasesService {
     }
   }
   async loadCoreLib() {
+    // Prefer ESM build (supports TLA); fallback to CJS
     const coreLibPath = path.join(
       __dirname,
       '../..',
@@ -178,11 +190,13 @@ export class TestCasesService {
       'dist/index.js'
     )
     try {
-      if (!fs.existsSync(coreLibPath)) {
+      const coreLibPathMjs = coreLibPath.replace(/index\.js$/, 'index.mjs')
+      const filePathUsed = fs.existsSync(coreLibPathMjs) ? coreLibPathMjs : coreLibPath
+      if (!fs.existsSync(filePathUsed)) {
         throw new Error(`core-lib not found at ${coreLibPath}. Please generate core-lib first.`)
       }
       // 获取文件的修改时间
-      const stats = fs.statSync(coreLibPath)
+      const stats = fs.statSync(filePathUsed)
       const currentModifiedTime = stats.mtimeMs
       // 如果模块已缓存且修改时间未变，返回缓存的模块
       if (this.coreModule && this.coreModuleLastUpdate === currentModifiedTime) {
@@ -190,10 +204,43 @@ export class TestCasesService {
       }
 
       // 文件已更改，重新加载模块
-      console.log(`Reloading core-lib from ${coreLibPath}`)
-      // 使用 CJS 产物，配合 require 缓存清理
-      this.deepClearCache(coreLibPath)
-      const module = require(coreLibPath)
+      console.log(`Reloading core-lib from ${filePathUsed}`)
+      // 支持 ESM/CJS：优先 ESM（有 require shim），回退 CJS
+      const distIndexMjs = coreLibPathMjs
+      let module: any
+      const dynamicImport = (p: string) => (new Function('p', 'return import(p)'))(p) as Promise<any>
+      try {
+        if (fs.existsSync(distIndexMjs)) {
+          // 用唯一文件名规避 ESM 缓存，并保持 file:// 方案，保证 createRequire(import.meta.url) 可用
+          const dir = path.dirname(distIndexMjs)
+          const ts = Math.floor(currentModifiedTime)
+          const basename = `index-${ts}.mjs`
+          const uniquePath = path.join(dir, basename)
+          // 清理旧的临时 mjs
+          try {
+            for (const f of fs.readdirSync(dir)) {
+              if (/^index-\d+\.mjs$/.test(f)) {
+                try { fs.unlinkSync(path.join(dir, f)) } catch {}
+              }
+            }
+          } catch {}
+          fs.copyFileSync(distIndexMjs, uniquePath)
+          const { pathToFileURL } = require('url')
+          const href = pathToFileURL(uniquePath).href
+          module = await dynamicImport(href)
+        } else if (fs.existsSync(coreLibPath)) {
+          this.deepClearCache(coreLibPath)
+          module = require(coreLibPath)
+        }
+      } catch (e) {
+        // 回退到 CJS
+        if (fs.existsSync(coreLibPath)) {
+          this.deepClearCache(coreLibPath)
+          module = require(coreLibPath)
+        } else {
+          throw e
+        }
+      }
       // 更新缓存和修改时间
       this.coreModule = module
       this.coreModuleLastUpdate = currentModifiedTime
@@ -205,31 +252,64 @@ export class TestCasesService {
     }
   }
   async loadGettrLib() {
+    // Prefer ESM build; fallback to CJS
     const gettrLibPath = path.join(
       __dirname,
       '../..',
       process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr',
-      '/dist/index.js'
+      'dist/index.js'
     )
     try {
-      if (!fs.existsSync(gettrLibPath)) {
+      const gettrLibPathMjs = gettrLibPath.replace(/index\.js$/, 'index.mjs')
+      const filePathUsed = fs.existsSync(gettrLibPathMjs) ? gettrLibPathMjs : gettrLibPath
+      if (!fs.existsSync(filePathUsed)) {
         throw new Error(`gettr-lib not found at ${gettrLibPath}. Please generate gettr-lib first.`)
       }
       // 获取文件的修改时间
-      const stats = fs.statSync(gettrLibPath)
+      const stats = fs.statSync(filePathUsed)
       const currentModifiedTime = stats.mtimeMs
       // 如果模块已缓存且修改时间未变，返回缓存的模块
-      if (this.gettrModule && this.gettrModuleLastUpdate === currentModifiedTime) {
-        return this.gettrModule
+      if (this.gettrAndroidModule && this.gettrAndroidModuleLastUpdate === currentModifiedTime) {
+        return this.gettrAndroidModule
       }
 
       // 文件已更改，重新加载模块
-      console.log(`Reloading gettr-lib from ${gettrLibPath}`)
-      this.deepClearCache(gettrLibPath)
-      const module = require(gettrLibPath)
+      console.log(`Reloading gettr-lib from ${filePathUsed}`)
+      const distIndexMjs = gettrLibPathMjs
+      let module: any
+      const dynamicImport = (p: string) => (new Function('p', 'return import(p)'))(p) as Promise<any>
+      try {
+        if (fs.existsSync(distIndexMjs)) {
+          const dir = path.dirname(distIndexMjs)
+          const ts = Math.floor(currentModifiedTime)
+          const basename = `index-${ts}.mjs`
+          const uniquePath = path.join(dir, basename)
+          try {
+            for (const f of fs.readdirSync(dir)) {
+              if (/^index-\d+\.mjs$/.test(f)) {
+                try { fs.unlinkSync(path.join(dir, f)) } catch {}
+              }
+            }
+          } catch {}
+          fs.copyFileSync(distIndexMjs, uniquePath)
+          const { pathToFileURL } = require('url')
+          const href = pathToFileURL(uniquePath).href
+          module = await dynamicImport(href)
+        } else if (fs.existsSync(gettrLibPath)) {
+          this.deepClearCache(gettrLibPath)
+          module = require(gettrLibPath)
+        }
+      } catch (e) {
+        if (fs.existsSync(gettrLibPath)) {
+          this.deepClearCache(gettrLibPath)
+          module = require(gettrLibPath)
+        } else {
+          throw e
+        }
+      }
       // 更新缓存和修改时间
-      this.gettrModule = module
-      this.gettrModuleLastUpdate = currentModifiedTime
+      this.gettrAndroidModule = module
+      this.gettrAndroidModuleLastUpdate = currentModifiedTime
 
       return module
     } catch (error) {
@@ -238,20 +318,23 @@ export class TestCasesService {
     }
   }
   async loadGettrAndroidLib() {
+    // Prefer ESM build; fallback to CJS
     const gettrLibPath = path.join(
       __dirname,
       '../..',
       process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android',
-      '/dist/index.js'
+      'dist/index.js'
     )
     try {
-      if (!fs.existsSync(gettrLibPath)) {
+      const gettrLibPathMjs = gettrLibPath.replace(/index\.js$/, 'index.mjs')
+      const filePathUsed = fs.existsSync(gettrLibPathMjs) ? gettrLibPathMjs : gettrLibPath
+      if (!fs.existsSync(filePathUsed)) {
         throw new Error(
           `gettr-android-lib not found at ${gettrLibPath}. Please generate gettr-android-lib first.`
         )
       }
       // 获取文件的修改时间
-      const stats = fs.statSync(gettrLibPath)
+      const stats = fs.statSync(filePathUsed)
       const currentModifiedTime = stats.mtimeMs
       // 如果模块已缓存且修改时间未变，返回缓存的模块
       if (this.gettrModule && this.gettrModuleLastUpdate === currentModifiedTime) {
@@ -259,9 +342,39 @@ export class TestCasesService {
       }
 
       // 文件已更改，重新加载模块
-      console.log(`Reloading gettr-android-lib from ${gettrLibPath}`)
-      this.deepClearCache(gettrLibPath)
-      const module = require(gettrLibPath)
+      console.log(`Reloading gettr-android-lib from ${filePathUsed}`)
+      const distIndexMjs = gettrLibPathMjs
+      let module: any
+      const dynamicImport = (p: string) => (new Function('p', 'return import(p)'))(p) as Promise<any>
+      try {
+        if (fs.existsSync(distIndexMjs)) {
+          const dir = path.dirname(distIndexMjs)
+          const ts = Math.floor(currentModifiedTime)
+          const basename = `index-${ts}.mjs`
+          const uniquePath = path.join(dir, basename)
+          try {
+            for (const f of fs.readdirSync(dir)) {
+              if (/^index-\d+\.mjs$/.test(f)) {
+                try { fs.unlinkSync(path.join(dir, f)) } catch {}
+              }
+            }
+          } catch {}
+          fs.copyFileSync(distIndexMjs, uniquePath)
+          const { pathToFileURL } = require('url')
+          const href = pathToFileURL(uniquePath).href
+          module = await dynamicImport(href)
+        } else if (fs.existsSync(gettrLibPath)) {
+          this.deepClearCache(gettrLibPath)
+          module = require(gettrLibPath)
+        }
+      } catch (e) {
+        if (fs.existsSync(gettrLibPath)) {
+          this.deepClearCache(gettrLibPath)
+          module = require(gettrLibPath)
+        } else {
+          throw e
+        }
+      }
       // 更新缓存和修改时间
       this.gettrModule = module
       this.gettrModuleLastUpdate = currentModifiedTime
@@ -299,8 +412,11 @@ export class TestCasesService {
     delete require.cache[require.resolve(indexPath)]
 
     // 清理构建产物的缓存
-    const distIndexPath = path.join(outputDir, 'index.js')
-    this.deepClearCache(distIndexPath)
+    // 清理 ESM 产物的缓存无需 require.cache；这里保持向后兼容
+    const distIndexJs = path.join(outputDir, 'index.js')
+    const distIndexMjs = path.join(outputDir, 'index.mjs')
+    this.deepClearCache(distIndexJs)
+    this.deepClearCache(distIndexMjs)
   }
 
   async buildCoreLib(clientId?: string) {
@@ -327,8 +443,10 @@ export class TestCasesService {
     delete require.cache[require.resolve(indexPath)]
 
     // 清理构建产物的缓存
-    const distIndexPath = path.join(outputDir, 'index.js')
-    this.deepClearCache(distIndexPath)
+    const distIndexJs = path.join(outputDir, 'index.js')
+    const distIndexMjs = path.join(outputDir, 'index.mjs')
+    this.deepClearCache(distIndexJs)
+    this.deepClearCache(distIndexMjs)
   }
   async buildGettrAndroidLib(clientId?: string) {
     console.log('libdir:', process.env.CORE_LIB_DIR)
@@ -354,8 +472,10 @@ export class TestCasesService {
     delete require.cache[require.resolve(indexPath)]
 
     // 清理构建产物的缓存
-    const distIndexPath = path.join(outputDir, 'index.js')
-    this.deepClearCache(distIndexPath)
+    const distIndexJs = path.join(outputDir, 'index.js')
+    const distIndexMjs = path.join(outputDir, 'index.mjs')
+    this.deepClearCache(distIndexJs)
+    this.deepClearCache(distIndexMjs)
   }
 
   async generateIndexWithTsMorph(coreDir: string, srcDir: string, indexPath: string) {
@@ -389,30 +509,48 @@ export class TestCasesService {
   }
 
   async buildWithEsbuild(indexPath: string, outputDir: string) {
-    const buildOptions: esbuild.BuildOptions = {
-      entryPoints: [indexPath], // 从 index.ts 开始
+    const baseOptions: esbuild.BuildOptions = {
+      entryPoints: [indexPath],
       bundle: true,
       outdir: outputDir,
-      format: 'cjs', // 统一使用 CommonJS 格式，便于 require 和缓存清理
       platform: 'node',
       sourcemap: false,
       minify: false,
-      loader: {
-        '.ts': 'ts', // TypeScript loader
-      },
-      external: ['node:*'],
+      loader: { '.ts': 'ts' },
       write: true,
     }
 
     try {
-      const result = await esbuild.build(buildOptions)
-      if (result.errors.length > 0) {
-        console.error('Esbuild errors:', result.errors)
+      // 1) ESM 构建（支持 TLA），生成 index.mjs，并注入 require shim
+      const esmOptions: esbuild.BuildOptions = {
+        ...baseOptions,
+        format: 'esm',
+        outExtension: { '.js': '.mjs' },
+        banner: {
+          js: [
+            "import { createRequire } from 'module';",
+            "const require = createRequire(import.meta.url);",
+            "import { fileURLToPath } from 'url';",
+            "import path from 'path';",
+            "const __filename = fileURLToPath(import.meta.url);",
+            "const __dirname = path.dirname(__filename);",
+          ].join('\n'),
+        },
+        external: ['node:*'],
       }
+      const esmResult = await esbuild.build(esmOptions)
+      if (esmResult.errors?.length) console.error('ESM build errors:', esmResult.errors)
+
+      // 2) CJS 构建（兼容无 TLA 环境），生成 index.js
+      const cjsOptions: esbuild.BuildOptions = {
+        ...baseOptions,
+        format: 'cjs',
+      }
+      const cjsResult = await esbuild.build(cjsOptions)
+      if (cjsResult.errors?.length) console.error('CJS build errors:', cjsResult.errors)
+
       const files = fs.readdirSync(outputDir)
-      if (files.length === 0) {
-        throw new Error(`No files found in ${outputDir}. Build may have failed.`)
-      }
+      if (files.length === 0) throw new Error(`No files found in ${outputDir}. Build may have failed.`)
       console.log(`Built lib to ${outputDir}:`, files)
 
       return `build succssfully`
@@ -421,5 +559,81 @@ export class TestCasesService {
     } finally {
       esbuild.stop()
     }
+  }
+
+  async cleanupKeptAndroidSessions() {
+    const drivers: Map<string, any> | undefined = (globalThis as any).__androidDrivers
+    if (!drivers || drivers.size === 0) {
+      return { closed: 0, errors: 0, kept: 0 }
+    }
+    let closed = 0
+    let errors = 0
+    const kept = drivers.size
+    for (const [key, driver] of Array.from(drivers.entries())) {
+      try {
+        await driver?.deleteSession?.()
+        closed += 1
+      } catch (e) {
+        errors += 1
+        this.logger.warn(`Failed to close driver ${key}: ${e}`)
+      } finally {
+        try { drivers.delete(key) } catch {}
+      }
+    }
+    return { closed, errors, kept }
+  }
+  
+  async cleanupKeptAndroidSessionsFor(clientId: string) {
+    if (!clientId) {
+      return { closed: 0, errors: 0, kept: 0 }
+    }
+    const drivers: Map<string, any> | undefined = (globalThis as any).__androidDrivers
+    if (!drivers || drivers.size === 0) {
+      return { closed: 0, errors: 0, kept: 0 }
+    }
+    const prefix = `${clientId}:`
+    const sharePrefix = `share:${clientId}`
+    let closed = 0
+    let errors = 0
+    let kept = 0
+    for (const [key, driver] of Array.from(drivers.entries())) {
+      if (!(key.startsWith(prefix) || key === sharePrefix)) {
+        kept += 1
+        continue
+      }
+      try {
+        await driver?.deleteSession?.()
+        closed += 1
+      } catch (e) {
+        errors += 1
+        this.logger.warn(`Failed to close driver ${key}: ${e}`)
+      } finally {
+        try { drivers.delete(key) } catch {}
+      }
+    }
+    return { closed, errors, kept }
+  }
+
+  async cleanupSharedSessionByKey(sessionKey: string) {
+    if (!sessionKey) return { closed: 0, errors: 0, kept: 0 }
+    const drivers: Map<string, any> | undefined = (globalThis as any).__androidDrivers
+    if (!drivers || drivers.size === 0) return { closed: 0, errors: 0, kept: 0 }
+    const key = `share:${sessionKey}`
+    let closed = 0
+    let errors = 0
+    let kept = drivers.size
+    const drv = drivers.get(key)
+    if (!drv) return { closed: 0, errors: 0, kept }
+    try {
+      await drv?.deleteSession?.()
+      closed = 1
+    } catch (e) {
+      errors = 1
+      this.logger.warn(`Failed to close driver ${key}: ${e}`)
+    } finally {
+      try { drivers.delete(key) } catch {}
+    }
+    kept = drivers.size
+    return { closed, errors, kept }
   }
 }

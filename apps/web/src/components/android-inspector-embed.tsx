@@ -30,6 +30,8 @@ type Props = {
   autoCenterOnClick?: boolean
   onAutoCenterChange?: (v: boolean) => void
   initialState?: AndroidInspectorEmbedState
+  onInsertCode?: (code: string) => void
+  onSuggestSelector?: (selector: string, meta?: { isInput: boolean; node: NodeInfo }) => void
 }
 
 const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
@@ -43,6 +45,8 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
       autoCenterOnClick: controlledAutoCenter,
       onAutoCenterChange,
       initialState,
+      onInsertCode,
+      onSuggestSelector,
     },
     ref
   ) => {
@@ -54,7 +58,14 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
     try {
       setLoading(true)
       setError(null)
-      const qs = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ''
+      const params = new URLSearchParams()
+      if (deviceId) params.set('deviceId', deviceId)
+      try {
+        const v = localStorage.getItem('gtt:inspector:snapshot:intervalMs')
+        const ms = v ? Math.max(0, parseInt(v, 10) || 0) : 0
+        if (ms > 0) params.set('minMs', String(ms))
+      } catch {}
+      const qs = params.toString() ? `?${params.toString()}` : ''
       const res = await fetch(`/api/inspector/snapshot${qs}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(await res.text())
       const json = (await res.json()) as Snapshot
@@ -186,6 +197,35 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
   })
 
   const handleNodeClick = async (n: NodeInfo) => {
+    // Generate best selector and code line for insertion
+    const esc = (s: string) => s.replace(/['\\]/g, (m) => `\\${m}`)
+    const buildBestSelector = (node: NodeInfo): string => {
+      if (node.contentDesc) return `~${esc(node.contentDesc)}`
+      if (node.resourceId) return `#${esc(node.resourceId)}`
+      if (node.text) return `android=new UiSelector().text(\"${node.text.replace(/\"/g, '\\\"')}\")`
+      const parts: string[] = []
+      if (node.class) parts.push(node.class)
+      if (node.text) parts.push(`@text=\"${node.text.replace(/\"/g, '\\\"')}\"`)
+      if (node.resourceId) parts.push(`@resource-id=\"${node.resourceId}\"`)
+      const xpath = parts.length > 1 ? `//${parts[0]}[${parts.slice(1).join(' and ')}]` : `//${parts[0] || '*'}`
+      return xpath
+    }
+    try {
+      const selector = buildBestSelector(n)
+      const isInput = (() => {
+        const cls = (n.class || '').toLowerCase()
+        return (
+          cls.includes('edittext') ||
+          cls.includes('textinput') ||
+          cls.includes('textfield') ||
+          cls.includes('autocomplete') ||
+          cls.includes('search')
+        )
+      })()
+      const code = `await this.page.$('${selector}').click()`
+      onInsertCode?.(code)
+      onSuggestSelector?.(selector, { isInput, node: n })
+    } catch {}
     try {
       const c = centerOf(n)
       await fetch('/api/inspector/tap', {

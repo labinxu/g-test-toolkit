@@ -111,7 +111,7 @@ export default function Page() {
               </Button>
             </div>
             <div className="flex flex-row gap-3">
-              <strong>Server Status:</strong>{' '}
+              <strong>Status:</strong>{' '}
               <span style={{ color: connected ? 'green' : 'red' }}>
                 {connected ? 'Connected' : 'Disconnected'}
               </span>

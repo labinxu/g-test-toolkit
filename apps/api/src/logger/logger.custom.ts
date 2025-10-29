@@ -1,42 +1,40 @@
-import { Injectable, Scope, Optional, forwardRef } from '@nestjs/common';
-import * as winston from 'winston';
-import { Inject } from '@nestjs/common';
-import { LoggerGateway } from './logger.gateway';
-const loggerFormat = winston.format.printf(
-  ({ timestamp, level, message, context }) => {
-    const tag = context ? `[${context}]` : '';
-    return `${timestamp} ${level} ${tag} ${message}`;
-  },
-);
+import { Injectable, Scope, Optional, forwardRef } from '@nestjs/common'
+import * as winston from 'winston'
+import { Inject } from '@nestjs/common'
+import { LoggerGateway } from './logger.gateway'
+const loggerFormat = winston.format.printf(({ timestamp, level, message, context }) => {
+  const tag = context ? `[${context}]` : ''
+  return `${timestamp} ${level} ${tag} ${message}`
+})
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class CustomLogger {
-  private logger: winston.Logger;
-  private context = 'CustomLogger';
-  private clientId: string | null;
+  private logger: winston.Logger
+  private context = 'CustomLogger'
+  private clientId: string | null
   constructor(
     private readonly winstonLogger: winston.Logger,
     @Optional()
     @Inject(forwardRef(() => LoggerGateway))
     private readonly loggerGateway: LoggerGateway,
-    clientId?: string,
+    clientId?: string
   ) {
-    this.logger = winstonLogger.child({ context: this.context, clientId });
-    this.winstonLogger = winstonLogger;
-    this.clientId = clientId;
+    this.logger = winstonLogger.child({ context: this.context, clientId })
+    this.winstonLogger = winstonLogger
+    this.clientId = clientId
   }
 
   format(level: string, message: string): string {
-    const timestamp = new Date().toISOString();
-    const tag = this.context ? `[${this.context}]` : '';
-    return `${timestamp}  ${tag} [${level}] ${message}`;
+    const timestamp = new Date().toISOString()
+    const tag = this.context ? `[${this.context}]` : ''
+    return `${timestamp}  ${tag} [${level}] ${message}`
   }
   setContext(context: string) {
-    this.context = context;
+    this.context = context
     this.logger = this.winstonLogger.child({
       context,
       clientId: this.clientId,
-    });
+    })
   }
   addLogFileTransports(filename: string) {
     const contextTrans = new winston.transports.File({
@@ -46,46 +44,43 @@ export class CustomLogger {
       maxsize: 20 * 1024 * 1024,
       maxFiles: 30,
       format: winston.format.combine(winston.format.timestamp(), loggerFormat),
-    });
+    })
 
-    this.logger.add(contextTrans);
-    return contextTrans;
+    this.logger.add(contextTrans)
+    return contextTrans
   }
   removeLogFileTransports(transport: winston.transports.FileTransportInstance) {
-    this.logger.remove(transport);
+    this.logger.remove(transport)
   }
   sendTo(clientId: string, msg: string, level?: string) {
-    clientId &&
-      this.loggerGateway?.sendLogTo(
-        clientId,
-        this.format(level ? level : '', msg),
-      );
+    clientId && this.loggerGateway?.sendLogTo(clientId, this.format(level ? level : '', msg))
   }
   info(message: string, tag?: string) {
-    this.logger.info(message);
-    this.sendTo(this.clientId, message, tag ? tag : 'info');
+    this.logger.info(message)
+    this.sendTo(this.clientId, message, tag ? tag : 'info')
   }
 
   error(message: string, tag?: string) {
-    this.logger.error(message);
-    this.sendTo(this.clientId, message, tag ? tag : 'error');
+    this.logger.error(message)
+    this.sendTo(this.clientId, message, tag ? tag : 'error')
   }
 
   warn(message: string, tag?: string) {
-    this.logger.warn(message);
-    this.sendTo(this.clientId, message, tag ? tag : 'warn');
+    this.logger.warn(message)
+    this.sendTo(this.clientId, message, tag ? tag : 'warn')
   }
 
   debug(message: string, tag?: string) {
-    this.logger.debug(message);
-    this.sendTo(this.clientId, message, tag ? tag : 'debug');
+    this.logger.debug(message)
+    this.sendTo(this.clientId, message, tag ? tag : 'debug')
   }
 
   verbose(message: string, tag?: string) {
-    this.logger.verbose(message);
-    this.sendTo(this.clientId, message, tag ? tag : 'verbose');
+    this.logger.verbose(message)
+    this.sendTo(this.clientId, message, tag ? tag : 'verbose')
   }
   complete(clientId?: string) {
-    this.loggerGateway.sendExitTo(clientId ? clientId : this.clientId);
+    this.logger.info(`send exit to ${clientId}`)
+    this.loggerGateway.sendExitTo(clientId ? clientId : this.clientId)
   }
 }

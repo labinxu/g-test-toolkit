@@ -62,6 +62,8 @@ export function withAndroid(options: {
   path?: string
   timeout?: number
   retry?: number
+  /** 执行完成后是否保持 App 运行 */
+  keepAppOpen?: boolean
 }): ClassDecorator {
   return function (constructor: Function) {
     const opts = {
@@ -71,11 +73,13 @@ export function withAndroid(options: {
       path: '/',
       timeout: 60000,
       retry: 3,
+      keepAppOpen: true,
       ...options,
     }
     ;(constructor as any).__withAndroid = true
     ;(constructor as any).__timeout = opts.timeout
     ;(constructor as any).__retry = opts.retry
+    ;(constructor as any).__keepAppOpen = opts.keepAppOpen
     ;(constructor as any).__androidOpts = {
       protocol: opts.protocol,
       hostname: opts.hostname,

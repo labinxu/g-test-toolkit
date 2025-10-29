@@ -45,6 +45,9 @@ export default function DirectoryTree({
   setRefreshKey,
   collapsible = true,
   run,
+  selectedPath: selectedPathProp,
+  cacheEnabled = true,
+  cacheTtlMs = 60_000,
 }: {
   api: string;
   currentDir: string;
@@ -54,6 +57,9 @@ export default function DirectoryTree({
   setRefreshKey: (k: number) => void;
   collapsible?: boolean;
   run?: (node?: FileNode, clientId?: string) => Promise<void>;
+  selectedPath?: string | null;
+  cacheEnabled?: boolean;
+  cacheTtlMs?: number;
 }) {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -65,23 +71,78 @@ export default function DirectoryTree({
   const [deleting, setDeleting] = useState(false);
   const { isAuthenticated } = useSession();
 
-  // Initialize and restore expanded state
+  // Initialize and restore expanded state (with local cache for faster paint)
   useEffect(() => {
     if (!isAuthenticated) {
       return;
     }
+    // 1) Try fast path: load cached tree (configurable TTL)
+    if (cacheEnabled) {
+      try {
+        const CACHE_KEY = `gtt:dirTree:${api}`;
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const obj = JSON.parse(raw) as { at: number; tree: FileNode[] };
+          if (obj && Array.isArray(obj.tree) && Number.isFinite(obj.at) && Date.now() - obj.at < cacheTtlMs) {
+            setTree(obj.tree);
+            const saved = localStorage.getItem(EXPANDED_KEY);
+            if (saved) setExpanded(JSON.parse(saved));
+            // Apply selected path if provided
+            if (selectedPathProp) {
+              setSelectedPath(selectedPathProp);
+              try {
+                const allDirs = getAllDirPaths(obj.tree);
+                const open: Record<string, boolean> = {};
+                for (const dir of allDirs) {
+                  if (selectedPathProp.startsWith(dir)) open[dir] = true;
+                }
+                setExpanded((prev) => ({ ...prev, ...open }));
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 2) Always fetch in background to keep fresh
     fetch(api, {
       credentials: 'include',
     })
       .then((res) => res.json())
       .then((treeData: FileNode[]) => {
         setTree(treeData);
+        if (cacheEnabled) {
+          try {
+            const CACHE_KEY = `gtt:dirTree:${api}`;
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), tree: treeData }));
+          } catch {}
+        }
         const saved = localStorage.getItem(EXPANDED_KEY);
         if (saved) {
           setExpanded(JSON.parse(saved));
         }
+        // Apply controlled selected path after load
+        if (selectedPathProp) {
+          setSelectedPath(selectedPathProp);
+          // Auto-expand folders along the selected path
+          try {
+            const allDirs = getAllDirPaths(treeData);
+            const open: Record<string, boolean> = {};
+            for (const dir of allDirs) {
+              if (selectedPathProp.startsWith(dir)) open[dir] = true;
+            }
+            setExpanded((prev) => ({ ...prev, ...open }));
+          } catch {}
+        }
       });
-  }, [refreshKey, isAuthenticated]);
+  }, [refreshKey, isAuthenticated, cacheEnabled, cacheTtlMs]);
+
+  // Update selection when prop changes (after tree present)
+  useEffect(() => {
+    if (typeof selectedPathProp === 'string') {
+      setSelectedPath(selectedPathProp);
+    }
+  }, [selectedPathProp, tree]);
 
   // Persist expanded state
   useEffect(() => {
