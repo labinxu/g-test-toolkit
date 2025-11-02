@@ -15,4 +15,7 @@ export class User {
 
   @Column()
   password: string;
+
+  @Column({ type: 'boolean', default: false })
+  isAdmin: boolean;
 }

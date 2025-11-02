@@ -12,6 +12,7 @@ import {
   RefreshCwOff,
   Server,
   ServerOff,
+  Clover,
 } from 'lucide-react'
 import { AppiumToggleButton } from '@/components/appium-toggle-button'
 import { SlidersHorizontal } from 'lucide-react'
@@ -19,6 +20,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -45,10 +47,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { MousePointer, Type, Braces, Timer, Check } from 'lucide-react'
+import { MousePointer, Type, Braces, Timer, Check, Sparkles } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useLibsPageCache } from '../../page-cache'
+import { normalizeResponseError } from '@/lib/error'
 
 export default function Page() {
   const libsCache = useLibsPageCache()
@@ -77,6 +83,30 @@ export default function Page() {
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [refreshKeyInspector, setRefreshKeyInspector] = useState(0)
   const [autoCenter, setAutoCenter] = useState(false)
+  const [showClickableOnly, setShowClickableOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      const v = localStorage.getItem('gtt:inspector:clickableOnly')
+      return v == null ? true : v === '1' || v === 'true'
+    } catch {}
+    return true
+  })
+  const [overlayMode, setOverlayMode] = useState<'boxes' | 'markers'>(() => {
+    if (typeof window === 'undefined') return 'boxes'
+    try {
+      const v = localStorage.getItem('gtt:inspector:overlayMode')
+      return v === 'markers' ? 'markers' : 'boxes'
+    } catch {}
+    return 'boxes'
+  })
+  const [preferAppiumLocal, setPreferAppiumLocal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const v = localStorage.getItem('gtt:inspector:preferAppiumSource')
+      return v === '1' || v === 'true'
+    } catch {}
+    return false
+  })
   const [autoRefreshInspector, setAutoRefreshInspector] = useState(false)
   const [resetKeyInspector, setResetKeyInspector] = useState(0)
   const inspectorRef = useRef<AndroidInspectorEmbedHandle | null>(null)
@@ -121,6 +151,15 @@ export default function Page() {
         const rc = localStorage.getItem('gtt:testcases-libs:editor:wrapColumn')
         const n = rc ? parseInt(rc, 10) : 80
         setWrapColumn(Number.isFinite(n) ? n : 80)
+        // AI defaults
+        const rulesOnly = localStorage.getItem('gtt:ai:libs:useRulesOnly')
+        setAiUseRulesOnly(rulesOnly === '1')
+        const ml = localStorage.getItem('gtt:ai:libs:maxLines')
+        const nl = ml ? parseInt(ml, 10) : 0
+        setAiMaxLines(Number.isFinite(nl) ? (nl <= 0 ? 0 : Math.max(0, Math.min(200, nl))) : 0)
+        const mc = localStorage.getItem('gtt:ai:libs:maxCol')
+        const nc = mc ? parseInt(mc, 10) : 0
+        setAiMaxCol(Number.isFinite(nc) ? (nc <= 0 ? 0 : Math.max(0, Math.min(400, nc))) : 0)
       } catch {}
     }
     window.addEventListener('storage', handler)
@@ -232,6 +271,107 @@ export default function Page() {
   const [cachedInspectorState, setCachedInspectorState] = useState<
     AndroidInspectorEmbedState | undefined
   >(undefined)
+
+  // AI dialog state
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiUseRulesOnly, setAiUseRulesOnly] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return (localStorage.getItem('gtt:ai:libs:useRulesOnly') || '0') === '1'
+    } catch {}
+    return false
+  })
+  const [aiMaxLines, setAiMaxLines] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    try {
+      const raw = localStorage.getItem('gtt:ai:libs:maxLines')
+      const n = raw ? parseInt(raw, 10) : 0
+      if (!Number.isFinite(n)) return 0
+      if (n <= 0) return 0
+      return Math.max(0, Math.min(200, n))
+    } catch {}
+    return 0
+  })
+  const [aiMaxCol, setAiMaxCol] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    try {
+      const raw = localStorage.getItem('gtt:ai:libs:maxCol')
+      const n = raw ? parseInt(raw, 10) : 0
+      if (!Number.isFinite(n)) return 0
+      if (n <= 0) return 0
+      return Math.max(0, Math.min(400, n))
+    } catch {}
+    return 0
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('gtt:ai:libs:useRulesOnly', aiUseRulesOnly ? '1' : '0')
+    } catch {}
+  }, [aiUseRulesOnly])
+  useEffect(() => {
+    try {
+      if (aiMaxLines <= 0) localStorage.setItem('gtt:ai:libs:maxLines', '0')
+      else
+        localStorage.setItem(
+          'gtt:ai:libs:maxLines',
+          String(Math.max(0, Math.min(200, Math.floor(aiMaxLines))))
+        )
+    } catch {}
+  }, [aiMaxLines])
+  useEffect(() => {
+    try {
+      if (aiMaxCol <= 0) localStorage.setItem('gtt:ai:libs:maxCol', '0')
+      else
+        localStorage.setItem(
+          'gtt:ai:libs:maxCol',
+          String(Math.max(0, Math.min(400, Math.floor(aiMaxCol))))
+        )
+    } catch {}
+  }, [aiMaxCol])
+
+  const handleGenerateAi = useCallback(async () => {
+    try {
+      setAiLoading(true)
+      const snap = inspectorRef.current?.exportState()?.data ?? null
+      const payload: any = {
+        prompt: aiPrompt || '',
+        deviceId: selectedDeviceId || undefined,
+        snapshot: snap || undefined,
+        filePath: currentFile || undefined,
+        cursor: editorRef.current?.getCursor?.() ?? undefined,
+        focusNodeId: inspectorRef.current?.exportState()?.selectedId ?? undefined,
+        useRulesOnly: aiUseRulesOnly ? 1 : 0,
+        maxLines: aiMaxLines <= 0 ? 0 : Math.max(0, Math.min(200, Math.floor(aiMaxLines))),
+      }
+      const res = await fetch('/api/ai/libs-code', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...payload,
+          maxCol: aiMaxCol <= 0 ? 0 : Math.max(0, Math.min(400, Math.floor(aiMaxCol))),
+        }),
+      })
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Generation failed')
+      }
+      const data = await res.json()
+      const snippet = (data?.snippet || '').toString().trim()
+      if (!snippet) {
+        throw new Error('LLM 返回为空')
+      }
+      editorRef.current?.insertAtCursor(snippet, { ensureNewLine: true })
+      setAiOpen(false)
+      setAiPrompt('')
+      toast.success('已插入生成脚本')
+    } catch (e: any) {
+      toast.error(e?.message || 'AI 生成失败')
+    } finally {
+      setAiLoading(false)
+    }
+  }, [aiPrompt, selectedDeviceId, currentFile])
   const { logs, connected, clientId, clearLogs, running, setRunning } = useSocket()
   const [fileCache, setFileCache] = useState<Record<string, { content: string; original: string }>>(
     {}
@@ -361,7 +501,12 @@ export default function Page() {
           'Content-Type': 'application/json',
           ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         },
-        body: JSON.stringify({ filePath: currentFile, clientId, shareSession: true, sessionKey: (selectedDeviceId || undefined) }),
+        body: JSON.stringify({
+          filePath: currentFile,
+          clientId,
+          shareSession: true,
+          sessionKey: selectedDeviceId || undefined,
+        }),
       })
       toast.message('Start successful...')
       setOpenLog(true)
@@ -410,6 +555,23 @@ export default function Page() {
     }, 3000)
     return () => window.clearInterval(id)
   }, [showAndroidInspector, autoRefreshInspector])
+  // Sync clickable-only from Parameters changes
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const v = localStorage.getItem('gtt:inspector:clickableOnly')
+        setShowClickableOnly(v == null ? true : v === '1' || v === 'true')
+        const m = localStorage.getItem('gtt:inspector:overlayMode')
+        setOverlayMode(m === 'markers' ? 'markers' : 'boxes')
+      } catch {}
+    }
+    window.addEventListener('storage', handler)
+    window.addEventListener('gtt-parameters-updated', handler as any)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener('gtt-parameters-updated', handler as any)
+    }
+  }, [])
 
   // Appium status handled by shared AppiumToggleButton
   const renderLogs = () => {
@@ -484,6 +646,122 @@ export default function Page() {
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent sideOffset={6}>Build Libs</TooltipContent>
+                  </Tooltip>
+                  {/* AI generate */}
+                  <Tooltip>
+                    <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          aria-label="AI 生成脚本片段"
+                          type="button"
+                          onClick={() => {
+                            setAiOpen(true)
+                            setAiPrompt('')
+                          }}
+                        >
+                          <Sparkles className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <DialogContent
+                        className="max-w-2xl"
+                        onEscapeKeyDown={(e) => e.preventDefault()}
+                        onPointerDownOutside={(e) => e.preventDefault()}
+                        onInteractOutside={(e) => e.preventDefault()}
+                      >
+                        <DialogHeader>
+                          <DialogTitle>AI 生成脚本片段</DialogTitle>
+                          <DialogDescription>
+                            根据当前页面上下文生成可粘贴的脚本代码片段。
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-muted-foreground text-xs">
+                            需求描述（例如：点击“登录”，或在“用户名”输入框输入“test_user”）
+                          </label>
+                          <Textarea
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            placeholder="描述你要在当前页面执行的操作"
+                            className="min-h-24"
+                          />
+                          <div className="flex items-center gap-2">
+                            <Button onClick={handleGenerateAi} disabled={aiLoading}>
+                              {aiLoading ? '生成中…' : '生成'}
+                            </Button>
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-4 rounded-md border p-2">
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                id="ai-rules-only"
+                                checked={aiUseRulesOnly}
+                                onCheckedChange={(v) => setAiUseRulesOnly(!!v)}
+                              />
+                              <label
+                                htmlFor="ai-rules-only"
+                                className="cursor-pointer text-xs select-none"
+                              >
+                                仅规则生成（禁用LLM）
+                              </label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label
+                                htmlFor="ai-max-lines"
+                                className="text-muted-foreground text-xs"
+                              >
+                                最大行数
+                              </label>
+                              <Input
+                                id="ai-max-lines"
+                                type="number"
+                                min={0}
+                                max={200}
+                                className="h-8 w-20"
+                                value={aiMaxLines}
+                                onChange={(e) => {
+                                  const n = parseInt(e.target.value || '0', 10)
+                                  if (!Number.isFinite(n)) {
+                                    setAiMaxLines(0)
+                                  } else if (n <= 0) {
+                                    setAiMaxLines(0)
+                                  } else {
+                                    setAiMaxLines(Math.max(0, Math.min(200, n)))
+                                  }
+                                }}
+                              />
+                              <span className="text-muted-foreground text-xs">0 表示不限制</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label htmlFor="ai-max-col" className="text-muted-foreground text-xs">
+                                最大列宽
+                              </label>
+                              <Input
+                                id="ai-max-col"
+                                type="number"
+                                min={0}
+                                max={400}
+                                className="h-8 w-24"
+                                value={aiMaxCol}
+                                onChange={(e) => {
+                                  const n = parseInt(e.target.value || '0', 10)
+                                  if (!Number.isFinite(n)) {
+                                    setAiMaxCol(0)
+                                  } else if (n <= 0) {
+                                    setAiMaxCol(0)
+                                  } else {
+                                    setAiMaxCol(Math.max(0, Math.min(400, n)))
+                                  }
+                                }}
+                              />
+                              <span className="text-muted-foreground text-xs">0 表示不限制</span>
+                            </div>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    <TooltipContent sideOffset={6}>AI 生成脚本</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -657,6 +935,26 @@ export default function Page() {
                         {autoCenter ? 'Auto-center: on' : 'Auto-center: off'}
                       </TooltipContent>
                     </Tooltip>
+                    {/* Quick toggle: Appium pageSource (local override) */}
+                    {/* Appium XML (faster; may hang)*/}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={'ghost'}
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          onClick={() => setPreferAppiumLocal((v) => !v)}
+                          aria-label="Appium XML (faster; may hang)"
+                        >
+                          <Clover
+                            className={`h-4 w-4 ${preferAppiumLocal ? 'text-blue-600' : ''}`}
+                          />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>
+                        {preferAppiumLocal ? 'Appium XM: on' : 'Appium XML: off'}
+                      </TooltipContent>
+                    </Tooltip>
 
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -665,14 +963,14 @@ export default function Page() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 rounded-full relative"
+                              className="relative h-8 w-8 rounded-full"
                               aria-label="Select device"
                             >
                               <Smartphone className="h-4 w-4" />
                               {selectedDeviceId ? (
                                 <span
                                   aria-hidden
-                                  className="absolute -top-0.5 -right-0.5 inline-block h-2 w-2 rounded-full bg-green-500 ring-2 ring-background"
+                                  className="ring-background absolute -top-0.5 -right-0.5 inline-block h-2 w-2 rounded-full bg-green-500 ring-2"
                                 />
                               ) : null}
                             </Button>
@@ -686,7 +984,13 @@ export default function Page() {
                                   ) : (
                                     <span className="mr-2 inline-block h-4 w-4" />
                                   )}
-                                  <span className={selectedDeviceId === id ? 'text-green-700 font-medium' : ''}>{id}</span>
+                                  <span
+                                    className={
+                                      selectedDeviceId === id ? 'font-medium text-green-700' : ''
+                                    }
+                                  >
+                                    {id}
+                                  </span>
                                 </DropdownMenuItem>
                               ))
                             ) : (
@@ -725,6 +1029,9 @@ export default function Page() {
                             <div className="bg-background border-b p-6">
                               <DialogHeader>
                                 <DialogTitle>Parameters</DialogTitle>
+                                <DialogDescription>
+                                  调整应用参数与 AI 设置，保存后将立即生效。
+                                </DialogDescription>
                               </DialogHeader>
                             </div>
                             <div className="flex-1 overflow-y-auto p-6">
@@ -750,6 +1057,7 @@ export default function Page() {
                     </Tooltip>
                     {/* (Server status moved to ScriptEditor actions) */}
                   </div>
+
                   <AndroidInspectorEmbed
                     ref={inspectorRef}
                     deviceId={selectedDeviceId || undefined}
@@ -760,6 +1068,9 @@ export default function Page() {
                     autoCenterOnClick={autoCenter}
                     onAutoCenterChange={setAutoCenter}
                     initialState={cachedInspectorState}
+                    showClickableOnly={showClickableOnly}
+                    overlayMode={overlayMode}
+                    preferAppium={preferAppiumLocal}
                     onSuggestSelector={(selector, meta) => {
                       const esc = (s: string) => (s ?? '').replace(/['\\]/g, (m) => `\\${m}`)
                       let snippet = ''

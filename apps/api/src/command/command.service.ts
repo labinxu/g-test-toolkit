@@ -14,9 +14,9 @@ export class CommandService {
   constructor(private readonly loggerService: LoggerService) {
     this.logger = this.loggerService.createLogger('CommandService')
   }
-  async runCommand(command: string): Promise<{ stdout: string; stderr: string }> {
+  async runCommand(command: string, timeoutMs?: number): Promise<{ stdout: string; stderr: string }> {
     try {
-      const { stdout, stderr } = await execPromise(command)
+      const { stdout, stderr } = await execPromise(command, typeof timeoutMs === 'number' && timeoutMs > 0 ? { timeout: Math.max(100, timeoutMs) } : undefined)
       return { stdout, stderr }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -40,10 +40,7 @@ export class CommandService {
     try {
       await this.powerOn(deviceId)
     } catch {}
-    await sleep(200)
-    try {
-      await this.home(deviceId)
-    } catch {}
+    // Do not press HOME here to avoid sending the foreground app to background
     await sleep(200)
   }
   async dumpxml(deviceId: string) {
@@ -58,7 +55,7 @@ export class CommandService {
     for (let attempt = 0; attempt < cmds.length; attempt++) {
       try {
         const cmd = cmds[attempt]
-        const res = await this.runCommand(cmd)
+        const res = await this.runCommand(cmd, 5000)
         return res
       } catch (err) {
         lastErr = err
@@ -91,10 +88,8 @@ export class CommandService {
       try { return s.toLowerCase().includes((k || '').toLowerCase()) } catch { return false }
     }
     let result = await this.runCommand(displaycommand)
-    if (contains(result.stdout, keywords)) {
-      await this.home(deviceId)
-      return
-    }
+    // If display is already on/holding, do nothing — avoid pressing HOME
+    if (contains(result.stdout, keywords)) return
     let counter = 3
     while (!contains(result.stdout, keywords) && counter > 0) {
       counter -= 1
@@ -107,7 +102,7 @@ export class CommandService {
     const inputpassword = `adb -s ${deviceId} shell input text ${password}`
     await this.runCommand(inputpassword)
     await this.unlock(deviceId)
-    await this.home(deviceId)
+    // Do not press HOME after unlocking — keep/restore previous foreground app if any
   }
   async dumpNotif(deviceId: string) {
     const cmd = `adb -s ${deviceId} shell dumpsys notification`

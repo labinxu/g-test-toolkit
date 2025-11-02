@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 import { useSession } from '@/app/context/session-context';
+import { normalizeResponseError } from '@/lib/error';
+import { toast } from 'sonner';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -70,7 +72,14 @@ export default function DirectoryTree({
     fetch(`/api/files/tree?dir=${rootDir}&depth=3`, {
       credentials: 'include',
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) {
+          const err = await normalizeResponseError(res)
+          toast.error(err.message || 'Failed to load files')
+          throw new Error(err.message || 'Failed to load files')
+        }
+        return res.json()
+      })
       .then((treeData: FileNode[]) => {
         setTree(treeData);
         // Restore expanded state
@@ -103,7 +112,7 @@ export default function DirectoryTree({
   const handleDelete = useCallback(
     async (path: string, isDirectory: boolean) => {
       setDeleting(true);
-      await fetch('/api/files/delete', {
+      const res = await fetch('/api/files/delete', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -111,6 +120,12 @@ export default function DirectoryTree({
         credentials: 'include',
         body: JSON.stringify({ path }),
       });
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        toast.error(err.message || 'Delete failed')
+        setDeleting(false)
+        return
+      }
       setDeleting(false);
       setRefreshKey(refreshKey - 1);
       if (selectedPath === path) setSelectedPath(null);

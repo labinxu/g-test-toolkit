@@ -5,7 +5,7 @@ import { PlusIcon } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Form, FormItem, FormControl, FormField } from '../ui/form';
+import { Form, FormItem, FormControl, FormField, FormMessage } from '../ui/form';
 import {
   Tooltip,
   TooltipContent,
@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { FileType } from './file-type';
+import { toast } from 'sonner';
+import { normalizeResponseError } from '@/lib/error';
 
 export default function NewFileOrFolder({
   parentDir,
@@ -49,7 +51,7 @@ export default function NewFileOrFolder({
     });
   const formSchema = z.object({
     fileName: fileNameSchema,
-    fileType: z.string(),
+    fileType: z.enum(['file', 'folder']),
   });
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -59,27 +61,25 @@ export default function NewFileOrFolder({
     },
   });
   async function handleSubmit(data: z.infer<typeof formSchema>) {
-    console.log('create ', data);
-    if (data.fileType === 'file') {
-      await fetch('/api/files/create', {
+    try {
+      const path = `${parentDir}/${data.fileName}`
+      const url = data.fileType === 'file' ? '/api/files/create' : '/api/files/mkdir'
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          path: `${parentDir}/${data.fileName}`,
-        }),
-      });
-    } else {
-      await fetch('/api/files/mkdir', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ path: `${parentDir}/${data.fileName}` }),
-      });
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        toast.error(err.message || 'Operation failed')
+        return
+      }
+      toast.success(data.fileType === 'file' ? 'File created' : 'Folder created')
+      onCreated?.()
+      form.reset()
+    } catch (e) {
+      toast.error((e as Error)?.message || 'Operation failed')
     }
-    onCreated?.();
   }
   return (
     <div className="flex flex-1 ">
@@ -108,6 +108,7 @@ export default function NewFileOrFolder({
                 <FormControl>
                   <Input placeholder="type name" {...field} />
                 </FormControl>
+                <FormMessage />
               </FormItem>
             )}
           />

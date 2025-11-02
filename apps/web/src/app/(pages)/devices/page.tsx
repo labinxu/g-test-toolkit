@@ -46,6 +46,7 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { GTable } from './components/g-table'
 import { cn } from '@/lib/utils'
+import { normalizeResponseError } from '@/lib/error'
 import { toast } from 'sonner'
 
 const defaultHeaders = { Accept: 'application/json' }
@@ -299,8 +300,8 @@ export default function Page() {
         headers: defaultHeaders,
       })
       if (!res.ok) {
-        const t = await res.text()
-        throw new Error(t || 'Failed to fetch appium status')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to fetch appium status')
       }
       return res.json()
     },
@@ -320,8 +321,8 @@ export default function Page() {
         body: JSON.stringify({ port }),
       })
       if (!res.ok) {
-        const t = await res.text()
-        throw new Error(t || 'Failed to start appium')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to start appium')
       }
       return res.json()
     },
@@ -339,8 +340,8 @@ export default function Page() {
         headers: defaultHeaders,
       })
       if (!res.ok) {
-        const t = await res.text()
-        throw new Error(t || 'Failed to stop appium')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to stop appium')
       }
       return res.json()
     },
@@ -359,7 +360,9 @@ export default function Page() {
         headers: defaultHeaders,
       }).then((res) => {
         if (!res.ok) {
-          throw new Error('Failed to fetch devices')
+          return normalizeResponseError(res).then((err) => {
+            throw new Error(err.message || 'Failed to fetch devices')
+          })
         }
         return res.json()
       }),
@@ -408,7 +411,8 @@ export default function Page() {
         headers: defaultHeaders,
       })
       if (!res.ok) {
-        throw new Error('Failed to fetch emulators')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to fetch emulators')
       }
       return res.json()
     },
@@ -428,8 +432,8 @@ export default function Page() {
         headers: defaultHeaders,
       })
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to load templates')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to load templates')
       }
       return res.json()
     },
@@ -459,8 +463,8 @@ export default function Page() {
         }),
       })
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to start emulator')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to start emulator')
       }
 
       return res.json()
@@ -495,8 +499,8 @@ export default function Page() {
         body: JSON.stringify({ serial: runningSerial }),
       })
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to stop emulator')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to stop emulator')
       }
       return res.json()
     },
@@ -518,8 +522,8 @@ export default function Page() {
         headers: defaultHeaders,
       })
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to delete emulator')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to delete emulator')
       }
       return res.json()
     },
@@ -547,8 +551,8 @@ export default function Page() {
         body: JSON.stringify({ templateId, name }),
       })
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to create emulator')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to create emulator')
       }
       return res.json()
     },
@@ -700,8 +704,8 @@ export default function Page() {
         headers: defaultHeaders,
       })
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to fetch iOS simulators')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to fetch iOS simulators')
       }
       return res.json()
     },
@@ -716,8 +720,8 @@ export default function Page() {
         body: JSON.stringify({ udid }),
       })
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to start iOS simulator')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to start iOS simulator')
       }
       return res.json()
     },
@@ -741,8 +745,8 @@ export default function Page() {
         body: JSON.stringify({ udid }),
       })
       if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Failed to stop iOS simulator')
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to stop iOS simulator')
       }
       return res.json()
     },

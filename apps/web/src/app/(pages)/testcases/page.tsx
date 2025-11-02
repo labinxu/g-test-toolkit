@@ -205,7 +205,13 @@ export default function Page() {
         'Content-Type': 'application/json',
         ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       },
-      body: JSON.stringify({ filePath: currentFile, clientId, keepAppOpen, shareSession: true, sessionKey: selectedDeviceId || undefined }),
+      body: JSON.stringify({
+        filePath: currentFile,
+        clientId,
+        keepAppOpen,
+        shareSession: true,
+        sessionKey: selectedDeviceId || undefined,
+      }),
     })
       .then((resp) => {
         if (resp.ok) {
@@ -479,6 +485,7 @@ export default function Page() {
                       queryKey={['appium-status', 'testcases']}
                       pollIntervalMs={appiumAutoRefresh ? 5000 : false}
                     />
+                    
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { normalizeResponseError } from '@/lib/error'
 import {
   RefreshCwIcon,
   ChevronRight,
@@ -59,20 +60,31 @@ type Snapshot = {
   takenAt: number
 }
 
-function useSnapshot(
-  deviceId?: string | null,
-  autoWake?: boolean,
-  autoUnlock?: boolean,
-  unlockPassword?: string,
-  unlockSwipe?: string,
-  unlockKeywords?: string
-) {
+function useSnapshot(deviceId?: string | null) {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<Snapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const inflightRef = useRef<Promise<Snapshot | null> | null>(null)
+  const lastFetchAtRef = useRef<number>(0)
 
   const fetchSnapshot = async (): Promise<Snapshot | null> => {
     try {
+      // Coalesce in-flight requests
+      if (inflightRef.current) return await inflightRef.current
+      // Throttle burst calls (e.g. on page switch + settings updates)
+      const now = Date.now()
+      const throttleMs = (() => {
+        try {
+          const v = localStorage.getItem('gtt:inspector:snapshot:intervalMs')
+          const n = v ? parseInt(v, 10) : 1200
+          return Math.max(400, Math.min(5000, Number.isFinite(n) ? n : 1200))
+        } catch {
+          return 1200
+        }
+      })()
+      if (now - lastFetchAtRef.current < throttleMs) {
+        return data // return last data without new network call
+      }
       setLoading(true)
       setError(null)
       // Prefer real backend; only fallback to mock if proxy not configured (503)
@@ -82,52 +94,54 @@ function useSnapshot(
         const v = localStorage.getItem('gtt:inspector:snapshot:intervalMs')
         const ms = v ? Math.max(0, parseInt(v, 10) || 0) : 0
         if (ms > 0) params.set('minMs', String(ms))
+        // Unified: read all snapshot parameters from localStorage with defaults
+        const aw = localStorage.getItem('gtt:inspector:autoWake')
+        const au = localStorage.getItem('gtt:inspector:autoUnlock')
+        const pwd = localStorage.getItem('gtt:inspector:unlockPassword') || ''
+        const swipe = localStorage.getItem('gtt:inspector:unlockSwipe') || ''
+        const kw = localStorage.getItem('gtt:inspector:unlockKeywords') || ''
+        const awBool = aw == null ? true : aw === '1' || aw === 'true'
+        const auBool = au == null ? false : au === '1' || au === 'true'
+        params.set('autoWake', awBool ? '1' : '0')
+        params.set('autoUnlock', auBool ? '1' : '0')
+        if (pwd) params.set('unlockPassword', pwd)
+        if (swipe) params.set('unlockSwipe', swipe)
+        if (kw) params.set('unlockKeywords', kw)
       } catch {}
-      if (typeof autoWake === 'boolean') params.set('autoWake', autoWake ? '1' : '0')
-      if (autoUnlock) {
-        params.set('autoUnlock', '1')
-        if (unlockPassword) params.set('unlockPassword', unlockPassword)
-        if (unlockSwipe) params.set('unlockSwipe', unlockSwipe)
-        if (unlockKeywords) params.set('unlockKeywords', unlockKeywords)
-      }
       const qs = params.toString() ? `?${params.toString()}` : ''
-      const res = await fetch(`/api/inspector/snapshot${qs}`, {
-        cache: 'no-store',
-      })
-      if (res.status === 503) {
-        const mockRes = await fetch('/api/mock/inspector/snapshot', {
-          cache: 'no-store',
-        })
-        if (!mockRes.ok) throw new Error(`HTTP ${mockRes.status}`)
-        const mockJson = (await mockRes.json()) as Snapshot
-        setData(mockJson)
-        return mockJson
-      }
-      if (!res.ok) {
-        // Provide a friendlier message, especially for 404 from backend (Nest NotFoundException)
-        const friendly404 =
-          'No running device or snapshot found. Please start an Android emulator and Appium from the Devices page.'
-        if (res.status === 404) {
-          throw new Error(friendly404)
+      const req = fetch(`/api/inspector/snapshot${qs}`, { cache: 'no-store' })
+      inflightRef.current = req.then(async (res) => {
+        if (res.status === 503) {
+          const mockRes = await fetch('/api/mock/inspector/snapshot', { cache: 'no-store' })
+          if (!mockRes.ok) throw new Error(`HTTP ${mockRes.status}`)
+          return (await mockRes.json()) as Snapshot
         }
-        let msg = `HTTP ${res.status}`
-        try {
-          const j = await res.json()
-          // Nest default NotFound: { statusCode: 404, message: '...', error: 'Not Found' }
-          const messageField = Array.isArray(j?.message) ? j.message.join('\n') : j?.message
-          if (j?.error === 'Not Found' && messageField) {
-            msg = String(messageField)
-          } else {
-            msg = messageField || j?.details || j?.error || msg
+        if (!res.ok) {
+          // Provide a friendlier message, especially for 404 from backend (Nest NotFoundException)
+          const friendly404 =
+            'No running device or snapshot found. Please start an Android emulator and Appium from the Devices page.'
+          if (res.status === 404) {
+            throw new Error(friendly404)
           }
-          if (/no running device|emulator/i.test(msg)) {
-            msg = friendly404
-          }
-        } catch {}
-        throw new Error(msg)
-      }
-      const json = (await res.json()) as Snapshot
+          let msg = `HTTP ${res.status}`
+          try {
+            const j = await res.json()
+            const messageField = Array.isArray(j?.message) ? j.message.join('\n') : j?.message
+            if (j?.error === 'Not Found' && messageField) {
+              msg = String(messageField)
+            } else {
+              msg = messageField || j?.details || j?.error || msg
+            }
+            if (/no running device|emulator/i.test(msg)) msg = friendly404
+          } catch {}
+          throw new Error(msg)
+        }
+        return (await res.json()) as Snapshot
+      })
+      const json = await inflightRef.current
+      inflightRef.current = null
       setData(json)
+      lastFetchAtRef.current = Date.now()
       return json
     } catch (e: any) {
       setError(e?.message || 'Failed to load snapshot')
@@ -140,7 +154,7 @@ function useSnapshot(
   useEffect(() => {
     fetchSnapshot()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId, autoWake, autoUnlock, unlockPassword, unlockSwipe, unlockKeywords])
+  }, [deviceId])
 
   return { loading, data, error, refresh: fetchSnapshot }
 }
@@ -368,88 +382,28 @@ export default function AndroidInspectorPage() {
     return paramDeviceId || ''
   })
   const effectiveDeviceId = selectedDeviceId || paramDeviceId || undefined
-  const [autoWake, setAutoWake] = useState<boolean>(() => {
+  const paramsRef = useRef<ParametersFormHandle | null>(null)
+  // Persisting moved to settings page
+  const { data, loading, error, refresh } = useSnapshot(effectiveDeviceId)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [autoCenterOnClick, setAutoCenterOnClick] = useState(false)
+  const [showClickableOnly, setShowClickableOnly] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     try {
-      const v = localStorage.getItem('gtt:inspector:autoWake')
+      const v = localStorage.getItem('gtt:inspector:clickableOnly')
       return v == null ? true : v === '1' || v === 'true'
     } catch {}
     return true
   })
-  // Persisting moved to settings page
-  const [autoUnlock, setAutoUnlock] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
+  const [overlayMode, setOverlayMode] = useState<'boxes' | 'markers'>(() => {
+    if (typeof window === 'undefined') return 'boxes'
     try {
-      const v = localStorage.getItem('gtt:inspector:autoUnlock')
-      return v === '1' || v === 'true'
+      const v = localStorage.getItem('gtt:inspector:overlayMode')
+      return v === 'markers' ? 'markers' : 'boxes'
     } catch {}
-    return false
+    return 'boxes'
   })
-  const [unlockPassword, setUnlockPassword] = useState<string>(() => {
-    if (typeof window === 'undefined') return ''
-    try {
-      return localStorage.getItem('gtt:inspector:unlockPassword') || ''
-    } catch {}
-    return ''
-  })
-  const [unlockSwipe, setUnlockSwipe] = useState<string>(() => {
-    if (typeof window === 'undefined') return ''
-    try {
-      return localStorage.getItem('gtt:inspector:unlockSwipe') || ''
-    } catch {}
-    return ''
-  })
-  const paramsRef = useRef<ParametersFormHandle | null>(null)
-  const [unlockKeywords, setUnlockKeywords] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'holding display'
-    try {
-      return localStorage.getItem('gtt:inspector:unlockKeywords') || 'holding display'
-    } catch {}
-    return 'holding display'
-  })
-  // Presets for unlock keywords
-  const keywordPresets = useMemo(
-    () => [
-      {
-        id: 'holding-display',
-        label: 'holding display',
-        value: 'holding display',
-      },
-      {
-        id: 'display-on',
-        label: 'Display Power: state=ON',
-        value: 'Display Power: state=ON',
-      },
-      { id: 'awake', label: 'mWakefulness=Awake', value: 'mWakefulness=Awake' },
-      { id: 'screen-on', label: 'mScreenOn=true', value: 'mScreenOn=true' },
-      {
-        id: 'suspend-blocker',
-        label: 'mHoldingDisplaySuspendBlocker=true',
-        value: 'mHoldingDisplaySuspendBlocker=true',
-      },
-    ],
-    []
-  )
-  const [keywordsPresetId, setKeywordsPresetId] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'holding-display'
-    try {
-      return localStorage.getItem('gtt:inspector:unlockKeywordsPreset') || 'holding-display'
-    } catch {}
-    return 'holding-display'
-  })
-  // Persisting moved to settings page
-  const { data, loading, error, refresh } = useSnapshot(
-    effectiveDeviceId,
-    autoWake,
-    autoUnlock,
-    unlockPassword,
-    unlockSwipe,
-    unlockKeywords
-  )
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [autoCenterOnClick, setAutoCenterOnClick] = useState(false)
-  const [showClickableOnly, setShowClickableOnly] = useState(true)
   const [filterText, setFilterText] = useState('')
   const [selectedAvd, setSelectedAvd] = useState(paramAvd || '')
   // Filters are now in a collapsible; no persistent state needed
@@ -491,6 +445,31 @@ export default function AndroidInspectorPage() {
   const selectedNode = useMemo(() => {
     return data?.nodes.find((n) => n.nodeId === selectedId) || null
   }, [data, selectedId])
+
+  // Persist clickable-only preference (shared with Libs page embed)
+  useEffect(() => {
+    try {
+      localStorage.setItem('gtt:inspector:clickableOnly', showClickableOnly ? '1' : '0')
+    } catch {}
+  }, [showClickableOnly])
+
+  // Hot-apply overlay and clickable-only when saved in Parameters
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const v = localStorage.getItem('gtt:inspector:clickableOnly')
+        setShowClickableOnly(v == null ? true : v === '1' || v === 'true')
+        const m = localStorage.getItem('gtt:inspector:overlayMode')
+        setOverlayMode(m === 'markers' ? 'markers' : 'boxes')
+      } catch {}
+    }
+    window.addEventListener('storage', handler)
+    window.addEventListener('gtt-parameters-updated', handler as any)
+    return () => {
+      window.removeEventListener('storage', handler)
+      window.removeEventListener('gtt-parameters-updated', handler as any)
+    }
+  }, [])
 
   useEffect(() => {
     const vp = viewportRef.current
@@ -679,8 +658,8 @@ export default function AndroidInspectorPage() {
         body: JSON.stringify({}),
       })
       if (!res.ok) {
-        const t = await res.text()
-        throw new Error(t || `HTTP ${res.status}`)
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || `HTTP ${res.status}`)
       }
       const data = await res.json().catch(() => ({}) as any)
       const port = (data as any)?.port
@@ -762,7 +741,10 @@ export default function AndroidInspectorPage() {
     queryKey: ['android-emulators-for-inspector'],
     queryFn: async () => {
       const res = await fetch('/api/android/emulators', { method: 'GET' })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to fetch emulators')
+      }
       return res.json()
     },
     staleTime: 5000,
@@ -781,7 +763,10 @@ export default function AndroidInspectorPage() {
     queryKey: ['android-devices-for-inspector'],
     queryFn: async () => {
       const res = await fetch('/api/android/devices', { method: 'GET' })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to fetch devices')
+      }
       return res.json()
     },
     staleTime: 3000,
@@ -813,7 +798,10 @@ export default function AndroidInspectorPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ avd, headless: false, reset: false }),
       })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to start emulator')
+      }
       return res.json()
     },
     onSuccess: async (data) => {
@@ -824,40 +812,54 @@ export default function AndroidInspectorPage() {
     onError: (e: any) => toast.error(e?.message || 'Failed to start emulator'),
   })
 
+  // Read-only LLM info (server settings)
+  const [llmInfo, setLlmInfo] = useState<{
+    provider: string
+    model: string
+    hasApiKey: boolean
+  } | null>(null)
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/settings/ai', { cache: 'no-store' })
+        if (!res.ok) return
+        const j = await res.json()
+        setLlmInfo({
+          provider: (j?.provider || '').toLowerCase() || 'openai',
+          model: j?.model || '',
+          hasApiKey: !!j?.hasApiKey,
+        })
+      } catch {}
+    }
+    load()
+  }, [])
+
   // Hot-apply settings when saved in Parameters
   useEffect(() => {
     const handler = () => {
       try {
-        const readBool = (k: string, d: boolean) => {
-          const v = localStorage.getItem(k)
-          if (v == null) return d
-          return v === '1' || v === 'true'
-        }
         const readInt = (k: string, d: number) => {
           const raw = localStorage.getItem(k)
           if (!raw) return d
           const n = parseInt(raw, 10)
           return Number.isFinite(n) ? n : d
         }
-        setAutoWake(readBool('gtt:inspector:autoWake', true))
-        setAutoUnlock(readBool('gtt:inspector:autoUnlock', false))
-        setUnlockPassword(localStorage.getItem('gtt:inspector:unlockPassword') || '')
-        setUnlockSwipe(localStorage.getItem('gtt:inspector:unlockSwipe') || '')
-        setUnlockKeywords(localStorage.getItem('gtt:inspector:unlockKeywords') || 'holding display')
-        setKeywordsPresetId(
-          localStorage.getItem('gtt:inspector:unlockKeywordsPreset') || 'holding-display'
-        )
-
-        setListsAutoRefresh(readBool('gtt:inspector:lists:autoRefresh', true))
+        const listsAuto = localStorage.getItem('gtt:inspector:lists:autoRefresh')
+        setListsAutoRefresh(listsAuto == null ? true : listsAuto === '1' || listsAuto === 'true')
         setListsRefreshSec(Math.max(1, Math.min(60, readInt('gtt:inspector:lists:refreshSec', 3))))
 
-        setAutoRefresh(readBool('gtt:inspector:snapshot:autoRefresh', false))
+        const ar = localStorage.getItem('gtt:inspector:snapshot:autoRefresh')
+        setAutoRefresh(ar === '1' || ar === 'true')
         setPollIntervalMs(
           Math.max(100, Math.min(3000, readInt('gtt:inspector:snapshot:intervalMs', 400)))
         )
         setPollMaxAttempts(
           Math.max(1, Math.min(20, readInt('gtt:inspector:snapshot:maxAttempts', 6)))
         )
+        // Re-fetch to apply new snapshot parameters immediately
+        try {
+          refresh()
+        } catch {}
       } catch {}
     }
     window.addEventListener('storage', handler)
@@ -1183,6 +1185,7 @@ export default function AndroidInspectorPage() {
           setHoveredId={setHoveredId}
           centerOn={centerOn}
           loading={loading}
+          overlayMode={overlayMode}
         />
 
         {/* Tree view with compact right-side toggle */}
@@ -1316,8 +1319,8 @@ export default function AndroidInspectorPage() {
                                 }),
                               })
                               if (!res.ok) {
-                                const msg = await res.text()
-                                toast.error(`Verify Failed: ${msg}`)
+                                const err = await normalizeResponseError(res)
+                                toast.error(`Verify Failed: ${err.message || 'Unknown error'}`)
                               } else {
                                 toast.success('Verify successful')
                                 const prevAt = data?.takenAt

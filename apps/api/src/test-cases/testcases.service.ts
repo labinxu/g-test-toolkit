@@ -117,7 +117,11 @@ export class TestCasesService {
   async runInSandbox(
     code: string,
     clientId?: string,
-    options?: { keepAppOpen?: boolean; shareSession?: boolean; sessionKey?: string }
+    options?: {
+      keepAppOpen?: boolean
+      shareSession?: boolean
+      sessionKey?: string
+    }
   ): Promise<any> {
     let transformedCode = ''
     let coreLib: any
@@ -183,12 +187,23 @@ export class TestCasesService {
   }
   async loadCoreLib() {
     // Prefer ESM build (supports TLA); fallback to CJS
-    const coreLibPath = path.join(
+    const coreDir = path.join(
       __dirname,
       '../..',
-      process.env.CORE_LIB_DIR || 'workspace/shared-libs/core',
-      'dist/index.js'
+      process.env.CORE_LIB_DIR || 'workspace/shared-libs/core'
     )
+    const coreLibPath = path.join(coreDir, 'dist/index.js')
+    const coreSrcDir = path.join(coreDir, 'src')
+    // If dist is missing or older than src, rebuild automatically
+    try {
+      const distExists = fs.existsSync(coreLibPath) || fs.existsSync(coreLibPath.replace(/index\.js$/, 'index.mjs'))
+      const srcLatest = await this.getDirLatestMtimeSafe(coreSrcDir)
+      const distLatest = await this.getFileMtimeSafe(coreLibPath) || (await this.getFileMtimeSafe(coreLibPath.replace(/index\.js$/, 'index.mjs')))
+      if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
+        this.logger.info('Core lib dist outdated or missing. Rebuilding...')
+        await this.buildCoreLib()
+      }
+    } catch {}
     try {
       const coreLibPathMjs = coreLibPath.replace(/index\.js$/, 'index.mjs')
       const filePathUsed = fs.existsSync(coreLibPathMjs) ? coreLibPathMjs : coreLibPath
@@ -253,12 +268,23 @@ export class TestCasesService {
   }
   async loadGettrLib() {
     // Prefer ESM build; fallback to CJS
-    const gettrLibPath = path.join(
+    const gettrDir = path.join(
       __dirname,
       '../..',
-      process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr',
-      'dist/index.js'
+      process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr'
     )
+    const gettrLibPath = path.join(gettrDir, 'dist/index.js')
+    const gettrSrcDir = path.join(gettrDir, 'src')
+    // Auto rebuild if outdated
+    try {
+      const distExists = fs.existsSync(gettrLibPath) || fs.existsSync(gettrLibPath.replace(/index\.js$/, 'index.mjs'))
+      const srcLatest = await this.getDirLatestMtimeSafe(gettrSrcDir)
+      const distLatest = await this.getFileMtimeSafe(gettrLibPath) || (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
+      if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
+        this.logger.info('gettr lib dist outdated or missing. Rebuilding...')
+        await this.buildGettrLib()
+      }
+    } catch {}
     try {
       const gettrLibPathMjs = gettrLibPath.replace(/index\.js$/, 'index.mjs')
       const filePathUsed = fs.existsSync(gettrLibPathMjs) ? gettrLibPathMjs : gettrLibPath
@@ -319,12 +345,23 @@ export class TestCasesService {
   }
   async loadGettrAndroidLib() {
     // Prefer ESM build; fallback to CJS
-    const gettrLibPath = path.join(
+    const gettrAndroidDir = path.join(
       __dirname,
       '../..',
-      process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android',
-      'dist/index.js'
+      process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android'
     )
+    const gettrLibPath = path.join(gettrAndroidDir, 'dist/index.js')
+    const gettrSrcDir = path.join(gettrAndroidDir, 'src')
+    // Auto rebuild if outdated
+    try {
+      const distExists = fs.existsSync(gettrLibPath) || fs.existsSync(gettrLibPath.replace(/index\.js$/, 'index.mjs'))
+      const srcLatest = await this.getDirLatestMtimeSafe(gettrSrcDir)
+      const distLatest = await this.getFileMtimeSafe(gettrLibPath) || (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
+      if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
+        this.logger.info('gettr-android lib dist outdated or missing. Rebuilding...')
+        await this.buildGettrAndroidLib()
+      }
+    } catch {}
     try {
       const gettrLibPathMjs = gettrLibPath.replace(/index\.js$/, 'index.mjs')
       const filePathUsed = fs.existsSync(gettrLibPathMjs) ? gettrLibPathMjs : gettrLibPath
@@ -417,6 +454,36 @@ export class TestCasesService {
     const distIndexMjs = path.join(outputDir, 'index.mjs')
     this.deepClearCache(distIndexJs)
     this.deepClearCache(distIndexMjs)
+  }
+
+  private async getDirLatestMtimeSafe(dir: string): Promise<number | undefined> {
+    try {
+      let latest = 0
+      if (!fs.existsSync(dir)) return undefined
+      const walk = (d: string) => {
+        for (const name of fs.readdirSync(d)) {
+          const full = path.join(d, name)
+          try {
+            const st = fs.statSync(full)
+            if (st.isDirectory()) walk(full)
+            else if (st.isFile()) latest = Math.max(latest, st.mtimeMs)
+          } catch {}
+        }
+      }
+      walk(dir)
+      return latest || undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  private async getFileMtimeSafe(file: string): Promise<number | undefined> {
+    try {
+      if (!fs.existsSync(file)) return undefined
+      return fs.statSync(file).mtimeMs
+    } catch {
+      return undefined
+    }
   }
 
   async buildCoreLib(clientId?: string) {

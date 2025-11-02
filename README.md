@@ -147,3 +147,128 @@ WS_CORS_ORIGIN=true
 Notes:
 - In development, React Strict Mode may cause double mounting of effects which can print duplicate connect/disconnect logs. This does not occur in production builds.
 - The web socket client is configured to prefer `websocket` transport to reduce unnecessary polling/upgrade cycles.
+
+## Android Automation
+
+The backend exposes a core library to author and run Android UI tests via Appium. Use the `withAndroid` decorator to declare the device and app under test.
+
+- Exposed types from `core-lib`:
+  - `WithAndroidOptions` — parameters for `withAndroid`
+  - `MainOptions` — options for `core.main` (no installMode override)
+
+### Mode selection (auto)
+
+`withAndroid` automatically selects run mode based on provided options:
+
+- Provide `apk` → install mode (installs the APK, then launches)
+- Provide `appPackage` (and `appActivity`) without `apk` → launch mode (starts already-installed app)
+- Provide both `apk` and `appPackage` → install mode
+
+There is no UI or API override for this behavior; it is derived from the decorator. If required data is missing for the chosen mode, a clear error is thrown.
+
+### Examples
+
+Install mode (APK install + launch):
+
+```ts
+import { TestCase, Test, withAndroid } from 'core-lib'
+
+@Test({ module: 'appium' })
+@withAndroid({
+  deviceName: 'YOUR_DEVICE_NAME',
+  udid: 'YOUR_DEVICE_UDID',
+  apk: 'your-app.apk', // resolved from `workspace/app` or `APP_DIR`
+  // keepAppOpen: true, // optional — app will be reinstalled/reset for this run and not uninstalled after
+})
+export class InstallSample extends TestCase {
+  async test_login() {
+    this.logger.info('running in install mode')
+    // this.page is an Appium driver
+  }
+}
+```
+
+Launch mode (start an already-installed app):
+
+```ts
+import { TestCase, Test, withAndroid } from 'core-lib'
+
+@Test({ module: 'appium' })
+@withAndroid({
+  deviceName: 'YOUR_DEVICE_NAME',
+  udid: 'YOUR_DEVICE_UDID',
+  appPackage: 'com.example.app',
+  appActivity: '.MainActivity',
+  // keepAppOpen: true, // optional
+})
+export class LaunchSample extends TestCase {
+  async test_smoke() {
+    this.logger.info('running in launch mode')
+  }
+}
+```
+
+Optional behaviors (WithAndroidOptions):
+
+- `keepAppOpen?: boolean` — keep Appium session after run (default true)
+- `bringToFront?: boolean` — bring app to foreground after session create/reuse (default true)
+
+### Notes
+
+- APK location: by default `workspace/app/<apk>`. You can set `APP_DIR` to point to a different directory if needed.
+- Keep app open: set `keepAppOpen: true` in the decorator, or pass `keepAppOpen: true` to the `/api/testcase/runpath` body to retain the Appium session after run.
+- Session reuse: `/api/testcase/runpath` also accepts `shareSession: true` and a `sessionKey` to reuse a driver across runs.
+- Clear error messages: if launch mode is selected but `appPackage/appActivity` are missing, or install mode is selected without `apk`, the runner throws an explicit error.
+
+### Find Package/Activity (ADB)
+
+Common ADB commands to discover the Android package name and main Activity for use with `withAndroid({ appPackage, appActivity })`:
+
+- Verify device connection
+
+  ```bash
+  adb devices
+  ```
+
+- Find installed packages (filter by keyword)
+
+  ```bash
+  adb shell pm list packages | grep gettr
+  # -> e.g. package:com.gettr.gettr
+  ```
+
+- Get the current foreground app (package and activity) while the app is open
+
+  ```bash
+  # Works on most devices
+  adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp"
+
+  # Alternative (some ROMs)
+  adb shell dumpsys activity activities | grep mResumedActivity
+  ```
+
+- Resolve the launchable (MAIN/LAUNCHER) activity for a package
+
+  ```bash
+  adb shell cmd package resolve-activity \
+    -a android.intent.action.MAIN \
+    -c android.intent.category.LAUNCHER \
+    com.gettr.gettr
+  # -> com.gettr.gettr/.MainActivity
+  ```
+
+- From an APK file (if available), extract package and launchable activity
+
+  ```bash
+  # Requires Android build-tools 'aapt' to be available
+  aapt dump badging ./apps/api/workspace/app/gettr-1.74.3.apk \
+    | grep -E "^package: name=|^launchable-activity: name="
+  # package: name='com.gettr.gettr' ...
+  # launchable-activity: name='.MainActivity' ...
+  ```
+
+- Sanity check: trigger the app’s launcher activity (no-op if not installed)
+
+  ```bash
+  adb shell monkey -p com.gettr.gettr -c android.intent.category.LAUNCHER 1
+  ```

@@ -20,6 +20,8 @@ import { FileNode } from './types';
 import { DeleteAlertDialog } from '../alert-dialog/delete-alert';
 import { RunAlertDialog } from '../alert-dialog/run-alert';
 import { useSocket } from '../socket-content';
+import { normalizeResponseError } from '@/lib/error';
+import { toast } from 'sonner';
 
 const EXPANDED_KEY = 'directoryTreeExpanded';
 
@@ -108,7 +110,14 @@ export default function DirectoryTree({
     fetch(api, {
       credentials: 'include',
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) {
+          const err = await normalizeResponseError(res)
+          toast.error(err.message || 'Failed to load files')
+          throw new Error(err.message || 'Failed to load files')
+        }
+        return res.json()
+      })
       .then((treeData: FileNode[]) => {
         setTree(treeData);
         if (cacheEnabled) {
@@ -167,7 +176,7 @@ export default function DirectoryTree({
   const handleDelete = useCallback(
     async (node: FileNode) => {
       setDeleting(true);
-      await fetch('/api/files/delete', {
+      const res = await fetch('/api/files/delete', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -175,6 +184,12 @@ export default function DirectoryTree({
         credentials: 'include',
         body: JSON.stringify({ path: node.path }),
       });
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        toast.error(err.message || 'Delete failed')
+        setDeleting(false)
+        return
+      }
       setDeleting(false);
       setRefreshKey(refreshKey + 1);
       if (selectedPath === node.path) setSelectedPath(null);

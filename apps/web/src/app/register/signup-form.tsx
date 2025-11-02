@@ -17,6 +17,7 @@ import { useSession } from '../context/session-context';
 import { formSchema } from './schema';
 import { PasswordInput } from '@/components/ui/password-input';
 import { useState } from 'react';
+import { applyFieldErrors } from '@/lib/error';
 
 type FormData = {
   username: string;
@@ -47,7 +48,11 @@ export function SignupForm() {
       setError('');
       router.push('/signin');
     } catch (err) {
-      setError((err as Error).message);
+      const e = err as any;
+      if (e?.fieldErrors) {
+        applyFieldErrors(form, e.fieldErrors);
+      }
+      setError(e?.message || 'Registration failed');
     }
   };
 

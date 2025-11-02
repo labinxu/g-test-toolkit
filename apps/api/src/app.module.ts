@@ -11,15 +11,18 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { User } from './auth/entities/user.entity';
 import { TestCase } from './report/entities/testcase.entity';
+import { Setting } from './settings/setting.entity';
 import { ReportModule } from './report/report.module';
 import { LoggerModule } from './logger/logger.module';
 import { InspectorModule } from './mobile/inspector/inspector.module';
+import { SettingsModule } from './settings/settings.module';
+import { AiModule } from './ai/ai.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: '../../database/auth_db.sqlite',
-      entities: [User, TestCase],
+      entities: [User, TestCase, Setting],
       synchronize: true,
     }),
     AndroidModule,
@@ -30,6 +33,8 @@ import { InspectorModule } from './mobile/inspector/inspector.module';
     ReportModule,
     LoggerModule,
     InspectorModule,
+    AiModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService, LoggerService, LoggerGateway],

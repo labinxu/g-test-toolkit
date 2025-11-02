@@ -101,10 +101,6 @@ export function getMenuList(pathname: string): Group[] {
               href: '/tools/android-inspector',
             },
             {
-              label: 'Account',
-              href: '/tools/account',
-            },
-            {
               label: 'FastUserInfo',
               href: '/tools/fast-user-db',
             },
@@ -126,8 +122,8 @@ export function getMenuList(pathname: string): Group[] {
           icon: Settings,
         },
         {
-          href: '/account',
-          label: 'Account',
+          href: '/users',
+          label: 'Users',
           icon: Users,
         },
       ],

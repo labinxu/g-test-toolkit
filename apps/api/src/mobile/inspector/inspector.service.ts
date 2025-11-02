@@ -21,12 +21,34 @@ type NodeInfo = {
 export class InspectorService {
   private logger: CustomLogger;
   private lastSnapshotCache: Map<string, { at: number; data: any }> = new Map();
+  private inflightSnapshots: Map<string, Promise<any>> = new Map();
   constructor(
     private readonly commandService: CommandService,
     private readonly loggerService: LoggerService,
     private readonly androidService: AndroidService,
   ) {
     this.logger = this.loggerService.createLogger('InspectorService');
+  }
+
+  private lookupKeptAndroidDriverBySerial(serial: string): any | null {
+    try {
+      const store: Map<string, any> | undefined = (globalThis as any).__androidDrivers;
+      if (!store || store.size === 0) return null;
+      // Prefer shared session keyed by deviceId
+      const key = `share:${serial}`;
+      const drv = store.get(key);
+      if (drv) return drv;
+      // Fallback: match by capabilities udid
+      for (const d of store.values()) {
+        try {
+          const udid = d?.capabilities?.['appium:udid'] || d?.capabilities?.udid;
+          if (udid && String(udid).toLowerCase() === serial.toLowerCase()) return d;
+        } catch {}
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   private parseBounds(value: string): Bounds | null {
@@ -39,7 +61,7 @@ export class InspectorService {
     const out: NodeInfo[] = [];
     let counter = 0;
     const walk = (node: any) => {
-      if (!node) return;
+      if (!node || typeof node !== 'object') return;
       const attr = (k: string) => node?.[`@_${k}`] ?? '';
       const b = this.parseBounds(attr('bounds'));
       if (b) {
@@ -53,9 +75,24 @@ export class InspectorService {
           bounds: b,
         });
       }
-      const child = node.node;
-      if (Array.isArray(child)) child.forEach(walk);
-      else if (child) walk(child);
+      // Support both UiAutomator dump (<node>) and Appium pageSource (widget tags)
+      const childNode = (node as any).node;
+      if (Array.isArray(childNode)) {
+        childNode.forEach(walk);
+      } else if (childNode) {
+        walk(childNode);
+      } else {
+        // Traverse non-attribute object properties as children
+        for (const [k, v] of Object.entries(node)) {
+          if (k.startsWith('@_')) continue; // skip attributes
+          if (k === '#text') continue;
+          if (k === 'node') continue;
+          if (v && typeof v === 'object') {
+            if (Array.isArray(v)) v.forEach(walk);
+            else walk(v);
+          }
+        }
+      }
     };
     walk(root);
     return out;
@@ -94,10 +131,15 @@ export class InspectorService {
     unlockSwipe?: string;
     unlockKeywords?: string;
     minIntervalMs?: number;
+    preferAppium?: boolean;
   }) {
     const serial = await this.ensureSerial(params.deviceId);
     const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    const minMs = Math.max(0, Number(params.minIntervalMs ?? process.env.INSPECTOR_SNAPSHOT_MIN_MS ?? 0));
+    const defaultMin = (() => {
+      const env = Number(process.env.INSPECTOR_SNAPSHOT_MIN_MS || 0);
+      return Number.isFinite(env) ? Math.max(0, env) : 0;
+    })();
+    const minMs = Math.max(0, Number(params.minIntervalMs ?? defaultMin));
     const now = Date.now();
     const cached = this.lastSnapshotCache.get(serial);
     if (minMs > 0 && cached && now - cached.at < minMs) {
@@ -115,17 +157,39 @@ export class InspectorService {
         }
       } catch {}
     }
+    const withTimeout = async <T>(p: Promise<T>, ms: number): Promise<T> => {
+      return await Promise.race([
+        p,
+        new Promise<T>((_, rej) => setTimeout(() => rej(new Error('Timed out')), Math.max(100, ms))) as any,
+      ]);
+    };
+
     const attempt = async () => {
       const filePath = await this.androidService.getScreen(serial);
       const screenshotBase64 = readFileSync(filePath).toString('base64');
-      await this.commandService.dumpxml(serial);
-      const xmlPath = `./tmp/window_dump-${serial}.xml`;
-      // ensure device flushed the dump file on some devices
-      await wait(120);
-      await this.commandService.pullDumpedXml(serial, xmlPath);
-      const xmlContent = readFileSync(xmlPath);
+
+      // Prefer Appium session if available to get XML source; fallback to ADB uiautomator dump
+      let xmlString: string | null = null;
+      const preferAppium = params.preferAppium ?? false;
+      const drv = this.lookupKeptAndroidDriverBySerial(serial);
+      if (preferAppium && drv && typeof drv.getPageSource === 'function') {
+        try {
+          this.logger.info(`Using kept Appium session for page source (serial=${serial})`);
+          xmlString = await withTimeout(Promise.resolve(drv.getPageSource()), 4000);
+        } catch (e) {
+          this.logger.warn(`getPageSource via kept session failed: ${e}`);
+        }
+      }
+      if (!xmlString) {
+        await this.commandService.dumpxml(serial);
+        const xmlPath = `./tmp/window_dump-${serial}.xml`;
+        // ensure device flushed the dump file on some devices
+        await wait(120);
+        await this.commandService.pullDumpedXml(serial, xmlPath);
+        xmlString = readFileSync(xmlPath).toString();
+      }
       const parser = new XMLParser({ ignoreAttributes: false });
-      const obj = parser.parse(xmlContent);
+      const obj = parser.parse(xmlString);
       const nodes = this.flattenNodes(obj?.hierarchy?.node ?? obj?.hierarchy);
       const width = nodes.reduce((mx, n) => Math.max(mx, n.bounds.x2), 0);
       const height = nodes.reduce((mx, n) => Math.max(mx, n.bounds.y2), 0);
@@ -137,20 +201,31 @@ export class InspectorService {
       };
     };
     const allowWake = params.autoWake !== false;
-    try {
-      const res = await attempt();
-      if (minMs > 0) this.lastSnapshotCache.set(serial, { at: Date.now(), data: res });
-      return res;
-    } catch (e) {
-      if (!allowWake) throw e;
-      try {
-        await this.commandService.wakeDevice(serial);
-        await wait(500);
-      } catch {}
-      const res = await attempt();
-      if (minMs > 0) this.lastSnapshotCache.set(serial, { at: Date.now(), data: res });
-      return res;
+    // Coalesce concurrent snapshot requests per device
+    if (this.inflightSnapshots.has(serial)) {
+      this.logger.debug(`Coalescing inflight snapshot for ${serial}`);
+      return this.inflightSnapshots.get(serial)!;
     }
+    const inflight = (async () => {
+      try {
+        const res = await attempt();
+        if (minMs > 0) this.lastSnapshotCache.set(serial, { at: Date.now(), data: res });
+        return res;
+      } catch (e) {
+        if (!allowWake) throw e;
+        try {
+          await this.commandService.wakeDevice(serial);
+          await wait(500);
+        } catch {}
+        const res = await attempt();
+        if (minMs > 0) this.lastSnapshotCache.set(serial, { at: Date.now(), data: res });
+        return res;
+      } finally {
+        this.inflightSnapshots.delete(serial);
+      }
+    })();
+    this.inflightSnapshots.set(serial, inflight);
+    return inflight;
   }
 
   private findByUsing(nodes: NodeInfo[], using: string, value: string): NodeInfo | null {

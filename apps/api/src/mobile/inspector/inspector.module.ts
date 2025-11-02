@@ -9,6 +9,6 @@ import { AndroidModule } from '../android/android.module';
   imports: [LoggerModule, CommandModule, AndroidModule],
   controllers: [InspectorController],
   providers: [InspectorService],
+  exports: [InspectorService],
 })
 export class InspectorModule {}
-

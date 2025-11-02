@@ -8,6 +8,7 @@ import AndroidInspector, {
 import { Button } from '@/components/ui/button'
 import { RefreshCwIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { normalizeResponseError } from '@/lib/error'
 
 export type AndroidInspectorEmbedState = {
   data: Snapshot | null
@@ -32,6 +33,10 @@ type Props = {
   initialState?: AndroidInspectorEmbedState
   onInsertCode?: (code: string) => void
   onSuggestSelector?: (selector: string, meta?: { isInput: boolean; node: NodeInfo }) => void
+  showClickableOnly?: boolean
+  overlayMode?: 'boxes' | 'markers'
+  /** Optional override for pageSource preference. When omitted, reads from localStorage. */
+  preferAppium?: boolean
 }
 
 const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
@@ -47,6 +52,9 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
       initialState,
       onInsertCode,
       onSuggestSelector,
+      showClickableOnly = true,
+      overlayMode = 'boxes',
+      preferAppium,
     },
     ref
   ) => {
@@ -54,8 +62,10 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const inflightRef = useRef<Promise<Snapshot | null> | null>(null)
   const fetchSnapshot = async (opts?: { silent?: boolean }): Promise<Snapshot | null> => {
     try {
+      if (inflightRef.current) return await inflightRef.current
       setLoading(true)
       setError(null)
       const params = new URLSearchParams()
@@ -64,11 +74,40 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
         const v = localStorage.getItem('gtt:inspector:snapshot:intervalMs')
         const ms = v ? Math.max(0, parseInt(v, 10) || 0) : 0
         if (ms > 0) params.set('minMs', String(ms))
+        // Inspector parameters: autoWake/autoUnlock and unlock details
+        const aw = localStorage.getItem('gtt:inspector:autoWake')
+        const au = localStorage.getItem('gtt:inspector:autoUnlock')
+        const pwd = localStorage.getItem('gtt:inspector:unlockPassword') || ''
+        const swipe = localStorage.getItem('gtt:inspector:unlockSwipe') || ''
+        const kw = localStorage.getItem('gtt:inspector:unlockKeywords') || ''
+        const prefer =
+          typeof preferAppium === 'boolean'
+            ? preferAppium
+            : (() => {
+                const s = localStorage.getItem('gtt:inspector:preferAppiumSource')
+                return s === '1' || s === 'true'
+              })()
+        // Defaults: autoWake=true if unset, autoUnlock=false if unset
+        const awBool = aw == null ? true : aw === '1' || aw === 'true'
+        const auBool = au == null ? false : au === '1' || au === 'true'
+        params.set('autoWake', awBool ? '1' : '0')
+        params.set('autoUnlock', auBool ? '1' : '0')
+        if (pwd) params.set('unlockPassword', pwd)
+        if (swipe) params.set('unlockSwipe', swipe)
+        if (kw) params.set('unlockKeywords', kw)
+        params.set('preferAppium', prefer ? '1' : '0')
       } catch {}
       const qs = params.toString() ? `?${params.toString()}` : ''
-      const res = await fetch(`/api/inspector/snapshot${qs}`, { cache: 'no-store' })
-      if (!res.ok) throw new Error(await res.text())
-      const json = (await res.json()) as Snapshot
+      const req = fetch(`/api/inspector/snapshot${qs}`, { cache: 'no-store' })
+      inflightRef.current = req.then(async (res) => {
+        if (!res.ok) {
+          const err = await normalizeResponseError(res)
+          throw new Error(err.message || 'Failed to load snapshot')
+        }
+        return (await res.json()) as Snapshot
+      })
+      const json = await inflightRef.current
+      inflightRef.current = null
       setData(json)
       return json
     } catch (e: any) {
@@ -97,7 +136,8 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
 
   useEffect(() => {
     if (refreshKey !== undefined) {
-      fetchSnapshot()
+      // avoid overlapping requests
+      if (!inflightRef.current) fetchSnapshot()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey])
@@ -188,8 +228,8 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
 
   const filteredNodes = useMemo(() => {
     if (!data) return [] as NodeInfo[]
-    return data.nodes.filter((n) => n.clickable)
-  }, [data])
+    return showClickableOnly ? data.nodes.filter((n) => n.clickable) : data.nodes
+  }, [data, showClickableOnly])
 
   const centerOf = (n: NodeInfo) => ({
     x: Math.round((n.bounds.x1 + n.bounds.x2) / 2),
@@ -228,11 +268,15 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
     } catch {}
     try {
       const c = centerOf(n)
-      await fetch('/api/inspector/tap', {
+      const tapRes = await fetch('/api/inspector/tap', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ x: c.x, y: c.y, deviceId: deviceId ?? undefined }),
       })
+      if (!tapRes.ok) {
+        const err = await normalizeResponseError(tapRes)
+        throw new Error(err.message || 'Tap failed')
+      }
       // After tapping, poll for a fresh snapshot to reflect UI change
       const prevAt = data?.takenAt
       const attempts = 6
@@ -304,6 +348,7 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
         onNodeClick={handleNodeClick}
         loading={loading}
         showToolbar={showToolbar}
+        overlayMode={overlayMode}
       />
 
     </div>

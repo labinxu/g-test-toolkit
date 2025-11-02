@@ -22,6 +22,8 @@ export class HomePage extends IPage {
     await this.page.pause(500)
     await this.page.$('//android.view.View[@content-desc="Log In" and @clickable="true"]').click()
     await this.page.pause(500)
+    
+
   }
 
   async gotoSignUpPage() {}

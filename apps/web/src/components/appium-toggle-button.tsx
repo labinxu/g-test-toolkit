@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Aperture } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { normalizeResponseError } from '@/lib/error'
 
 type AppiumStatus = { running: boolean; port?: number }
 
@@ -30,7 +31,10 @@ export function AppiumToggleButton({
     queryKey: queryKey ?? ['appium-status'],
     queryFn: async () => {
       const res = await fetch('/api/android/appium/status', { method: 'GET' })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to fetch appium status')
+      }
       return res.json()
     },
     staleTime: 5000,
@@ -46,7 +50,10 @@ export function AppiumToggleButton({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({}),
       })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to start Appium')
+      }
       return res.json()
     },
     onSuccess: async (data) => {
@@ -60,7 +67,10 @@ export function AppiumToggleButton({
   const stopMutation = useMutation<{ result: string; stopped?: boolean }, Error, void>({
     mutationFn: async () => {
       const res = await fetch('/api/android/appium/stop', { method: 'POST' })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to stop Appium')
+      }
       return res.json()
     },
     onSuccess: async (data) => {

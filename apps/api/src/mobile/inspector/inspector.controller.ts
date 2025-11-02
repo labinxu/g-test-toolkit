@@ -14,6 +14,7 @@ export class InspectorController {
     @Query('unlockSwipe') unlockSwipe?: string,
     @Query('unlockKeywords') unlockKeywords?: string,
     @Query('minMs') minMs?: string,
+    @Query('preferAppium') preferAppium?: string,
   ) {
     try {
       const aw = autoWake ? /^(1|true|yes|on)$/i.test(autoWake) : true;
@@ -26,6 +27,7 @@ export class InspectorController {
         unlockSwipe: unlockSwipe || undefined,
         unlockKeywords: unlockKeywords || undefined,
         minIntervalMs: minMs ? Math.max(0, parseInt(minMs, 10) || 0) : undefined,
+        preferAppium: preferAppium ? /^(1|true|yes|on)$/i.test(preferAppium) : undefined,
       });
     } catch (e: any) {
       throw new NotFoundException(e?.message ?? 'Snapshot failed');

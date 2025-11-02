@@ -54,6 +54,7 @@ export interface AndroidInspectorProps {
   onNodeClick?: (node: NodeInfo) => void
 
   loading: boolean
+  overlayMode?: 'boxes' | 'markers'
 }
 
 export default function AndroidInspector(props: AndroidInspectorProps) {
@@ -84,6 +85,7 @@ export default function AndroidInspector(props: AndroidInspectorProps) {
     loading,
     showToolbar = true,
     fillHeight = false,
+    overlayMode = 'boxes',
   } = props
 
   return (
@@ -153,73 +155,130 @@ export default function AndroidInspector(props: AndroidInspectorProps) {
                 ) : null
               })()}
 
-              {/* Overlay */}
-              <div className="pointer-events-none absolute top-0 left-0 h-full w-full">
-                {filteredNodes.map((n) => {
-                  const left = Math.round(n.bounds.x1 * scale.sx * zoom)
-                  const top = Math.round(n.bounds.y1 * scale.sy * zoom)
-                  const width = Math.max(
-                    2,
-                    Math.round((n.bounds.x2 - n.bounds.x1) * scale.sx * zoom)
-                  )
-                  const height = Math.max(
-                    2,
-                    Math.round((n.bounds.y2 - n.bounds.y1) * scale.sy * zoom)
-                  )
-                  const selected = selectedId === n.nodeId
-                  const hovered = hoveredId === n.nodeId
-                  return (
-                    <div
-                      key={n.nodeId}
-                      className={
-                        'absolute box-border rounded-sm ' +
-                        (selected
-                          ? 'border-4 border-red-500 bg-red-500/10'
-                          : hovered
-                            ? 'border-2 border-amber-500 bg-amber-500/10'
-                            : 'border border-emerald-500 bg-emerald-500/10')
-                      }
-                      style={{ left, top, width, height }}
-                    />
-                  )
-                })}
-              </div>
-              {/* Click layer */}
-              <div className="absolute top-0 left-0 h-full w-full">
-                {filteredNodes.map((n) => {
-                  const left = Math.round(n.bounds.x1 * scale.sx * zoom)
-                  const top = Math.round(n.bounds.y1 * scale.sy * zoom)
-                  const width = Math.max(
-                    2,
-                    Math.round((n.bounds.x2 - n.bounds.x1) * scale.sx * zoom)
-                  )
-                  const height = Math.max(
-                    2,
-                    Math.round((n.bounds.y2 - n.bounds.y1) * scale.sy * zoom)
-                  )
-                  return (
-                    <button
-                      key={n.nodeId}
-                      type="button"
-                      className="absolute cursor-pointer border-transparent bg-transparent p-0"
-                      style={{ left, top, width, height }}
-                      onClick={() => {
-                        setSelectedId(n.nodeId)
-                        if (autoCenterOnClick) {
-                          centerOn(n)
-                        }
-                        onNodeClick?.(n)
-                      }}
-                      onDoubleClick={() => {
-                        // For future: double-click could zoom or other action
-                      }}
-                      title={`${n.class} ${n.text || ''}`.trim()}
-                      onMouseEnter={() => setHoveredId(n.nodeId)}
-                      onMouseLeave={() => setHoveredId((id) => (id === n.nodeId ? null : id))}
-                    />
-                  )
-                })}
-              </div>
+              {/* Overlay and click layer */}
+              {overlayMode === 'boxes' ? (
+                <>
+                  {/* Boxes overlay */}
+                  <div className="pointer-events-none absolute top-0 left-0 h-full w-full">
+                    {filteredNodes.map((n) => {
+                      const left = Math.round(n.bounds.x1 * scale.sx * zoom)
+                      const top = Math.round(n.bounds.y1 * scale.sy * zoom)
+                      const width = Math.max(
+                        2,
+                        Math.round((n.bounds.x2 - n.bounds.x1) * scale.sx * zoom)
+                      )
+                      const height = Math.max(
+                        2,
+                        Math.round((n.bounds.y2 - n.bounds.y1) * scale.sy * zoom)
+                      )
+                      const selected = selectedId === n.nodeId
+                      const hovered = hoveredId === n.nodeId
+                      return (
+                        <div
+                          key={n.nodeId}
+                          className={
+                            'absolute box-border rounded-sm ' +
+                            (selected
+                              ? 'border-4 border-red-500 bg-red-500/10'
+                              : hovered
+                                ? 'border-2 border-amber-500 bg-amber-500/10'
+                                : 'border border-emerald-500 bg-emerald-500/10')
+                          }
+                          style={{ left, top, width, height }}
+                        />
+                      )
+                    })}
+                  </div>
+                  {/* Click layer (full boxes) */}
+                  <div className="absolute top-0 left-0 h-full w-full">
+                    {filteredNodes.map((n) => {
+                      const left = Math.round(n.bounds.x1 * scale.sx * zoom)
+                      const top = Math.round(n.bounds.y1 * scale.sy * zoom)
+                      const width = Math.max(
+                        2,
+                        Math.round((n.bounds.x2 - n.bounds.x1) * scale.sx * zoom)
+                      )
+                      const height = Math.max(
+                        2,
+                        Math.round((n.bounds.y2 - n.bounds.y1) * scale.sy * zoom)
+                      )
+                      return (
+                        <button
+                          key={n.nodeId}
+                          type="button"
+                          className="absolute cursor-pointer border-transparent bg-transparent p-0"
+                          style={{ left, top, width, height }}
+                          onClick={() => {
+                            setSelectedId(n.nodeId)
+                            if (autoCenterOnClick) {
+                              centerOn(n)
+                            }
+                            onNodeClick?.(n)
+                          }}
+                          title={`${n.class} ${n.text || ''}`.trim()}
+                          onMouseEnter={() => setHoveredId(n.nodeId)}
+                          onMouseLeave={() => setHoveredId((id) => (id === n.nodeId ? null : id))}
+                        />
+                      )
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Marker overlay */}
+                  <div className="pointer-events-none absolute top-0 left-0 h-full w-full">
+                    {filteredNodes.map((n) => {
+                      const cx = ((n.bounds.x1 + n.bounds.x2) / 2) * scale.sx * zoom
+                      const cy = ((n.bounds.y1 + n.bounds.y2) / 2) * scale.sy * zoom
+                      const selected = selectedId === n.nodeId
+                      const hovered = hoveredId === n.nodeId
+                      const size = 10
+                      const left = Math.round(cx - size / 2)
+                      const top = Math.round(cy - size / 2)
+                      const cls = selected
+                        ? 'bg-red-500 border-red-600 shadow-red-500/40'
+                        : hovered
+                          ? 'bg-amber-500 border-amber-600 shadow-amber-500/40'
+                          : 'bg-emerald-500 border-emerald-600 shadow-emerald-500/40'
+                      return (
+                        <div
+                          key={n.nodeId}
+                          className={`absolute rounded-full border shadow ${cls}`}
+                          style={{ left, top, width: size, height: size }}
+                        />
+                      )
+                    })}
+                  </div>
+                  {/* Marker click layer */}
+                  <div className="absolute top-0 left-0 h-full w-full">
+                    {filteredNodes.map((n) => {
+                      const cx = ((n.bounds.x1 + n.bounds.x2) / 2) * scale.sx * zoom
+                      const cy = ((n.bounds.y1 + n.bounds.y2) / 2) * scale.sy * zoom
+                      const size = 16
+                      const left = Math.round(cx - size / 2)
+                      const top = Math.round(cy - size / 2)
+                      return (
+                        <button
+                          key={n.nodeId}
+                          type="button"
+                          className="absolute cursor-pointer border-transparent bg-transparent p-0"
+                          style={{ left, top, width: size, height: size }}
+                          onClick={() => {
+                            setSelectedId(n.nodeId)
+                            if (autoCenterOnClick) {
+                              centerOn(n)
+                            }
+                            onNodeClick?.(n)
+                          }}
+                          title={`${n.class} ${n.text || ''}`.trim()}
+                          onMouseEnter={() => setHoveredId(n.nodeId)}
+                          onMouseLeave={() => setHoveredId((id) => (id === n.nodeId ? null : id))}
+                        />
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </>
         ) : (

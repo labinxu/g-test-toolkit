@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
+import { normalizeResponseError } from '@/lib/error';
 interface SessionContextType {
   isAuthenticated: boolean;
   user: { username: string; email: string } | null;
@@ -114,8 +115,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         await checkAuth(); // Refresh auth state after login
       } else {
-        const errorData = await response.json();
-        toast('Error', errorData.message || 'Login failed');
+        const err = await normalizeResponseError(response);
+        toast.error(err.message || 'Login failed');
+        const e: any = new Error(err.message || 'Login failed')
+        if (err.fieldErrors) e.fieldErrors = err.fieldErrors
+        if (err.status) e.status = err.status
+        if (err.code) e.code = err.code
+        throw e
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -148,8 +154,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await checkAuth(); // Refresh auth state after registration
         router.push('/dashboard'); // Redirect to dashboard
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Registration failed');
+        const err = await normalizeResponseError(response);
+        toast.error(err.message || 'Registration failed');
+        const e: any = new Error(err.message || 'Registration failed')
+        if (err.fieldErrors) e.fieldErrors = err.fieldErrors
+        if (err.status) e.status = err.status
+        if (err.code) e.code = err.code
+        throw e
       }
     } catch (error) {
       console.error('Registration error:', error);

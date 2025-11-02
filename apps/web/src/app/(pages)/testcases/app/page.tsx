@@ -19,6 +19,7 @@ import {
   UploadCloud,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { normalizeResponseError } from '@/lib/error'
 import {
   Dialog,
   DialogContent,
@@ -121,7 +122,8 @@ export default function AppTestCasesPage() {
         credentials: 'include',
       })
       if (!res.ok) {
-        throw new Error(await extractErrorMessage(res, 'Failed to fetch app files'))
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to fetch app files')
       }
       const data = (await res.json()) as FileNode[] | { data?: FileNode[] }
       if (Array.isArray(data)) {
@@ -143,7 +145,8 @@ export default function AppTestCasesPage() {
         credentials: 'include',
       })
       if (!res.ok) {
-        throw new Error(await extractErrorMessage(res, 'Failed to fetch Android devices'))
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to fetch Android devices')
       }
       return res.json() as Promise<{ devices: string }>
     },
@@ -164,7 +167,8 @@ export default function AppTestCasesPage() {
         body: JSON.stringify({ path: filePath }),
       })
       if (!res.ok) {
-        throw new Error(await extractErrorMessage(res, 'Failed to delete file'))
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to delete file')
       }
       return res.json()
     },
@@ -189,7 +193,8 @@ export default function AppTestCasesPage() {
         body: formData,
       })
       if (!res.ok) {
-        throw new Error(await extractErrorMessage(res, 'Failed to upload file'))
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to upload file')
       }
       return res.json()
     },
@@ -281,7 +286,8 @@ export default function AppTestCasesPage() {
         body: JSON.stringify({ filePath, serials }),
       })
       if (!res.ok) {
-        throw new Error(await extractErrorMessage(res, 'Failed to install app'))
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Failed to install app')
       }
       return res.json()
     },

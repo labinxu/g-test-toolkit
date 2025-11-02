@@ -19,6 +19,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import { EditorView } from '@codemirror/view'
 import { javascript } from '@codemirror/lang-javascript'
 import { useTheme } from 'next-themes'
+import { normalizeResponseError } from '@/lib/error'
 
 type CachedFileEntry = {
   content: string
@@ -124,7 +125,8 @@ export const ScriptEditor = forwardRef<ScriptEditorHandle, ScriptEditorProps>(fu
           credentials: 'include',
         })
         if (!res.ok) {
-          throw new Error(await res.text())
+          const err = await normalizeResponseError(res)
+          throw new Error(err.message || 'Loading failed')
         }
         const data = await res.json()
         const nextContent = data['content'] ?? ''
@@ -206,7 +208,10 @@ export const ScriptEditor = forwardRef<ScriptEditorHandle, ScriptEditorProps>(fu
         },
         body: JSON.stringify({ path: filePath, content }),
       })
-      if (!res.ok) throw new Error('Save Failed')
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || 'Save Failed')
+      }
       setChanged(false)
       originalContentRef.current = content
       onContentSaved?.({ content, original: content }, { filePath })

@@ -3,6 +3,12 @@ import { TestCase } from './test-case-base'
 import { BrowserHelper, CustomLogger } from '../../types'
 import { remote } from 'webdriverio'
 
+export type MainOptions = {
+  keepAppOpen?: boolean
+  shareSession?: boolean
+  sessionKey?: string
+}
+
 type TestCaseConstructor = new (logger: any) => TestCase
 export async function main({
   clientId,
@@ -15,7 +21,7 @@ export async function main({
   workspace: string
   loggerService: any
   browserHelper: BrowserHelper
-  options?: { keepAppOpen?: boolean; shareSession?: boolean; sessionKey?: string }
+  options?: MainOptions
 }) {
   const logger = loggerService.createLogger('main', clientId) as CustomLogger
   for (const Ctor of __testCaseClasses as TestCaseConstructor[]) {
@@ -24,8 +30,7 @@ export async function main({
     const androidOpts = (Ctor as any).__androidOpts
     const headless = (Ctor as any).__headless
     const debug = (Ctor as any).__debug
-    const keepAndroidOpen =
-      (Ctor as any).__keepAppOpen ?? options?.keepAppOpen ?? (process.env.ANDROID_KEEP_APP_OPEN === '1')
+    const keepAndroidOpen = options?.keepAppOpen ?? (Ctor as any).__keepAppOpen
     const shareSession = !!options?.shareSession
     const sessionKey = options?.sessionKey || clientId
     const domain = (Ctor as any).__domain
@@ -93,21 +98,132 @@ export async function main({
         ;(globalThis as any).__androidDrivers = (globalThis as any).__androidDrivers || new Map()
         const store: Map<string, any> = (globalThis as any).__androidDrivers
         const key = shareSession ? `share:${sessionKey || 'default'}` : `${clientId || 'default'}:${Ctor.name}`
+        // Determine mode for this run (no external override; from decorator)
+        const installModeForThisRun: 'install' | 'launch' =
+          (Ctor as any).__androidInstallBehavior ?? 'install'
+        logger.info(`android run mode decided: ${installModeForThisRun}`)
 
         let driver = shareSession ? store.get(key) : undefined
+        let reused = false
         if (driver) {
-          logger.info(`reusing android driver session for key: ${key}`)
-        } else {
-          driver = await remote(androidOpts)
+          // Validate the existing session; recreate if invalid
+          try {
+            await (driver as any).getPageSource?.()
+            logger.info(`reusing android driver session for key: ${key}`)
+            reused = true
+          } catch (e) {
+            logger.warn(`stale android session detected for key: ${key}, recreating...`)
+            try { await (driver as any).deleteSession?.() } catch {}
+            store.delete(key)
+            driver = undefined
+          }
+        }
+        let created = false
+        if (!driver) {
+          // 选择运行模式：依据装饰器设定推断，默认 'install'（不允许外部覆盖）
+          let installMode: 'install' | 'launch' = (Ctor as any).__androidInstallBehavior ?? 'install'
+
+          // 从装饰器元数据中获取 server 与两种模式的 caps
+          const server = (Ctor as any).__androidServer || {
+            protocol: androidOpts?.protocol,
+            hostname: androidOpts?.hostname,
+            port: androidOpts?.port,
+            path: androidOpts?.path,
+          }
+          const capsInstall = (Ctor as any).__androidCapsInstall || androidOpts?.capabilities
+          const capsLaunch = (Ctor as any).__androidCapsLaunch
+
+          // 若选择 launch 但缺少包名/Activity，则回退到 install
+          if (installMode === 'launch' && !capsLaunch) {
+            logger.warn('直启模式缺少 appPackage/appActivity，回退为安装模式')
+            installMode = 'install'
+          }
+
+          // 选择最终 capabilities，并在缺失时给出明确错误
+          const selectedCaps = installMode === 'launch' ? capsLaunch : capsInstall
+          if (!selectedCaps) {
+            if (installMode === 'launch') {
+              throw new Error(
+                'Launch 模式需要提供 appPackage 与 appActivity（@withAndroid），或改为 install 模式并提供 apk'
+              )
+            }
+            throw new Error(
+              'Install 模式需要提供 apk（@withAndroid），或改为 launch 模式并提供 appPackage/appActivity'
+            )
+          }
+
+          try {
+            const capSummary = {
+              app: selectedCaps['appium:app'] ? 'set' : 'n/a',
+              appPackage: selectedCaps['appium:appPackage'] || 'n/a',
+              appActivity: selectedCaps['appium:appActivity'] || 'n/a',
+              noReset: selectedCaps['appium:noReset'],
+              fullReset: selectedCaps['appium:fullReset'],
+            }
+            logger.info(
+              `initializing android driver (mode=${installMode}) host=${server?.hostname}:${server?.port} caps=${JSON.stringify(
+                capSummary
+              )}`
+            )
+          } catch {}
+
+          const finalOpts = {
+            protocol: server?.protocol,
+            hostname: server?.hostname,
+            port: server?.port,
+            path: server?.path,
+            capabilities: selectedCaps,
+          }
+
+          driver = await remote(finalOpts)
           if (!driver) {
-            throw new Error(`remote driver initailize failed ${JSON.stringify(androidOpts)}`)
+            throw new Error(
+              `remote driver initialize failed ${JSON.stringify({ mode: installMode })}`
+            )
           }
           logger.info('create android driver')
+          created = true
           if (shareSession || keepAndroidOpen) {
             store.set(key, driver)
             logger.info(`driver stored with key: ${key}`)
           }
         }
+        // Try to bring the AUT to foreground when reusing/creating sessions (configurable)
+        const bringToFront = (Ctor as any).__androidBringToFront
+        const shouldBring = bringToFront !== false
+        logger.info(
+          `bringToFront decision: reused=${reused} created=${created} enabled=${String(
+            shouldBring
+          )} runMode=${installModeForThisRun}`
+        )
+        if (shouldBring) {
+          try {
+            const capsLaunchMeta = (Ctor as any).__androidCapsLaunch
+            const pkg: string | undefined =
+              capsLaunchMeta?.['appium:appPackage'] ||
+              androidOpts?.capabilities?.['appium:appPackage']
+            const act: string | undefined =
+              capsLaunchMeta?.['appium:appActivity'] ||
+              androidOpts?.capabilities?.['appium:appActivity']
+            logger.info(
+              `bringToFront target: package=${pkg || 'n/a'} activity=${act || 'n/a'}`
+            )
+            if (pkg) {
+              if (typeof (driver as any).activateApp === 'function') {
+                logger.info(`bringToFront via activateApp(${pkg})`)
+                await (driver as any).activateApp(pkg)
+              } else if (typeof (driver as any).startActivity === 'function' && act) {
+                logger.info(`bringToFront via startActivity(${pkg}, ${act})`)
+                await (driver as any).startActivity(pkg, act)
+              }
+            }
+          } catch (e) {
+            logger.warn(`bring-to-front failed: ${e}`)
+          }
+        } else {
+          logger.info('bringToFront skipped: disabled by configuration')
+        }
+
         instance.setPage(driver)
       }
     } catch (err) {

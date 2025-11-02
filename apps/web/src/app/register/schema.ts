@@ -1,30 +1,32 @@
 import { z } from 'zod';
-const passwordSchema = z
-  .string()
-  .min(6, { message: 'Password must be at least 6 characters long.' })
-  .max(128, { message: 'Password must not exceed 128 characters.' });
-// .regex(/[a-z]/, {
-//   message: 'Password must contain at least one lowercase letter.',
-// })
-// .regex(/[A-Z]/, {
-//   message: 'Password must contain at least one uppercase letter.',
-// })
-// .regex(/[0-9]/, { message: 'Password must contain at least one number.' })
-// .regex(/[^a-zA-Z0-9]/, {
-//   message: 'Password must contain at least one special character.',
-// });
+import { passwordSchema } from '@/lib/utils';
 
-export const formSchema = z.object({
-  username: z
-    .string()
-    .min(4, { message: 'username must be at least 4 character.' })
-    .max(255),
-  email: z.email({ message: 'Invalid email address.' }),
-  password: passwordSchema,
-  confirmPassword: z
-    .string()
-    .optional()
-    .refine((val) => !val || val === passwordSchema.parse(val), {
-      message: 'Passwords must match.',
-    }),
-});
+const usernameSchema = z
+  .string()
+  .trim()
+  .min(4, { message: 'Username must be at least 4 characters.' })
+  .max(64, { message: 'Username must be at most 64 characters.' })
+  .regex(/^[A-Za-z0-9._-]+$/, {
+    message: 'Username can only include letters, numbers, dot, underscore, hyphen.',
+  });
+
+export const formSchema = z
+  .object({
+    username: usernameSchema,
+    email: z
+      .string()
+      .trim()
+      .email({ message: 'Invalid email address.' })
+      .max(255, { message: 'Email must be at most 255 characters.' }),
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, { message: 'Please confirm your password.' }),
+  })
+  .superRefine((val, ctx) => {
+    if (val.confirmPassword !== val.password) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Passwords must match.',
+        path: ['confirmPassword'],
+      });
+    }
+  });
