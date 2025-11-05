@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dialog'
 import { ParametersForm, type ParametersFormHandle } from '@/components/settings/parameters-form'
 import DirectoryTreePanel from '@/components/files/directory-tree-panel'
-import { ScriptEditor, type ScriptEditorHandle } from '@/components/files/script-editor'
+import MonacoScriptEditor, { type MonacoScriptEditorHandle } from '@/components/files/monaco-script-editor'
 import { PackagePlus } from 'lucide-react'
 import { OutputPanel } from '@/components/output-panel'
 import { useSocket } from '../socket-content'
@@ -110,7 +110,20 @@ export default function Page() {
   const [autoRefreshInspector, setAutoRefreshInspector] = useState(false)
   const [resetKeyInspector, setResetKeyInspector] = useState(0)
   const inspectorRef = useRef<AndroidInspectorEmbedHandle | null>(null)
-  const editorRef = useRef<ScriptEditorHandle | null>(null)
+  const editorRef = useRef<MonacoScriptEditorHandle | null>(null)
+  const [typesOpen, setTypesOpen] = useState(false)
+  const [typesGlobal, setTypesGlobal] = useState<string[]>([])
+  const [typesRelatives, setTypesRelatives] = useState<string[]>([])
+  const updateTypesStatus = useCallback(() => {
+    try {
+      const s = editorRef.current?.getTypingsStatus?.()
+      setTypesGlobal(s?.global || [])
+      setTypesRelatives(s?.relatives || [])
+    } catch {}
+  }, [])
+  useEffect(() => {
+    if (typesOpen) updateTypesStatus()
+  }, [typesOpen, updateTypesStatus])
   const paramsRef = useRef<ParametersFormHandle | null>(null)
   const [insertMode, setInsertMode] = useState<'click' | 'setValue' | 'selector' | 'longPress'>(
     () => {
@@ -143,6 +156,7 @@ export default function Page() {
       return 80
     }
   })
+  
   useEffect(() => {
     const handler = () => {
       try {
@@ -169,6 +183,7 @@ export default function Page() {
       window.removeEventListener('gtt-parameters-updated', handler as any)
     }
   }, [])
+  
   const [longPressMs, setLongPressMs] = useState<number>(() => {
     if (typeof window === 'undefined') return 800
     const raw = localStorage.getItem('gtt:longPressMs')
@@ -373,6 +388,21 @@ export default function Page() {
     }
   }, [aiPrompt, selectedDeviceId, currentFile])
   const { logs, connected, clientId, clearLogs, running, setRunning } = useSocket()
+  // Auto refresh typings when server logs report lib build completion
+  const lastTypingsReloadIdxRef = useRef<number>(0)
+  useEffect(() => {
+    const start = Math.max(0, lastTypingsReloadIdxRef.current)
+    const pattern = /(core|gettr|android)\s+lib\s+build/i
+    const L = logs?.length || 0
+    for (let i = start; i < L; i++) {
+      const msg = logs[i] || ''
+      if (pattern.test(msg)) {
+        try { setTimeout(() => editorRef.current?.reloadTypings?.(), 200) } catch {}
+        lastTypingsReloadIdxRef.current = L
+        break
+      }
+    }
+  }, [logs])
   const [fileCache, setFileCache] = useState<Record<string, { content: string; original: string }>>(
     {}
   )
@@ -625,7 +655,8 @@ export default function Page() {
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pl-1 transition-all duration-300">
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-row items-stretch overflow-auto rounded-lg border">
-            <ScriptEditor
+            <div className="flex-1 min-w-0">
+              <MonacoScriptEditor
               ref={editorRef}
               filePath={currentFile}
               wrapAtColumn={wrapColumn}
@@ -645,7 +676,79 @@ export default function Page() {
                         <PackagePlus className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent sideOffset={6}>Build Libs</TooltipContent>
+                  <TooltipContent sideOffset={6}>Build Libs</TooltipContent>
+                  </Tooltip>
+                  {/* Refresh typings */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-full"
+                        onClick={async () => { await editorRef.current?.reloadTypings?.(); updateTypesStatus() }}
+                        aria-label="Refresh types"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent sideOffset={6}>Refresh Types</TooltipContent>
+                  </Tooltip>
+                  {/* Types inspector */}
+                  <Tooltip>
+                    <Dialog open={typesOpen} onOpenChange={setTypesOpen}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          aria-label="Show loaded types"
+                          type="button"
+                          onClick={() => { setTypesOpen(true); /* useEffect will update */ }}
+                        >
+                          <Braces className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>Loaded Types</DialogTitle>
+                        </DialogHeader>
+                        <div className="max-h-[60vh] overflow-auto space-y-3">
+                          <div>
+                            <div className="mb-1 text-sm font-medium">Global typings ({typesGlobal.length})</div>
+                            <ul className="text-xs">
+                              {typesGlobal.map((p) => (
+                                <li key={p} className="truncate">{p}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-sm font-medium">Relative imports ({typesRelatives.length})</div>
+                            <ul className="text-xs">
+                              {typesRelatives.map((p) => (
+                                <li key={p} className="truncate">
+                                  <button
+                                    type="button"
+                                    className="hover:underline text-left"
+                                    onClick={() => {
+                                      try { setCurrentFile(p) } catch {}
+                                      setTypesOpen(false)
+                                    }}
+                                  >
+                                    {p}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <DialogClose asChild>
+                            <Button variant="outline">Close</Button>
+                          </DialogClose>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    <TooltipContent sideOffset={6}>Show Types</TooltipContent>
                   </Tooltip>
                   {/* AI generate */}
                   <Tooltip>
@@ -828,12 +931,14 @@ export default function Page() {
                   )
                 } catch {}
               }}
-            />
+              />
+            </div>
             <div
               className={cn(
-                'flex overflow-auto rounded-lg border p-2',
-                showAndroidInspector ? 'min-w-[420px]' : ''
+                'flex overflow-hidden rounded-lg border flex-none relative z-10',
+                showAndroidInspector ? 'p-2' : 'p-1'
               )}
+              style={{ width: showAndroidInspector ? 420 : 32, transition: 'width 240ms ease' }}
             >
               <div className="self-center">
                 <Tooltip>
@@ -849,6 +954,7 @@ export default function Page() {
                         }
                         setShowAndroidInspector((v) => !v)
                       }}
+                      aria-expanded={showAndroidInspector}
                       tabIndex={-1}
                       type="button"
                     >
@@ -935,26 +1041,7 @@ export default function Page() {
                         {autoCenter ? 'Auto-center: on' : 'Auto-center: off'}
                       </TooltipContent>
                     </Tooltip>
-                    {/* Quick toggle: Appium pageSource (local override) */}
-                    {/* Appium XML (faster; may hang)*/}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant={'ghost'}
-                          size="icon"
-                          className="h-8 w-8 rounded-full"
-                          onClick={() => setPreferAppiumLocal((v) => !v)}
-                          aria-label="Appium XML (faster; may hang)"
-                        >
-                          <Clover
-                            className={`h-4 w-4 ${preferAppiumLocal ? 'text-blue-600' : ''}`}
-                          />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>
-                        {preferAppiumLocal ? 'Appium XM: on' : 'Appium XML: off'}
-                      </TooltipContent>
-                    </Tooltip>
+                    {/* Appium XML toggle removed (moved to Parameters) */}
 
                     <Tooltip>
                       <TooltipTrigger asChild>

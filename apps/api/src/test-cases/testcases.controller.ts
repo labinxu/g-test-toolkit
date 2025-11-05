@@ -114,11 +114,11 @@ export class TestCasesController {
       )
     )
     if (serials.length === 0) {
-      throw new BadRequestException('At least one emulator serial is required')
+      throw new BadRequestException('At least one device serial is required')
     }
     try {
       const absolutePath = await this.filesService.getAppFileAbsolutePath(installAppDto.filePath)
-      const result = await this.androidService.installAppOnEmulators(serials, absolutePath)
+      const result = await this.androidService.installAppOnEmulators(serials, absolutePath, { force: !!installAppDto.force })
       return {
         result: 'ok',
         installed: result.installed,
@@ -183,18 +183,6 @@ export class TestCasesController {
     }
   }
 
-  @Get('interfaces')
-  @UseGuards(AuthGuard('jwt'))
-  async interfaces(@Res() res: Response) {
-    try {
-      const interfs = await this.testCasesService.getInterfaces()
-      res.type('application/json')
-      res.send(interfs)
-    } catch (err) {
-      throw new NotFoundException('make types file failed')
-    }
-  }
-
   @Get('corelib')
   async corelib(@Query('clientId') clientId: string) {
     try {
@@ -218,13 +206,16 @@ export class TestCasesController {
 
   @Post('cleanup-android')
   @UseGuards(AuthGuard('jwt'))
-  async cleanupAndroid(@Body('clientId') clientId?: string, @Body('sessionKey') sessionKey?: string) {
+  async cleanupAndroid(
+    @Body('clientId') clientId?: string,
+    @Body('sessionKey') sessionKey?: string
+  ) {
     try {
       const result = sessionKey
         ? await this.testCasesService.cleanupSharedSessionByKey(sessionKey)
         : clientId
-        ? await this.testCasesService.cleanupKeptAndroidSessionsFor(clientId)
-        : await this.testCasesService.cleanupKeptAndroidSessions()
+          ? await this.testCasesService.cleanupKeptAndroidSessionsFor(clientId)
+          : await this.testCasesService.cleanupKeptAndroidSessions()
       return { result: 'ok', ...result }
     } catch (error) {
       throw new NotFoundException(getErrorMessage(error))
@@ -237,10 +228,22 @@ export class TestCasesController {
       await this.testCasesService.buildCoreLib(clientId)
       await this.testCasesService.buildGettrLib(clientId)
       await this.testCasesService.buildGettrAndroidLib(clientId)
+      await this.testCasesService.buildLibsComplete(clientId)
     } catch (error) {
       throw new NotFoundException(getErrorMessage(error))
     }
     return { result: 'ok', message: 'building...' }
+  }
+
+  // Provide a bundle of .d.ts files for editor intellisense
+  @Get('typings')
+  async typings() {
+    try {
+      const bundle = await this.testCasesService.getTypingsBundle()
+      return { result: 'ok', ...bundle }
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error))
+    }
   }
   @Post('runpath')
   async runTestCaseFile(@Body() runTestCaseFileDto: RunTestCaseFileDto) {
@@ -261,15 +264,11 @@ export class TestCasesController {
     console.log(absPath)
     const code = fs.readFileSync(absPath)
     try {
-      this.testCasesService.runInSandbox(
-        code.toString('utf-8'),
-        runTestCaseFileDto.clientId,
-        {
-          keepAppOpen: !!runTestCaseFileDto.keepAppOpen,
-          shareSession: !!runTestCaseFileDto.shareSession,
-          sessionKey: runTestCaseFileDto.sessionKey,
-        }
-      )
+      this.testCasesService.runInSandbox(code.toString('utf-8'), runTestCaseFileDto.clientId, {
+        keepAppOpen: !!runTestCaseFileDto.keepAppOpen,
+        shareSession: !!runTestCaseFileDto.shareSession,
+        sessionKey: runTestCaseFileDto.sessionKey,
+      })
     } catch (err) {
       throw new NotFoundException(getErrorMessage(err))
     }

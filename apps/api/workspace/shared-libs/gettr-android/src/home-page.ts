@@ -1,30 +1,48 @@
-import { IPage } from './interface/ipage'
-import { LoginPage } from './login-page'
-import { ProfilePage } from './profile-page'
-
+import {IPage} from "./interface/ipage"
 export class HomePage extends IPage {
   constructor(instance: any) {
     super(instance)
-    //changelanguage
   }
-  async setLanguage(lan: string) {}
-  async gotoLoginPage(username: string, password: string) {
-    await this.page.pause(1000)
-    await this.page.$('~Log in').click()
-    await this.page.pause(1000)
-    await this.page.$('~Email / Username').click()
-    const allInputs = await this.page.$$('//android.widget.EditText')
-    this.logger.debug(`input number: ${allInputs.length}`)
-    await allInputs[1].setValue(username) // 第一个
-    await this.page.pause(1000)
-    await allInputs[2].click()
-    await allInputs[2].setValue(password) // 第二个
-    await this.page.pause(500)
-    await this.page.$('//android.view.View[@content-desc="Log In" and @clickable="true"]').click()
-    await this.page.pause(500)
+  public async clickHere(): Promise<void> {
+    await this.page.$('~Click here to access Direct Message').click();
+  }
+  public async sideMenuButton(): Promise<void> {
+    await this.page.$('~side menu button').click();
+  }
+  public async exploreTab(): Promise<void> {
+    await this.page.$('~Explore\nTab 1 of 3').click();
+  }
+  public async followingTab(): Promise<void> {
+    await this.page.$('~Following\nTab 2 of 3').click();
+  }
+  public async breakingTab(): Promise<void> {
+    await this.page.$('~Breaking\nTab 3 of 3').click();
+  }
+  public async all(): Promise<void> {
+    await this.page.$('~All').click();
+  }
+  public async news(): Promise<void> {
+    await this.page.$('~News').click();
+  }
+  public async maga(): Promise<void> {
+    await this.page.$('~MAGA').click();
+  }
+  public category(category:string){
     
-
   }
-
-  async gotoSignUpPage() {}
+  public async postFrom(): Promise<void> {
+    await this.page.$('~Post from SteveBannon').click();
+  }
+  public async remindMeLater(): Promise<void> {
+    await this.page.$('~Remind me later').click();
+  }
+  public async startTheTour(): Promise<void> {
+    await this.page.$('~Start the tour').click();
+  }
+  public async crypto(): Promise<void> {
+    await this.page.$('~Crypto').click();
+  }
+  public async creatorLabel(): Promise<void> {
+    await this.page.$('~creator label').click();
+  }
 }

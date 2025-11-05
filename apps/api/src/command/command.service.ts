@@ -59,7 +59,7 @@ export class CommandService {
         return res
       } catch (err) {
         lastErr = err
-        await sleep(150)
+        await sleep(250)
       }
     }
     throw new NotFoundException(
@@ -68,14 +68,18 @@ export class CommandService {
   }
   async pullDumpedXml(deviceId: string, outPath: string) {
     const pullcommand = `adb -s ${deviceId} pull /sdcard/window_dump.xml ${outPath}`
-    // In some devices the file may not be immediately flushed; add a quick retry
-    try {
-      await this.runCommand(pullcommand)
-      return
-    } catch {
-      await sleep(150)
-      await this.runCommand(pullcommand)
+    // In some devices the file may not be immediately flushed; add retries
+    let lastErr: any = null
+    for (let i = 0; i < 3; i++) {
+      try {
+        await this.runCommand(pullcommand)
+        return
+      } catch (e) {
+        lastErr = e
+        await sleep(300)
+      }
     }
+    throw new Error(`Failed to pull window_dump.xml: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`)
   }
   async unlockScreen(
     deviceId: string,

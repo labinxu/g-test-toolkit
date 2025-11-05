@@ -54,41 +54,6 @@ export class TestCasesService {
       delete require.cache[relativePath]
     }
   }
-  async getInterfaces() {
-    const coreLibPath = path.join(
-      __dirname,
-      '../..',
-      process.env.CORE_LIB_DIR || 'workspace/shared-libs/core',
-      'index.ts'
-    )
-    const gettrLibPath = path.join(
-      __dirname,
-      '../..',
-      process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr',
-      'index.ts'
-    )
-    const androidLibPath = path.join(
-      __dirname,
-      '../..',
-      process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android',
-      'index.ts'
-    )
-
-    this.logger.info(`corelib:${coreLibPath}\ngettrlib:${gettrLibPath}`)
-    try {
-      const coreInterface = fs.readFileSync(coreLibPath, 'utf-8')
-      const gettrInterface = fs.readFileSync(gettrLibPath, 'utf-8')
-      const gettrAndroidInterface = fs.readFileSync(androidLibPath, 'utf-8')
-      return [
-        { 'core-lib': coreInterface },
-        { 'gettr-lib': gettrInterface },
-        { 'android-lib': gettrAndroidInterface },
-      ]
-    } catch (err) {
-      this.logger.error(getErrorMessage(err))
-      throw err
-    }
-  }
 
   async transformCode(code: string): Promise<string> {
     try {
@@ -146,7 +111,7 @@ export class TestCasesService {
         if (moduleName === 'gettr-lib') {
           return gettrLib
         }
-        if (moduleName === 'android-lib') {
+        if (moduleName === 'gettr-android-lib') {
           return gettrAndroidLib
         }
         return require(moduleName)
@@ -196,9 +161,12 @@ export class TestCasesService {
     const coreSrcDir = path.join(coreDir, 'src')
     // If dist is missing or older than src, rebuild automatically
     try {
-      const distExists = fs.existsSync(coreLibPath) || fs.existsSync(coreLibPath.replace(/index\.js$/, 'index.mjs'))
+      const distExists =
+        fs.existsSync(coreLibPath) || fs.existsSync(coreLibPath.replace(/index\.js$/, 'index.mjs'))
       const srcLatest = await this.getDirLatestMtimeSafe(coreSrcDir)
-      const distLatest = await this.getFileMtimeSafe(coreLibPath) || (await this.getFileMtimeSafe(coreLibPath.replace(/index\.js$/, 'index.mjs')))
+      const distLatest =
+        (await this.getFileMtimeSafe(coreLibPath)) ||
+        (await this.getFileMtimeSafe(coreLibPath.replace(/index\.js$/, 'index.mjs')))
       if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
         this.logger.info('Core lib dist outdated or missing. Rebuilding...')
         await this.buildCoreLib()
@@ -223,7 +191,7 @@ export class TestCasesService {
       // 支持 ESM/CJS：优先 ESM（有 require shim），回退 CJS
       const distIndexMjs = coreLibPathMjs
       let module: any
-      const dynamicImport = (p: string) => (new Function('p', 'return import(p)'))(p) as Promise<any>
+      const dynamicImport = (p: string) => new Function('p', 'return import(p)')(p) as Promise<any>
       try {
         if (fs.existsSync(distIndexMjs)) {
           // 用唯一文件名规避 ESM 缓存，并保持 file:// 方案，保证 createRequire(import.meta.url) 可用
@@ -235,7 +203,9 @@ export class TestCasesService {
           try {
             for (const f of fs.readdirSync(dir)) {
               if (/^index-\d+\.mjs$/.test(f)) {
-                try { fs.unlinkSync(path.join(dir, f)) } catch {}
+                try {
+                  fs.unlinkSync(path.join(dir, f))
+                } catch {}
               }
             }
           } catch {}
@@ -277,9 +247,13 @@ export class TestCasesService {
     const gettrSrcDir = path.join(gettrDir, 'src')
     // Auto rebuild if outdated
     try {
-      const distExists = fs.existsSync(gettrLibPath) || fs.existsSync(gettrLibPath.replace(/index\.js$/, 'index.mjs'))
+      const distExists =
+        fs.existsSync(gettrLibPath) ||
+        fs.existsSync(gettrLibPath.replace(/index\.js$/, 'index.mjs'))
       const srcLatest = await this.getDirLatestMtimeSafe(gettrSrcDir)
-      const distLatest = await this.getFileMtimeSafe(gettrLibPath) || (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
+      const distLatest =
+        (await this.getFileMtimeSafe(gettrLibPath)) ||
+        (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
       if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
         this.logger.info('gettr lib dist outdated or missing. Rebuilding...')
         await this.buildGettrLib()
@@ -303,7 +277,7 @@ export class TestCasesService {
       console.log(`Reloading gettr-lib from ${filePathUsed}`)
       const distIndexMjs = gettrLibPathMjs
       let module: any
-      const dynamicImport = (p: string) => (new Function('p', 'return import(p)'))(p) as Promise<any>
+      const dynamicImport = (p: string) => new Function('p', 'return import(p)')(p) as Promise<any>
       try {
         if (fs.existsSync(distIndexMjs)) {
           const dir = path.dirname(distIndexMjs)
@@ -313,7 +287,9 @@ export class TestCasesService {
           try {
             for (const f of fs.readdirSync(dir)) {
               if (/^index-\d+\.mjs$/.test(f)) {
-                try { fs.unlinkSync(path.join(dir, f)) } catch {}
+                try {
+                  fs.unlinkSync(path.join(dir, f))
+                } catch {}
               }
             }
           } catch {}
@@ -354,9 +330,13 @@ export class TestCasesService {
     const gettrSrcDir = path.join(gettrAndroidDir, 'src')
     // Auto rebuild if outdated
     try {
-      const distExists = fs.existsSync(gettrLibPath) || fs.existsSync(gettrLibPath.replace(/index\.js$/, 'index.mjs'))
+      const distExists =
+        fs.existsSync(gettrLibPath) ||
+        fs.existsSync(gettrLibPath.replace(/index\.js$/, 'index.mjs'))
       const srcLatest = await this.getDirLatestMtimeSafe(gettrSrcDir)
-      const distLatest = await this.getFileMtimeSafe(gettrLibPath) || (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
+      const distLatest =
+        (await this.getFileMtimeSafe(gettrLibPath)) ||
+        (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
       if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
         this.logger.info('gettr-android lib dist outdated or missing. Rebuilding...')
         await this.buildGettrAndroidLib()
@@ -382,7 +362,7 @@ export class TestCasesService {
       console.log(`Reloading gettr-android-lib from ${filePathUsed}`)
       const distIndexMjs = gettrLibPathMjs
       let module: any
-      const dynamicImport = (p: string) => (new Function('p', 'return import(p)'))(p) as Promise<any>
+      const dynamicImport = (p: string) => new Function('p', 'return import(p)')(p) as Promise<any>
       try {
         if (fs.existsSync(distIndexMjs)) {
           const dir = path.dirname(distIndexMjs)
@@ -392,7 +372,9 @@ export class TestCasesService {
           try {
             for (const f of fs.readdirSync(dir)) {
               if (/^index-\d+\.mjs$/.test(f)) {
-                try { fs.unlinkSync(path.join(dir, f)) } catch {}
+                try {
+                  fs.unlinkSync(path.join(dir, f))
+                } catch {}
               }
             }
           } catch {}
@@ -444,6 +426,11 @@ export class TestCasesService {
     fs.mkdirSync(outputDir, { recursive: true })
     this.generateIndexWithTsMorph(coreDir, srcDir, indexPath)
     const result = await this.buildWithEsbuild(indexPath, outputDir)
+    try {
+      await this.emitDeclarationsWithTsMorph(coreDir)
+    } catch (e) {
+      this.logger.warn(`emit d.ts failed for gettr lib: ${e}`)
+    }
     clientId && this.logger.sendTo(clientId, `gettr lib ${result}`, 'info')
     // delete the module cache,
     delete require.cache[require.resolve(indexPath)]
@@ -504,6 +491,11 @@ export class TestCasesService {
     fs.mkdirSync(outputDir, { recursive: true })
     await this.generateIndexWithTsMorph(coreDir, srcDir, indexPath)
     const result = await this.buildWithEsbuild(indexPath, outputDir)
+    try {
+      await this.emitDeclarationsWithTsMorph(coreDir)
+    } catch (e) {
+      this.logger.warn(`emit d.ts failed for core lib: ${e}`)
+    }
     clientId && this.logger.sendTo(clientId, `core lib ${result}`, 'info')
 
     // delete the module cache
@@ -516,7 +508,6 @@ export class TestCasesService {
     this.deepClearCache(distIndexMjs)
   }
   async buildGettrAndroidLib(clientId?: string) {
-    console.log('libdir:', process.env.CORE_LIB_DIR)
     const androidLibPath = path.join(
       __dirname,
       '../..',
@@ -533,6 +524,11 @@ export class TestCasesService {
     fs.mkdirSync(outputDir, { recursive: true })
     await this.generateIndexWithTsMorph(androidLibPath, srcDir, indexPath)
     const result = await this.buildWithEsbuild(indexPath, outputDir)
+    try {
+      await this.emitDeclarationsWithTsMorph(androidLibPath)
+    } catch (e) {
+      this.logger.warn(`emit d.ts failed for gettr-android lib: ${e}`)
+    }
     clientId && this.logger.sendTo(clientId, `gettr-android lib ${result}`, 'info')
 
     // delete the module cache
@@ -551,11 +547,15 @@ export class TestCasesService {
       skipAddingFilesFromTsConfig: true,
     })
 
+    // Include TS sources but exclude declaration files to avoid duplicate named exports
     project.addSourceFilesAtPaths([`${srcDir}/*.ts`])
 
     // 收集导出的符号
     const exportStatements: string[] = []
-    const files = [...project.getSourceFiles(`${srcDir}/*.ts`)]
+    // Note: `*.ts` glob also matches `*.d.ts`; filter them out explicitly
+    const files = [...project.getSourceFiles(`${srcDir}/*.ts`)].filter(
+      (f) => !/\.d\.ts$/i.test(f.getFilePath())
+    )
 
     files.forEach((file) => {
       const filePath = file.getFilePath()
@@ -596,11 +596,11 @@ export class TestCasesService {
         banner: {
           js: [
             "import { createRequire } from 'module';",
-            "const require = createRequire(import.meta.url);",
+            'const require = createRequire(import.meta.url);',
             "import { fileURLToPath } from 'url';",
             "import path from 'path';",
-            "const __filename = fileURLToPath(import.meta.url);",
-            "const __dirname = path.dirname(__filename);",
+            'const __filename = fileURLToPath(import.meta.url);',
+            'const __dirname = path.dirname(__filename);',
           ].join('\n'),
         },
         external: ['node:*'],
@@ -617,8 +617,8 @@ export class TestCasesService {
       if (cjsResult.errors?.length) console.error('CJS build errors:', cjsResult.errors)
 
       const files = fs.readdirSync(outputDir)
-      if (files.length === 0) throw new Error(`No files found in ${outputDir}. Build may have failed.`)
-      console.log(`Built lib to ${outputDir}:`, files)
+      if (files.length === 0)
+        throw new Error(`No files found in ${outputDir}. Build may have failed.`)
 
       return `build succssfully`
     } catch (error) {
@@ -626,6 +626,123 @@ export class TestCasesService {
     } finally {
       esbuild.stop()
     }
+  }
+  async buildLibsComplete(clientId: string) {
+    this.logger.sendTo(clientId, 'libs build complete')
+  }
+  /**
+   * Emit TypeScript declaration files (.d.ts) for a lib directory using its tsconfig.json.
+   * Writes to the configured declarationDir/outDir in the lib tsconfig (usually ./dist).
+   */
+  private async emitDeclarationsWithTsMorph(libDir: string) {
+    const tsconfig = path.join(libDir, 'tsconfig.json')
+    const project = new Project({
+      tsConfigFilePath: tsconfig,
+      skipAddingFilesFromTsConfig: false,
+    })
+    // Ensure index.ts exists when ts-morph resolves project files
+    // It is generated by generateIndexWithTsMorph before calling this method
+    await project.emit({ emitOnlyDtsFiles: true })
+  }
+
+  /** Read all .d.ts produced under each lib dist and return as a mapping for the editor. */
+  async getTypingsBundle() {
+    const libs = [
+      {
+        name: 'core-lib',
+        dir: path.join(
+          __dirname,
+          '../..',
+          process.env.CORE_LIB_DIR || 'workspace/shared-libs/core'
+        ),
+      },
+      {
+        name: 'gettr-lib',
+        dir: path.join(
+          __dirname,
+          '../..',
+          process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr'
+        ),
+      },
+      {
+        name: 'gettr-android-lib',
+        dir: path.join(
+          __dirname,
+          '../..',
+          process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android'
+        ),
+      },
+    ]
+
+    // Ensure d.ts exist by emitting (no-op if already up-to-date)
+    for (const l of libs) {
+      try {
+        await this.emitDeclarationsWithTsMorph(l.dir)
+      } catch {}
+    }
+
+    const entries: { path: string; content: string }[] = []
+    for (const l of libs) {
+      const dist = path.join(l.dir, 'dist')
+      if (!fs.existsSync(dist)) continue
+      const walk = (d: string) => {
+        for (const name of fs.readdirSync(d)) {
+          const full = path.join(d, name)
+          const st = fs.statSync(full)
+          if (st.isDirectory()) walk(full)
+          else if (st.isFile() && name.endsWith('.d.ts')) {
+            const rel = path.relative(l.dir, full).replace(/\\/g, '/')
+            const virtualPath = `/types/${l.name}/${rel}`
+            try {
+              entries.push({
+                path: virtualPath,
+                content: fs.readFileSync(full, 'utf-8'),
+              })
+            } catch {}
+          }
+        }
+      }
+      walk(dist)
+    }
+    // Ensure each lib has a virtual dist/index.d.ts that re-exports its declarations
+    const byLib: Record<string, string[]> = {}
+    for (const e of entries) {
+      const m = e.path.match(/^\/types\/([^/]+)\/dist\/(.+)$/)
+      if (!m) continue
+      const lib = m[1]
+      byLib[lib] = byLib[lib] || []
+      byLib[lib].push(e.path)
+    }
+    const hasIndex = new Set(
+      entries
+        .filter((e) => /\/dist\/index\.d\.ts$/.test(e.path))
+        .map((e) => e.path.replace(/\/dist\/index\.d\.ts$/, ''))
+    )
+    for (const lib of Object.keys(byLib)) {
+      const base = `/types/${lib}`
+      const indexPath = `${base}/dist/index.d.ts`
+      const exists = entries.some((e) => e.path === indexPath)
+      if (!exists) {
+        const files = byLib[lib]
+        const rels: string[] = []
+        for (const p of files) {
+          const m2 = p.match(/^\/types\/[^/]+\/dist\/(.+)$/)
+          if (!m2) continue
+          // Prefer src/*.d.ts first, then others
+          rels.push(m2[1])
+        }
+        // put likely entry first if present
+        const pri = rels.sort((a, b) => {
+          const score = (s: string) =>
+            s === 'index.d.ts' ? 0 : s === 'src/index.d.ts' ? 1 : s.startsWith('src/') ? 2 : 3
+          return score(a) - score(b)
+        })
+        const content =
+          pri.map((r) => `export * from './${r.replace(/'/g, "'")}'`).join('\n') + '\n'
+        entries.push({ path: indexPath, content })
+      }
+    }
+    return { files: entries }
   }
 
   async cleanupKeptAndroidSessions() {
@@ -644,12 +761,14 @@ export class TestCasesService {
         errors += 1
         this.logger.warn(`Failed to close driver ${key}: ${e}`)
       } finally {
-        try { drivers.delete(key) } catch {}
+        try {
+          drivers.delete(key)
+        } catch {}
       }
     }
     return { closed, errors, kept }
   }
-  
+
   async cleanupKeptAndroidSessionsFor(clientId: string) {
     if (!clientId) {
       return { closed: 0, errors: 0, kept: 0 }
@@ -675,7 +794,9 @@ export class TestCasesService {
         errors += 1
         this.logger.warn(`Failed to close driver ${key}: ${e}`)
       } finally {
-        try { drivers.delete(key) } catch {}
+        try {
+          drivers.delete(key)
+        } catch {}
       }
     }
     return { closed, errors, kept }
@@ -698,7 +819,9 @@ export class TestCasesService {
       errors = 1
       this.logger.warn(`Failed to close driver ${key}: ${e}`)
     } finally {
-      try { drivers.delete(key) } catch {}
+      try {
+        drivers.delete(key)
+      } catch {}
     }
     kept = drivers.size
     return { closed, errors, kept }

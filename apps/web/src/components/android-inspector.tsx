@@ -20,6 +20,8 @@ export type Snapshot = {
   screen: { width: number; height: number }
   nodes: NodeInfo[]
   takenAt: number
+  fsTriggered?: boolean
+  fsMessage?: string
 }
 
 export interface AndroidInspectorProps {

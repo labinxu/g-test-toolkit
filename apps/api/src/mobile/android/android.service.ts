@@ -345,9 +345,36 @@ export class AndroidService {
     return { created: true, avd: finalName, templateId: template.id };
   }
 
-  async installAppOnEmulators(serials: string[], apkPath: string) {
+  private async getApkPackageName(apkPath: string): Promise<string> {
+    // Try aapt
+    try {
+      const { stdout } = await this.run(`aapt dump badging "${apkPath}"`);
+      const out = stdout.toString();
+      const m = out.match(/package:\s+name='([^']+)'/);
+      if (m && m[1]) return m[1];
+    } catch {}
+
+    // Try aapt2
+    try {
+      const { stdout } = await this.run(`aapt2 dump badging "${apkPath}"`);
+      const out = stdout.toString();
+      const m = out.match(/package:\s+name='([^']+)'/);
+      if (m && m[1]) return m[1];
+    } catch {}
+
+    // Try apkanalyzer
+    try {
+      const { stdout } = await this.run(`apkanalyzer manifest application-id "${apkPath}"`);
+      const pkg = stdout.toString().trim();
+      if (pkg) return pkg;
+    } catch {}
+
+    throw new Error('Unable to determine APK package name. Ensure Android Build Tools (aapt/apkanalyzer) are installed.');
+  }
+
+  async installAppOnEmulators(serials: string[], apkPath: string, options: { force?: boolean } = {}) {
     if (!serials || serials.length === 0) {
-      throw new Error('No emulator serials provided');
+      throw new Error('No device serials provided');
     }
     const uniqueSerials = Array.from(
       new Set(
@@ -357,12 +384,28 @@ export class AndroidService {
       ),
     );
     if (uniqueSerials.length === 0) {
-      throw new Error('No valid emulator serials provided');
+      throw new Error('No valid device serials provided');
     }
     const installed: string[] = [];
+    let packageName: string | null = null;
+    if (options?.force) {
+      try {
+        packageName = await this.getApkPackageName(apkPath);
+      } catch (err) {
+        this.logger.warn(`Force install requested but failed to read package name: ${(err as Error)?.message ?? err}`);
+      }
+    }
     for (const serial of uniqueSerials) {
       try {
         this.logger.info(`Installing ${apkPath} on ${serial}`);
+        if (options?.force && packageName) {
+          try {
+            this.logger.info(`Force uninstalling ${packageName} on ${serial}`);
+            await this.run(`adb -s ${serial} uninstall ${packageName}`);
+          } catch (unErr) {
+            this.logger.warn(`Uninstall before install failed (non-fatal) on ${serial}: ${(unErr as Error)?.message ?? unErr}`);
+          }
+        }
         await this.run(`adb -s ${serial} install -r "${apkPath}"`);
         installed.push(serial);
       } catch (error) {
@@ -377,7 +420,7 @@ export class AndroidService {
     return {
       installed: installed.length,
       serials: installed,
-      message: `Installed ${apkLabel} on ${installed.length} emulator${
+      message: `Installed ${apkLabel} on ${installed.length} device${
         installed.length === 1 ? '' : 's'
       }`,
     };

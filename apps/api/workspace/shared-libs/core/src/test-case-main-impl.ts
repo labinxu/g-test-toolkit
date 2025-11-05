@@ -1,7 +1,62 @@
 import { __testCaseClasses } from './test-case-decorator'
 import { TestCase } from './test-case-base'
-import { BrowserHelper, CustomLogger } from '../../types'
 import { remote } from 'webdriverio'
+
+// Small utilities
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, Math.max(0, ms || 0)))
+async function waitForAppiumServer(
+  server: {
+    protocol?: string
+    hostname?: string
+    port?: number
+    path?: string
+  },
+  logger: any,
+  totalTimeoutMs = 15000
+) {
+  const proto = (server?.protocol || 'http').replace(/:$/, '')
+  const host = server?.hostname || '127.0.0.1'
+  const port = server?.port || 4723
+  const basePath = server?.path || '/'
+  const url = `${proto}://${host}:${port}${basePath.endsWith('/') ? basePath : basePath + '/'}status`
+  const start = Date.now()
+  let attempt = 0
+  while (Date.now() - start < totalTimeoutMs) {
+    attempt += 1
+    try {
+      const res = await fetch(url, { method: 'GET' } as any)
+      if (res.ok) {
+        logger.debug?.(`Appium status OK after ${attempt} attempt(s) at ${url}`)
+        return true
+      }
+      logger.debug?.(`Appium status HTTP ${res.status}`)
+    } catch (e) {
+      logger.debug?.(`Appium status error: ${e}`)
+    }
+    await sleep(1000)
+  }
+  logger.warn?.(`Appium status not confirmed within ${totalTimeoutMs}ms at ${url}`)
+  return false
+}
+
+function withAndroidTimeoutDefaults(caps: Record<string, any>) {
+  const out = { ...caps }
+  const setIfMissing = (k: string, v: any) => {
+    if (out[k] === undefined || out[k] === null) out[k] = v
+  }
+  setIfMissing('appium:automationName', 'UiAutomator2')
+  setIfMissing('appium:newCommandTimeout', 180)
+  setIfMissing('appium:adbExecTimeout', 200000)
+  setIfMissing('appium:uiautomator2ServerInstallTimeout', 120000)
+  setIfMissing('appium:uiautomator2ServerLaunchTimeout', 60000)
+  setIfMissing('appium:appWaitDuration', 120000)
+  setIfMissing('appium:appWaitActivity', '*')
+  setIfMissing('appium:waitForIdleTimeout', 0)
+  setIfMissing('appium:disableWindowAnimation', true)
+  setIfMissing('appium:autoGrantPermissions', true)
+  setIfMissing('appium:ignoreHiddenApiPolicyError', true)
+  return out
+}
 
 export type MainOptions = {
   keepAppOpen?: boolean
@@ -9,7 +64,8 @@ export type MainOptions = {
   sessionKey?: string
 }
 
-type TestCaseConstructor = new (logger: any) => TestCase
+// TestCase requires (logger, clientId, workspace) per TestCase constructor
+type TestCaseConstructor = new (logger: any, clientId: string, workspace: string) => TestCase
 export async function main({
   clientId,
   workspace,
@@ -20,10 +76,10 @@ export async function main({
   clientId: string
   workspace: string
   loggerService: any
-  browserHelper: BrowserHelper
+  browserHelper: any
   options?: MainOptions
 }) {
-  const logger = loggerService.createLogger('main', clientId) as CustomLogger
+  const logger = loggerService.createLogger('main', clientId)
   for (const Ctor of __testCaseClasses as TestCaseConstructor[]) {
     const needBrowser = (Ctor as any).__useBrowser
     const isAndroid = (Ctor as any).__withAndroid
@@ -36,8 +92,8 @@ export async function main({
     const domain = (Ctor as any).__domain
     const timeout = (Ctor as any).__timeout
     const retry = (Ctor as any).__retry
-
-    let instance = new Ctor(loggerService.createLogger(Ctor.name, clientId), clientId, workspace)
+    const _logger = loggerService.createLogger(Ctor.name, clientId)
+    let instance = new Ctor(_logger, clientId, workspace)
     const allMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(instance))
     logger.info(`browser:${needBrowser},isAndroid:${isAndroid}`)
     const withBrowserMethods: string[] = []
@@ -97,7 +153,9 @@ export async function main({
       } else if (isAndroid) {
         ;(globalThis as any).__androidDrivers = (globalThis as any).__androidDrivers || new Map()
         const store: Map<string, any> = (globalThis as any).__androidDrivers
-        const key = shareSession ? `share:${sessionKey || 'default'}` : `${clientId || 'default'}:${Ctor.name}`
+        const key = shareSession
+          ? `share:${sessionKey || 'default'}`
+          : `${clientId || 'default'}:${Ctor.name}`
         // Determine mode for this run (no external override; from decorator)
         const installModeForThisRun: 'install' | 'launch' =
           (Ctor as any).__androidInstallBehavior ?? 'install'
@@ -113,7 +171,9 @@ export async function main({
             reused = true
           } catch (e) {
             logger.warn(`stale android session detected for key: ${key}, recreating...`)
-            try { await (driver as any).deleteSession?.() } catch {}
+            try {
+              await (driver as any).deleteSession?.()
+            } catch {}
             store.delete(key)
             driver = undefined
           }
@@ -121,7 +181,8 @@ export async function main({
         let created = false
         if (!driver) {
           // 选择运行模式：依据装饰器设定推断，默认 'install'（不允许外部覆盖）
-          let installMode: 'install' | 'launch' = (Ctor as any).__androidInstallBehavior ?? 'install'
+          let installMode: 'install' | 'launch' =
+            (Ctor as any).__androidInstallBehavior ?? 'install'
 
           // 从装饰器元数据中获取 server 与两种模式的 caps
           const server = (Ctor as any).__androidServer || {
@@ -167,15 +228,48 @@ export async function main({
             )
           } catch {}
 
-          const finalOpts = {
-            protocol: server?.protocol,
-            hostname: server?.hostname,
-            port: server?.port,
-            path: server?.path,
-            capabilities: selectedCaps,
+          // Fill sensible defaults for server and capabilities to improve stability
+          const finalServer = {
+            protocol: (server?.protocol || 'http').replace(/:$/, ''),
+            hostname: server?.hostname || '127.0.0.1',
+            port: server?.port || 4723,
+            path: server?.path || '/',
+          }
+          const finalCaps = withAndroidTimeoutDefaults(selectedCaps)
+
+          // Ensure server is up before requesting /session (best-effort)
+          try {
+            await waitForAppiumServer(finalServer, logger, 15000)
+          } catch {}
+
+          const finalOpts: any = {
+            ...finalServer,
+            logLevel: 'info',
+            connectionRetryTimeout: 120000,
+            connectionRetryCount: 2,
+            capabilities: finalCaps,
           }
 
-          driver = await remote(finalOpts)
+          // Retry remote initialization a couple of times to avoid transient failures
+          {
+            let ok = false
+            let lastErr: any = null
+            for (let i = 0; i < 2 && !ok; i++) {
+              try {
+                driver = await remote(finalOpts)
+                ok = !!driver
+              } catch (e) {
+                lastErr = e
+                logger.warn(`remote() attempt ${i + 1} failed: ${e}`)
+                await sleep(2000)
+              }
+            }
+            if (!ok || !driver) {
+              throw new Error(
+                `remote driver initialize failed ${JSON.stringify({ mode: installMode })}: ${lastErr || 'unknown'}`
+              )
+            }
+          }
           if (!driver) {
             throw new Error(
               `remote driver initialize failed ${JSON.stringify({ mode: installMode })}`
@@ -205,9 +299,7 @@ export async function main({
             const act: string | undefined =
               capsLaunchMeta?.['appium:appActivity'] ||
               androidOpts?.capabilities?.['appium:appActivity']
-            logger.info(
-              `bringToFront target: package=${pkg || 'n/a'} activity=${act || 'n/a'}`
-            )
+            logger.info(`bringToFront target: package=${pkg || 'n/a'} activity=${act || 'n/a'}`)
             if (pkg) {
               if (typeof (driver as any).activateApp === 'function') {
                 logger.info(`bringToFront via activateApp(${pkg})`)

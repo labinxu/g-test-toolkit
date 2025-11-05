@@ -1,7 +1,9 @@
+import {IPage} from './interface/ipage';
 
-
-export class PostPage {
-  constructor(private page: any) {}
+export class PostPage extends IPage{
+  constructor(private testcase: any) {
+    super(testcase);
+  }
   async post() {
     await this.page.$('~Post').click();
   }

@@ -158,6 +158,9 @@ export const ParametersForm = forwardRef<
   const [inspectorClickableOnly, setInspectorClickableOnly] = useState(true);
   const [inspectorPreferAppium, setInspectorPreferAppium] = useState(false);
   const [inspectorOverlayMode, setInspectorOverlayMode] = useState<'boxes' | 'markers'>('boxes');
+  const [fsOnAdbFail, setFsOnAdbFail] = useState(false);
+  const [fsFailN, setFsFailN] = useState(2);
+  const [fsCooldownMs, setFsCooldownMs] = useState(60000);
 
   // Testcases & Libs - Appium polling
   const [tcAppiumAuto, setTcAppiumAuto] = useState(true);
@@ -210,6 +213,9 @@ export const ParametersForm = forwardRef<
       const m = localStorage.getItem('gtt:inspector:overlayMode');
       setInspectorOverlayMode(m === 'markers' ? 'markers' : 'boxes');
     } catch {}
+    setFsOnAdbFail(readBool('gtt:inspector:fsOnAdbFail', false));
+    setFsFailN(clamp(readInt('gtt:inspector:fsFailN', 2), 1, 10));
+    setFsCooldownMs(clamp(readInt('gtt:inspector:fsCooldownMs', 60000), 0, 600000));
 
     setTcAppiumAuto(readBool('gtt:testcases:appiumAutoRefresh', true));
     setLibsAppiumAuto(readBool('gtt:testcases-libs:appiumAutoRefresh', true));
@@ -335,6 +341,9 @@ export const ParametersForm = forwardRef<
       inspectorPreferAppium ? '1' : '0',
     );
     localStorage.setItem('gtt:inspector:overlayMode', inspectorOverlayMode);
+    localStorage.setItem('gtt:inspector:fsOnAdbFail', fsOnAdbFail ? '1' : '0');
+    localStorage.setItem('gtt:inspector:fsFailN', String(clamp(fsFailN | 0, 1, 10)));
+    localStorage.setItem('gtt:inspector:fsCooldownMs', String(clamp(fsCooldownMs | 0, 0, 600000)));
 
     localStorage.setItem(
       'gtt:ai:libs:useRulesOnly',
@@ -476,6 +485,9 @@ export const ParametersForm = forwardRef<
     setInspectorClickableOnly(true);
     setInspectorPreferAppium(false);
     setInspectorOverlayMode('boxes');
+    setFsOnAdbFail(false);
+    setFsFailN(2);
+    setFsCooldownMs(60000);
 
     setTcAppiumAuto(true);
     setLibsAppiumAuto(true);
@@ -747,6 +759,42 @@ export const ParametersForm = forwardRef<
                   </Label>
                 </div>
                 <div className="text-xs text-muted-foreground">Fallback to ADB dump on failure.</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="ins-fs-on-adb-fail"
+                    checked={fsOnAdbFail}
+                    onCheckedChange={(v) => setFsOnAdbFail(!!v)}
+                  />
+                  <Label htmlFor="ins-fs-on-adb-fail" className="cursor-pointer select-none text-xs">
+                    If ADB dump fails consecutively, force-stop UiAutomator2
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="ins-fs-failN" className="text-xs text-muted-foreground">Threshold</Label>
+                  <Input
+                    id="ins-fs-failN"
+                    type="number"
+                    min={1}
+                    max={10}
+                    className="h-8 w-20"
+                    value={fsFailN}
+                    onChange={(e) => setFsFailN(clamp(parseInt(e.target.value || '2', 10), 1, 10))}
+                  />
+                  <Label htmlFor="ins-fs-cooldown" className="text-xs text-muted-foreground">Cooldown</Label>
+                  <Input
+                    id="ins-fs-cooldown"
+                    type="number"
+                    min={0}
+                    max={600000}
+                    step={5000}
+                    className="h-8 w-28"
+                    value={fsCooldownMs}
+                    onChange={(e) => setFsCooldownMs(clamp(parseInt(e.target.value || '60000', 10), 0, 600000))}
+                  />
+                  <span className="text-xs text-muted-foreground">ms</span>
+                </div>
               </div>
             </div>
           </Section>

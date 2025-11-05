@@ -15,6 +15,9 @@ export class InspectorController {
     @Query('unlockKeywords') unlockKeywords?: string,
     @Query('minMs') minMs?: string,
     @Query('preferAppium') preferAppium?: string,
+    @Query('fsOnAdbFail') fsOnAdbFail?: string,
+    @Query('fsFailN') fsFailN?: string,
+    @Query('fsCooldown') fsCooldown?: string,
   ) {
     try {
       const aw = autoWake ? /^(1|true|yes|on)$/i.test(autoWake) : true;
@@ -28,6 +31,9 @@ export class InspectorController {
         unlockKeywords: unlockKeywords || undefined,
         minIntervalMs: minMs ? Math.max(0, parseInt(minMs, 10) || 0) : undefined,
         preferAppium: preferAppium ? /^(1|true|yes|on)$/i.test(preferAppium) : undefined,
+        fsOnAdbFail: fsOnAdbFail ? /^(1|true|yes|on)$/i.test(fsOnAdbFail) : undefined,
+        fsFailN: fsFailN ? Math.max(1, parseInt(fsFailN, 10) || 1) : undefined,
+        fsCooldownMs: fsCooldown ? Math.max(0, parseInt(fsCooldown, 10) || 0) : undefined,
       });
     } catch (e: any) {
       throw new NotFoundException(e?.message ?? 'Snapshot failed');

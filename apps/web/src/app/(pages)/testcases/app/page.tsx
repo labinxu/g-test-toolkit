@@ -107,6 +107,14 @@ export default function AppTestCasesPage() {
     } catch {}
     return true
   })
+  const [forceInstall, setForceInstall] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const v = localStorage.getItem('gtt:testcases-app:forceInstall')
+      return v === '1' || v === 'true'
+    } catch {}
+    return false
+  })
   const AUTO_REFRESH_MS = 3000
   // Persist auto-refresh setting
   useEffect(() => {
@@ -114,6 +122,12 @@ export default function AppTestCasesPage() {
       localStorage.setItem('gtt:testcases-app:autoRefresh', autoRefresh ? '1' : '0')
     } catch {}
   }, [autoRefresh])
+  // Persist force-install setting
+  useEffect(() => {
+    try {
+      localStorage.setItem('gtt:testcases-app:forceInstall', forceInstall ? '1' : '0')
+    } catch {}
+  }, [forceInstall])
 
   const appsQuery = useQuery<FileNode[]>({
     queryKey: APP_FILES_QUERY_KEY,
@@ -212,12 +226,12 @@ export default function AppTestCasesPage() {
     [appsQuery.data]
   )
 
-  const runningEmulatorSerials = useMemo(() => {
+  const availableDeviceSerials = useMemo(() => {
     const devicesOutput = androidDevicesQuery.data?.devices ?? ''
     return devicesOutput
       .split('\n')
       .map((line) => line.trim())
-      .filter((line) => line && line.endsWith('device') && line.startsWith('emulator-'))
+      .filter((line) => line && line.endsWith('device'))
       .map((line) => line.split(/\s+/)[0])
   }, [androidDevicesQuery.data?.devices])
 
@@ -265,7 +279,7 @@ export default function AppTestCasesPage() {
     setSelectedSerials([])
   }, [])
 
-  type InstallAppRequest = { filePath: string; serials: string[] }
+  type InstallAppRequest = { filePath: string; serials: string[]; force?: boolean }
   type InstallAppResponse = {
     result: string
     installed?: number
@@ -283,7 +297,7 @@ export default function AppTestCasesPage() {
           ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         },
         credentials: 'include',
-        body: JSON.stringify({ filePath, serials }),
+        body: JSON.stringify({ filePath, serials, force: !!forceInstall }),
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
@@ -307,25 +321,26 @@ export default function AppTestCasesPage() {
     },
   })
 
-  const hasRunningEmulator = runningEmulatorSerials.length > 0
+  const hasAvailableDevices = availableDeviceSerials.length > 0
 
   const handleInstall = useCallback(
     (file: FileNode) => {
-      if (!hasRunningEmulator || installMutation.isPending) {
+      if (!hasAvailableDevices || installMutation.isPending) {
         return
       }
       setPendingInstallFile(file)
-      if (runningEmulatorSerials.length === 1) {
+      if (availableDeviceSerials.length === 1) {
         installMutation.mutate({
           filePath: file.path,
-          serials: runningEmulatorSerials,
+          serials: availableDeviceSerials,
+          force: !!forceInstall,
         })
       } else {
-        setSelectedSerials(runningEmulatorSerials)
+        setSelectedSerials(availableDeviceSerials)
         setInstallDialogOpen(true)
       }
     },
-    [hasRunningEmulator, installMutation, runningEmulatorSerials]
+    [hasAvailableDevices, installMutation, availableDeviceSerials, forceInstall]
   )
 
   const toggleSerialSelection = useCallback((serial: string, checked: boolean) => {
@@ -343,8 +358,9 @@ export default function AppTestCasesPage() {
     installMutation.mutate({
       filePath: pendingInstallFile.path,
       serials: selectedSerials,
+      force: !!forceInstall,
     })
-  }, [installMutation, pendingInstallFile, selectedSerials])
+  }, [installMutation, pendingInstallFile, selectedSerials, forceInstall])
 
   const isRefreshing = appsQuery.isFetching || androidDevicesQuery.isFetching
 
@@ -360,6 +376,10 @@ export default function AppTestCasesPage() {
             <div className="text-muted-foreground mr-2 flex items-center gap-2">
               <Switch id="apps-auto-refresh" checked={autoRefresh} onCheckedChange={(v) => setAutoRefresh(!!v)} />
               <label htmlFor="apps-auto-refresh" className="cursor-pointer select-none text-sm">Auto refresh</label>
+            </div>
+            <div className="text-muted-foreground mr-2 flex items-center gap-2">
+              <Switch id="apps-force-install" checked={forceInstall} onCheckedChange={(v) => setForceInstall(!!v)} />
+              <label htmlFor="apps-force-install" className="cursor-pointer select-none text-sm">Force install</label>
             </div>
             <Button
               variant="outline"
@@ -435,7 +455,7 @@ export default function AppTestCasesPage() {
                           size="sm"
                           className="w-[104px] justify-center"
                           onClick={() => handleInstall(file)}
-                          disabled={!hasRunningEmulator || installMutation.isPending}
+                          disabled={!hasAvailableDevices || installMutation.isPending}
                           variant="secondary"
                         >
                           {installMutation.isPending && pendingInstallFile?.path === file.path ? (
@@ -480,15 +500,15 @@ export default function AppTestCasesPage() {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Select emulators</DialogTitle>
+            <DialogTitle>Select devices</DialogTitle>
             <DialogDescription>
-              Choose the Android emulators to install{' '}
+              Choose the Android devices to install{' '}
               <span className="font-medium">{pendingInstallFile?.name ?? ''}</span> on.
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-64 pr-2">
             <div className="space-y-3 py-2">
-              {runningEmulatorSerials.map((serial) => {
+              {availableDeviceSerials.map((serial) => {
                 const checkboxId = `install-serial-${serial}`
                 const checked = selectedSerials.includes(serial)
                 return (

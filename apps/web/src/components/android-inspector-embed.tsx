@@ -96,6 +96,15 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
         if (swipe) params.set('unlockSwipe', swipe)
         if (kw) params.set('unlockKeywords', kw)
         params.set('preferAppium', prefer ? '1' : '0')
+        // Force-stop fallback settings
+        try {
+          const fs = localStorage.getItem('gtt:inspector:fsOnAdbFail')
+          const fsN = localStorage.getItem('gtt:inspector:fsFailN')
+          const fsCd = localStorage.getItem('gtt:inspector:fsCooldownMs')
+          if (fs != null) params.set('fsOnAdbFail', fs === '1' || fs === 'true' ? '1' : '0')
+          if (fsN) params.set('fsFailN', String(Math.max(1, parseInt(fsN, 10) || 1)))
+          if (fsCd) params.set('fsCooldown', String(Math.max(0, parseInt(fsCd, 10) || 0)))
+        } catch {}
       } catch {}
       const qs = params.toString() ? `?${params.toString()}` : ''
       const req = fetch(`/api/inspector/snapshot${qs}`, { cache: 'no-store' })
@@ -109,6 +118,15 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
       const json = await inflightRef.current
       inflightRef.current = null
       setData(json)
+      try {
+        if (json && (json as any).fsTriggered) {
+          const msg = (json as any).fsMessage || 'ADB 异常，已触发 UiAutomator2 force-stop'
+          // Show a one-off toast when backend reports force-stop
+          // Use warning style if available, fallback to message
+          // @ts-ignore sonner may not type warning; safe to call
+          ;(toast as any).warning ? (toast as any).warning(msg) : toast.message(msg)
+        }
+      } catch {}
       return json
     } catch (e: any) {
       setError(e?.message || 'Failed to load snapshot')
@@ -169,8 +187,20 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
   }, [viewportRef.current])
 
   useEffect(() => {
+    const isEditableTarget = (el: EventTarget | null) => {
+      const t = el as HTMLElement | null
+      if (!t) return false
+      const tag = (t.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea') return true
+      if ((t as HTMLElement).isContentEditable) return true
+      try {
+        if (t.closest && (t.closest('.cm-editor') || t.closest('[role="textbox"]'))) return true
+      } catch {}
+      return false
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
+        if (isEditableTarget(e.target)) return
         e.preventDefault()
         setSpaceDown(e.type === 'keydown')
       }

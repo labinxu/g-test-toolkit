@@ -1,7 +1,9 @@
 'use client'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import DirectoryTreePanel from '@/components/files/directory-tree-panel'
-import { ScriptEditor } from '@/components/files/script-editor'
+import MonacoScriptEditor, {
+  type MonacoScriptEditorHandle,
+} from '@/components/files/monaco-script-editor'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -10,6 +12,7 @@ import {
   PackagePlus,
   SlidersHorizontal,
   Activity,
+  Braces,
   RouteOff,
   Unplug,
   Server,
@@ -45,7 +48,12 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ParametersForm, type ParametersFormHandle } from '@/components/settings/parameters-form'
 import { useTestcasesPageCache } from '../page-cache'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export default function Page() {
   const tcCache = useTestcasesPageCache()
@@ -68,6 +76,20 @@ export default function Page() {
     }
   })
   const [refreshKey, setRefreshKey] = useState(0)
+  const editorRef = useRef<MonacoScriptEditorHandle | null>(null)
+  const [typesOpen, setTypesOpen] = useState(false)
+  const [typesGlobal, setTypesGlobal] = useState<string[]>([])
+  const [typesRelatives, setTypesRelatives] = useState<string[]>([])
+  const updateTypesStatus = useCallback(() => {
+    try {
+      const s = editorRef.current?.getTypingsStatus?.()
+      setTypesGlobal(s?.global || [])
+      setTypesRelatives(s?.relatives || [])
+    } catch {}
+  }, [])
+  useEffect(() => {
+    if (typesOpen) updateTypesStatus()
+  }, [typesOpen, updateTypesStatus])
   const [openLog, setOpenLog] = useState(false)
   const { logs, connected, clientId, clearLogs, running, setRunning } = useSocket()
   const [fileCache, setFileCache] = useState<Record<string, { content: string; original: string }>>(
@@ -92,7 +114,11 @@ export default function Page() {
   // Share session by selected deviceId stored by Libs page
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
-    try { return localStorage.getItem('gtt:selectedDeviceId') || '' } catch { return '' }
+    try {
+      return localStorage.getItem('gtt:selectedDeviceId') || ''
+    } catch {
+      return ''
+    }
   })
   useEffect(() => {
     try {
@@ -102,7 +128,9 @@ export default function Page() {
   }, [selectedDeviceId])
   useEffect(() => {
     const onStorage = () => {
-      try { setSelectedDeviceId(localStorage.getItem('gtt:selectedDeviceId') || '') } catch {}
+      try {
+        setSelectedDeviceId(localStorage.getItem('gtt:selectedDeviceId') || '')
+      } catch {}
     }
     window.addEventListener('storage', onStorage)
     window.addEventListener('gtt-parameters-updated', onStorage as any)
@@ -133,7 +161,9 @@ export default function Page() {
     let id: any
     const fetchDevices = async () => {
       try {
-        const res = await fetch('/api/android/devices', { credentials: 'include' })
+        const res = await fetch('/api/android/devices', {
+          credentials: 'include',
+        })
         if (!res.ok) return
         const j = (await res.json()) as { devices?: string }
         const output = j?.devices ?? ''
@@ -191,6 +221,23 @@ export default function Page() {
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
   }, [])
+  // Auto refresh typings on build completion messages
+  const lastTypingsReloadIdxRef = useRef<number>(0)
+  useEffect(() => {
+    const start = Math.max(0, lastTypingsReloadIdxRef.current)
+    const L = logs?.length || 0
+    const pattern = /libs build complete/i
+    for (let i = start; i < L; i++) {
+      const msg = logs[i] || ''
+      if (pattern.test(msg)) {
+        try {
+          setTimeout(() => editorRef.current?.reloadTypings?.(), 200)
+        } catch {}
+        lastTypingsReloadIdxRef.current = L
+        break
+      }
+    }
+  }, [logs])
   const runPath = useCallback(async () => {
     clearLogs()
     // 1) fetch csrf token first (cookie must be present and credentials included)
@@ -237,7 +284,10 @@ export default function Page() {
           'Content-Type': 'application/json',
           ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         },
-        body: JSON.stringify({ clientId, sessionKey: selectedDeviceId || undefined }),
+        body: JSON.stringify({
+          clientId,
+          sessionKey: selectedDeviceId || undefined,
+        }),
       })
       if (resp.ok) {
         const data = await resp.json()
@@ -397,7 +447,8 @@ export default function Page() {
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pl-4 transition-all duration-300">
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 justify-between">
-            <ScriptEditor
+            <MonacoScriptEditor
+              ref={editorRef}
               filePath={currentFile}
               cachedValue={currentFile ? fileCache[currentFile] : undefined}
               extraActions={
@@ -431,33 +482,39 @@ export default function Page() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="ml-1 h-8 w-8 rounded-full relative"
+                              className="relative ml-1 h-8 w-8 rounded-full"
                               aria-label="Select device"
                             >
                               <Smartphone className="h-4 w-4" />
                               {selectedDeviceId ? (
                                 <span
                                   aria-hidden
-                                  className="absolute -top-0.5 -right-0.5 inline-block h-2 w-2 rounded-full bg-green-500 ring-2 ring-background"
+                                  className="ring-background absolute -top-0.5 -right-0.5 inline-block h-2 w-2 rounded-full bg-green-500 ring-2"
                                 />
                               ) : null}
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" className="w-44">
-                          {deviceIds.length ? (
-                            deviceIds.map((id) => (
-                              <DropdownMenuItem key={id} onClick={() => setSelectedDeviceId(id)}>
-                                {selectedDeviceId === id ? (
-                                  <Check className="mr-2 h-4 w-4 text-green-600" />
-                                ) : (
-                                  <span className="mr-2 inline-block h-4 w-4" />
-                                )}
-                                <span className={selectedDeviceId === id ? 'text-green-700 font-medium' : ''}>{id}</span>
-                              </DropdownMenuItem>
-                            ))
-                          ) : (
-                            <DropdownMenuItem disabled>No devices</DropdownMenuItem>
-                          )}
+                            {deviceIds.length ? (
+                              deviceIds.map((id) => (
+                                <DropdownMenuItem key={id} onClick={() => setSelectedDeviceId(id)}>
+                                  {selectedDeviceId === id ? (
+                                    <Check className="mr-2 h-4 w-4 text-green-600" />
+                                  ) : (
+                                    <span className="mr-2 inline-block h-4 w-4" />
+                                  )}
+                                  <span
+                                    className={
+                                      selectedDeviceId === id ? 'font-medium text-green-700' : ''
+                                    }
+                                  >
+                                    {id}
+                                  </span>
+                                </DropdownMenuItem>
+                              ))
+                            ) : (
+                              <DropdownMenuItem disabled>No devices</DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TooltipTrigger>
@@ -479,13 +536,95 @@ export default function Page() {
                       </TooltipTrigger>
                       <TooltipContent sideOffset={6}>Build Libs</TooltipContent>
                     </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="ml-1 h-8 w-8 rounded-full"
+                          onClick={async () => {
+                            await editorRef.current?.reloadTypings?.()
+                            updateTypesStatus()
+                          }}
+                          aria-label="Refresh types"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>Refresh Types</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <Dialog open={typesOpen} onOpenChange={setTypesOpen}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-1 h-8 w-8 rounded-full"
+                            onClick={() => {
+                              setTypesOpen(true) /* useEffect will update */
+                            }}
+                            aria-label="Show types"
+                          >
+                            <Braces className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Loaded Types</DialogTitle>
+                          </DialogHeader>
+                          <div className="max-h-[60vh] space-y-3 overflow-auto">
+                            <div>
+                              <div className="mb-1 text-sm font-medium">
+                                Global typings ({typesGlobal.length})
+                              </div>
+                              <ul className="text-xs">
+                                {typesGlobal.map((p) => (
+                                  <li key={p} className="truncate">
+                                    {p}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div>
+                              <div className="mb-1 text-sm font-medium">
+                                Relative imports ({typesRelatives.length})
+                              </div>
+                              <ul className="text-xs">
+                                {typesRelatives.map((p) => (
+                                  <li key={p} className="truncate">
+                                    <button
+                                      type="button"
+                                      className="text-left hover:underline"
+                                      onClick={() => {
+                                        try {
+                                          setCurrentFile(p)
+                                        } catch {}
+                                        setTypesOpen(false)
+                                      }}
+                                    >
+                                      {p}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button variant="outline">Close</Button>
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                      <TooltipContent sideOffset={6}>Show Types</TooltipContent>
+                    </Tooltip>
                   </div>
                   <div>
                     <AppiumToggleButton
                       queryKey={['appium-status', 'testcases']}
                       pollIntervalMs={appiumAutoRefresh ? 5000 : false}
                     />
-                    
+
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button

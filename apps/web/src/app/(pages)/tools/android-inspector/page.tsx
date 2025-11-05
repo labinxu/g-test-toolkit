@@ -58,6 +58,8 @@ type Snapshot = {
   screen: { width: number; height: number }
   nodes: NodeInfo[]
   takenAt: number
+  fsTriggered?: boolean
+  fsMessage?: string
 }
 
 function useSnapshot(deviceId?: string | null) {
@@ -100,6 +102,10 @@ function useSnapshot(deviceId?: string | null) {
         const pwd = localStorage.getItem('gtt:inspector:unlockPassword') || ''
         const swipe = localStorage.getItem('gtt:inspector:unlockSwipe') || ''
         const kw = localStorage.getItem('gtt:inspector:unlockKeywords') || ''
+        const prefer = localStorage.getItem('gtt:inspector:preferAppiumSource')
+        const fs = localStorage.getItem('gtt:inspector:fsOnAdbFail')
+        const fsN = localStorage.getItem('gtt:inspector:fsFailN')
+        const fsCd = localStorage.getItem('gtt:inspector:fsCooldownMs')
         const awBool = aw == null ? true : aw === '1' || aw === 'true'
         const auBool = au == null ? false : au === '1' || au === 'true'
         params.set('autoWake', awBool ? '1' : '0')
@@ -107,6 +113,10 @@ function useSnapshot(deviceId?: string | null) {
         if (pwd) params.set('unlockPassword', pwd)
         if (swipe) params.set('unlockSwipe', swipe)
         if (kw) params.set('unlockKeywords', kw)
+        if (prefer != null) params.set('preferAppium', prefer === '1' || prefer === 'true' ? '1' : '0')
+        if (fs != null) params.set('fsOnAdbFail', fs === '1' || fs === 'true' ? '1' : '0')
+        if (fsN) params.set('fsFailN', String(Math.max(1, parseInt(fsN, 10) || 1)))
+        if (fsCd) params.set('fsCooldown', String(Math.max(0, parseInt(fsCd, 10) || 0)))
       } catch {}
       const qs = params.toString() ? `?${params.toString()}` : ''
       const req = fetch(`/api/inspector/snapshot${qs}`, { cache: 'no-store' })
@@ -141,6 +151,13 @@ function useSnapshot(deviceId?: string | null) {
       const json = await inflightRef.current
       inflightRef.current = null
       setData(json)
+      try {
+        if (json && (json as any).fsTriggered) {
+          const msg = (json as any).fsMessage || 'ADB 异常，已触发 UiAutomator2 force-stop'
+          // @ts-ignore sonner may not type warning; safe to call
+          ;(toast as any).warning ? (toast as any).warning(msg) : toast.message(msg)
+        }
+      } catch {}
       lastFetchAtRef.current = Date.now()
       return json
     } catch (e: any) {
@@ -482,8 +499,20 @@ export default function AndroidInspectorPage() {
   }, [viewportRef.current])
 
   useEffect(() => {
+    const isEditableTarget = (el: EventTarget | null) => {
+      const t = el as HTMLElement | null
+      if (!t) return false
+      const tag = (t.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea') return true
+      if ((t as HTMLElement).isContentEditable) return true
+      try {
+        if (t.closest && (t.closest('.cm-editor') || t.closest('[role="textbox"]'))) return true
+      } catch {}
+      return false
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
+        if (isEditableTarget(e.target)) return
         e.preventDefault()
         setSpaceDown(e.type === 'keydown')
       }

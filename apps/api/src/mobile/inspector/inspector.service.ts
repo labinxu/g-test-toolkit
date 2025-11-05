@@ -22,6 +22,7 @@ export class InspectorService {
   private logger: CustomLogger;
   private lastSnapshotCache: Map<string, { at: number; data: any }> = new Map();
   private inflightSnapshots: Map<string, Promise<any>> = new Map();
+  private adbFailState: Map<string, { count: number; lastForceAt: number }> = new Map();
   constructor(
     private readonly commandService: CommandService,
     private readonly loggerService: LoggerService,
@@ -132,6 +133,9 @@ export class InspectorService {
     unlockKeywords?: string;
     minIntervalMs?: number;
     preferAppium?: boolean;
+    fsOnAdbFail?: boolean;
+    fsFailN?: number;
+    fsCooldownMs?: number;
   }) {
     const serial = await this.ensureSerial(params.deviceId);
     const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -164,6 +168,8 @@ export class InspectorService {
       ]);
     };
 
+    let fsTriggered = false
+    let fsMessage: string | undefined
     const attempt = async () => {
       const filePath = await this.androidService.getScreen(serial);
       const screenshotBase64 = readFileSync(filePath).toString('base64');
@@ -181,12 +187,59 @@ export class InspectorService {
         }
       }
       if (!xmlString) {
-        await this.commandService.dumpxml(serial);
         const xmlPath = `./tmp/window_dump-${serial}.xml`;
-        // ensure device flushed the dump file on some devices
-        await wait(120);
-        await this.commandService.pullDumpedXml(serial, xmlPath);
-        xmlString = readFileSync(xmlPath).toString();
+        // First attempt
+        const performDumpAndPull = async () => {
+          await this.commandService.dumpxml(serial);
+          await wait(350);
+          try {
+            await this.commandService.pullDumpedXml(serial, xmlPath);
+          } catch (e1) {
+            try { await this.commandService.dumpxml(serial); } catch {}
+            await wait(400);
+            await this.commandService.pullDumpedXml(serial, xmlPath);
+          }
+          return readFileSync(xmlPath).toString();
+        }
+        try {
+          xmlString = await performDumpAndPull();
+          // success: reset counter
+          const s = this.adbFailState.get(serial);
+          if (s) s.count = 0;
+        } catch (e) {
+          // Consider force-stop fallback if enabled and thresholds met
+          const allowFs = !!params.fsOnAdbFail;
+          const threshold = Math.max(1, params.fsFailN ?? 2);
+          const cooldownMs = Math.max(0, params.fsCooldownMs ?? 60000);
+          const st = this.adbFailState.get(serial) || { count: 0, lastForceAt: 0 };
+          st.count += 1;
+          const now = Date.now();
+          const allowByCount = st.count >= threshold;
+          const allowByCooldown = now - st.lastForceAt >= cooldownMs;
+          if (allowFs && allowByCount && allowByCooldown) {
+            const msg = `ADB dump failed ${st.count} times for ${serial}. Forcing stop of UiAutomator2 servers...`
+            this.logger.warn(msg);
+            try {
+              await this.commandService.runCommand(`adb -s ${serial} shell am force-stop io.appium.uiautomator2.server`);
+            } catch {}
+            try {
+              await this.commandService.runCommand(`adb -s ${serial} shell am force-stop io.appium.uiautomator2.server.test`);
+            } catch {}
+            fsTriggered = true
+            fsMessage = msg
+            st.lastForceAt = now;
+            st.count = 0; // reset after force-stop to avoid repeated FS
+            this.adbFailState.set(serial, st);
+            try {
+              xmlString = await performDumpAndPull();
+            } catch (e2) {
+              throw e2;
+            }
+          } else {
+            this.adbFailState.set(serial, st);
+            throw e;
+          }
+        }
       }
       const parser = new XMLParser({ ignoreAttributes: false });
       const obj = parser.parse(xmlString);
@@ -198,6 +251,7 @@ export class InspectorService {
         screen: { width, height },
         nodes,
         takenAt: Date.now(),
+        ...(fsTriggered ? { fsTriggered: true as const, fsMessage } : {}),
       };
     };
     const allowWake = params.autoWake !== false;

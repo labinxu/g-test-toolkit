@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import DirectoryTreePanel from '@/components/files/directory-tree-panel'
-import { ScriptEditor } from '@/components/files/script-editor'
+import MonacoScriptEditor, { type MonacoScriptEditorHandle } from '@/components/files/monaco-script-editor'
 import io, { Socket } from 'socket.io-client'
 
 let socket: Socket | null = null
@@ -13,6 +13,7 @@ export default function Page() {
   const [connected, setConnected] = useState(false)
   const [running, setRunning] = useState(false)
   const [scripts, setScripts] = useState<string>('')
+  const editorRef = useRef<MonacoScriptEditorHandle | null>(null)
   useEffect(() => {
     if (running) run()
   }, [running])
@@ -95,7 +96,11 @@ export default function Page() {
         />
       </div>
       <div className="flex h-full min-w-0 flex-1 flex-col pl-4 transition-all duration-300">
-        <ScriptEditor filePath={currentFile} onContentChange={(value) => setScripts(value)} />
+        <MonacoScriptEditor
+          ref={editorRef}
+          filePath={currentFile}
+          onContentChange={(value) => setScripts(value)}
+        />
         <div className="flex min-h-0 basis-2/5 flex-col rounded-lg shadow-sm">
           <div className="flex items-center justify-between rounded-lg shadow-sm">
             <div>

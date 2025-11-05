@@ -1,24 +1,37 @@
-import { ModeToggle } from '@/components/mode-toggle';
-import { UserNav } from '@/components/admin-panel/user-nav';
-import { SheetMenu } from '@/components/admin-panel/sheet-menu';
-import { usePathname } from 'next/navigation';
-import { GlobalCacheControls } from '@/components/global-cache-controls';
+import { ModeToggle } from '@/components/mode-toggle'
+import { UserNav } from '@/components/admin-panel/user-nav'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { SquarePen, LibraryBig, InspectionPanel } from 'lucide-react'
 
 export function Navbar() {
-  const pathName = usePathname();
   return (
-    <header className="sticky top-0 z-10 w-full bg-background/95 rounded-lg shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/60 dark:shadow-secondary">
-      <div className="mx-1 sm:mx-2 flex h-10 items-center ">
-        <div className="flex items-center space-x-4 lg:space-x-0 ">
-          <SheetMenu />
-          <h1 className="font-bold">{pathName}</h1>
-        </div>
-        <div className="flex flex-1 items-center justify-end gap-2">
-          <GlobalCacheControls />
-          <ModeToggle />
-          <UserNav />
+    <header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 dark:shadow-secondary sticky top-0 z-10 w-full rounded-lg shadow-lg backdrop-blur">
+      <div className="mx-1 flex h-10 items-center sm:mx-2">
+        <div className="flex flex-1 justify-between gap-2">
+          <div>
+            <Button asChild variant="ghost" size="icon" aria-label="Testcases">
+              <Link href="/testcases">
+                <SquarePen />
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="icon" aria-label="Libs">
+              <Link href="/testcases/libs">
+                <LibraryBig />
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="icon" aria-label="Inspector">
+              <Link href="/tools/android-inspector">
+                <InspectionPanel />
+              </Link>
+            </Button>
+          </div>
+          <div>
+            <ModeToggle />
+            <UserNav />
+          </div>
         </div>
       </div>
     </header>
-  );
+  )
 }

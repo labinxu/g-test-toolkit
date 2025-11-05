@@ -1,4 +1,4 @@
-import { ArrayNotEmpty, IsArray, IsNotEmpty, IsString } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class InstallAppDto {
   @IsString()
@@ -9,4 +9,8 @@ export class InstallAppDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   serials: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }
