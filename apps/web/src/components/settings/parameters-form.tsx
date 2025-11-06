@@ -5,6 +5,7 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -182,6 +183,21 @@ export const ParametersForm = forwardRef<
   const [aiTimeoutMsValue, setAiTimeoutMsValue] = useState(10000);
   const [aiMaxTokens, setAiMaxTokens] = useState(512);
 
+  const [loggerFilePath, setLoggerFilePath] = useState('');
+  const [loggerFileLevel, setLoggerFileLevel] = useState<'error' | 'warn' | 'tc' | 'info' | 'debug'>('error');
+  const [loggerMaxSizeMbInput, setLoggerMaxSizeMbInput] = useState('20');
+  const [loggerMaxFilesInput, setLoggerMaxFilesInput] = useState('30');
+  const [loggerZippedArchive, setLoggerZippedArchive] = useState(true);
+  const [loggerAccessDenied, setLoggerAccessDenied] = useState(false);
+  const [loggerLoading, setLoggerLoading] = useState(false);
+  const loggerInitialRef = useRef<{
+    filePath: string;
+    fileLevel: 'error' | 'warn' | 'tc' | 'info' | 'debug';
+    maxSizeMb: string;
+    maxFiles: string;
+    zippedArchive: boolean;
+  } | null>(null);
+
   useEffect(() => {
     // Local persisted settings (Inspector/Testcases/Libs)
     setInspectorAutoWake(readBool('gtt:inspector:autoWake', true));
@@ -275,6 +291,63 @@ export const ParametersForm = forwardRef<
     };
 
     loadAi();
+    const loadLogger = async () => {
+      if (!isAuthenticated) return;
+      setLoggerLoading(true);
+      try {
+        const res = await fetch('/api/settings/logger', { cache: 'no-store' });
+        if (cancelled) return;
+        if (res.status === 403) {
+          setLoggerAccessDenied(true);
+          setLoggerLoading(false);
+          return;
+        }
+        if (!res.ok) {
+          const err = await (async () => {
+            try {
+              const mod = await import('@/lib/error');
+              return mod.normalizeResponseError(res);
+            } catch {
+              return { message: res.statusText };
+            }
+          })();
+          toast.error(err.message || 'Failed to load logger settings');
+          setLoggerLoading(false);
+          return;
+        }
+        const data = await res.json();
+        if (cancelled) return;
+        const next = {
+          filePath: typeof data?.filePath === 'string' ? data.filePath : '',
+          fileLevel: (data?.fileLevel ??
+            'error') as 'error' | 'warn' | 'tc' | 'info' | 'debug',
+          maxSizeMb: Number.isFinite(Number(data?.maxSizeMb))
+            ? String(Math.floor(Number(data.maxSizeMb)))
+            : '20',
+          maxFiles: Number.isFinite(Number(data?.maxFiles))
+            ? String(Math.floor(Number(data.maxFiles)))
+            : '30',
+          zippedArchive: !!data?.zippedArchive,
+        };
+        setLoggerAccessDenied(false);
+        loggerInitialRef.current = next;
+        setLoggerFilePath(next.filePath);
+        setLoggerFileLevel(next.fileLevel);
+        setLoggerMaxSizeMbInput(next.maxSizeMb);
+        setLoggerMaxFilesInput(next.maxFiles);
+        setLoggerZippedArchive(next.zippedArchive);
+      } catch (e: any) {
+        if (!cancelled) {
+          toast.error(e?.message || 'Failed to load logger settings');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoggerLoading(false);
+        }
+      }
+    };
+
+    loadLogger();
 
     return () => {
       cancelled = true;
@@ -421,10 +494,91 @@ export const ParametersForm = forwardRef<
     setAiClearKey(false);
   };
 
+  const syncLoggerSettings = async () => {
+    if (!isAuthenticated || loggerAccessDenied) return;
+    const fallbackSize = Number(loggerInitialRef.current?.maxSizeMb ?? 20);
+    const fallbackFiles = Number(loggerInitialRef.current?.maxFiles ?? 30);
+    const parsedSize = Number(loggerMaxSizeMbInput);
+    const parsedFiles = Number(loggerMaxFilesInput);
+    const normalizedSize =
+      Number.isFinite(parsedSize) && parsedSize > 0
+        ? clamp(Math.floor(parsedSize), 1, 1024)
+        : clamp(
+            Number.isFinite(fallbackSize) && fallbackSize > 0
+              ? Math.floor(fallbackSize)
+              : 20,
+            1,
+            1024,
+          );
+    const normalizedFiles =
+      Number.isFinite(parsedFiles) && parsedFiles > 0
+        ? clamp(Math.floor(parsedFiles), 1, 200)
+        : clamp(
+            Number.isFinite(fallbackFiles) && fallbackFiles > 0
+              ? Math.floor(fallbackFiles)
+              : 30,
+            1,
+            200,
+          );
+    const payload = {
+      filePath:
+        loggerFilePath.trim() ||
+        loggerInitialRef.current?.filePath ||
+        './logs/app.log',
+      fileLevel: loggerFileLevel,
+      maxSizeMb: normalizedSize,
+      maxFiles: normalizedFiles,
+      zippedArchive: loggerZippedArchive,
+    };
+    const res = await fetch('/api/settings/logger', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 403) {
+      setLoggerAccessDenied(true);
+      throw new Error('Admin privileges required to update logger settings');
+    }
+    if (!res.ok) {
+      const err = await (async () => {
+        try {
+          const mod = await import('@/lib/error');
+          return mod.normalizeResponseError(res);
+        } catch {
+          return { message: res.statusText };
+        }
+      })();
+      throw new Error(err.message || 'Failed to save logger settings');
+    }
+    const data = await res.json();
+    const next = {
+      filePath: typeof data?.filePath === 'string' ? data.filePath : payload.filePath,
+      fileLevel: (data?.fileLevel ??
+        payload.fileLevel) as 'error' | 'warn' | 'tc' | 'info' | 'debug',
+      maxSizeMb: Number.isFinite(Number(data?.maxSizeMb))
+        ? String(Math.floor(Number(data.maxSizeMb)))
+        : String(payload.maxSizeMb),
+      maxFiles: Number.isFinite(Number(data?.maxFiles))
+        ? String(Math.floor(Number(data.maxFiles)))
+        : String(payload.maxFiles),
+      zippedArchive:
+        data?.zippedArchive === undefined
+          ? payload.zippedArchive
+          : !!data.zippedArchive,
+    };
+    loggerInitialRef.current = next;
+    setLoggerFilePath(next.filePath);
+    setLoggerFileLevel(next.fileLevel);
+    setLoggerMaxSizeMbInput(next.maxSizeMb);
+    setLoggerMaxFilesInput(next.maxFiles);
+    setLoggerZippedArchive(next.zippedArchive);
+  };
+
   const saveAll = async () => {
     try {
       persistLocalSettings();
       await syncAiSettings();
+      await syncLoggerSettings();
       toast.success('Settings saved');
       window.dispatchEvent(new Event('gtt-parameters-updated'));
     } catch (e: any) {
@@ -465,6 +619,12 @@ export const ParametersForm = forwardRef<
       aiClearKey,
       aiTimeoutMsValue,
       aiMaxTokens,
+      loggerFilePath,
+      loggerFileLevel,
+      loggerMaxSizeMbInput,
+      loggerMaxFilesInput,
+      loggerZippedArchive,
+      loggerAccessDenied,
     ],
   );
 
@@ -501,10 +661,25 @@ export const ParametersForm = forwardRef<
     setAiMaxTokens(512);
 
     setAiProvider('openai');
-    setAiModel('gpt-4o-mini');
-    setAiBaseUrl('');
-    setAiApiKeyInput('');
-    setAiClearKey(false);
+   setAiModel('gpt-4o-mini');
+   setAiBaseUrl('');
+   setAiApiKeyInput('');
+   setAiClearKey(false);
+
+    const base = loggerInitialRef.current;
+    if (base) {
+      setLoggerFilePath(base.filePath);
+      setLoggerFileLevel(base.fileLevel);
+      setLoggerMaxSizeMbInput(base.maxSizeMb);
+      setLoggerMaxFilesInput(base.maxFiles);
+      setLoggerZippedArchive(base.zippedArchive);
+    } else {
+      setLoggerFilePath('');
+      setLoggerFileLevel('error');
+      setLoggerMaxSizeMbInput('20');
+      setLoggerMaxFilesInput('30');
+      setLoggerZippedArchive(true);
+    }
   };
 
   const baseUrlPlaceholder =
@@ -1090,6 +1265,122 @@ export const ParametersForm = forwardRef<
                 </div>
               </div>
             </div>
+          </Section>
+
+          <Section
+            title="Logger"
+            description="Configure server log rotation. Admin access is required to view or modify these settings."
+          >
+            {loggerAccessDenied ? (
+              <p className="text-sm text-muted-foreground">
+                Admin privileges are required to manage logger settings.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Label
+                    htmlFor="logger-file-path"
+                    className="text-xs text-muted-foreground"
+                  >
+                    Log file path
+                  </Label>
+                  <Input
+                    id="logger-file-path"
+                    className="h-8 w-[360px]"
+                    value={loggerFilePath}
+                    onChange={(e) => setLoggerFilePath(e.target.value)}
+                    placeholder="./logs/app.log"
+                    disabled={loggerLoading}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor="logger-file-level"
+                      className="text-xs text-muted-foreground"
+                    >
+                      File level
+                    </Label>
+                    <Select
+                      value={loggerFileLevel}
+                      onValueChange={(value) =>
+                        setLoggerFileLevel(
+                          (value as 'error' | 'warn' | 'tc' | 'info' | 'debug') ??
+                            'error',
+                        )
+                      }
+                      disabled={loggerLoading}
+                    >
+                      <SelectTrigger
+                        id="logger-file-level"
+                        className="h-8 w-[160px]"
+                      >
+                        <SelectValue placeholder="Select level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="error">error</SelectItem>
+                        <SelectItem value="warn">warn</SelectItem>
+                        <SelectItem value="tc">tc</SelectItem>
+                        <SelectItem value="info">info</SelectItem>
+                        <SelectItem value="debug">debug</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor="logger-max-size"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Max size (MB)
+                    </Label>
+                    <Input
+                      id="logger-max-size"
+                      type="number"
+                      min={1}
+                      max={1024}
+                      step={1}
+                      className="h-8 w-24"
+                      value={loggerMaxSizeMbInput}
+                      onChange={(e) => setLoggerMaxSizeMbInput(e.target.value)}
+                      disabled={loggerLoading}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor="logger-max-files"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Max files
+                    </Label>
+                    <Input
+                      id="logger-max-files"
+                      type="number"
+                      min={1}
+                      max={200}
+                      step={1}
+                      className="h-8 w-24"
+                      value={loggerMaxFilesInput}
+                      onChange={(e) => setLoggerMaxFilesInput(e.target.value)}
+                      disabled={loggerLoading}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label
+                      htmlFor="logger-zipped"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Zip archives
+                    </Label>
+                    <Switch
+                      id="logger-zipped"
+                      checked={loggerZippedArchive}
+                      onCheckedChange={(v) => setLoggerZippedArchive(!!v)}
+                      disabled={loggerLoading}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </Section>
         </div>
 

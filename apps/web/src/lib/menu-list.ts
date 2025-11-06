@@ -7,6 +7,7 @@ import {
   CommandIcon,
   UtensilsCrossedIcon,
   Users,
+  FileCog,
 } from 'lucide-react'
 
 type Submenu = {
@@ -120,6 +121,11 @@ export function getMenuList(pathname: string): Group[] {
           href: '/settings/parameters',
           label: 'Parameters',
           icon: Settings,
+        },
+        {
+          href: '/settings/logger',
+          label: 'Logger',
+          icon: FileCog,
         },
         {
           href: '/users',

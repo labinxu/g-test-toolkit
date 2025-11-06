@@ -31,7 +31,7 @@ export function Navbar() {
               </Link>
             </Button>
           </div>
-          <div>
+          <div className="flex flex-row">
             <ModeToggle />
             <UserNav />
           </div>

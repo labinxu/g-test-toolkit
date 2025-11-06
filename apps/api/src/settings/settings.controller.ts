@@ -5,12 +5,12 @@ import {
   Put,
   Req,
   UseGuards,
-  ForbiddenException,
   Post,
   Delete,
   Param,
   BadRequestException,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { AuthGuard } from '@nestjs/passport';
@@ -18,14 +18,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import * as bcrypt from 'bcrypt';
-
-async function ensureAdminOrBootstrap(repo: Repository<User>, req: any) {
-  const user = req?.user as any;
-  if (!user) throw new UnauthorizedException('No user');
-  const hasAnyAdmin = (await repo.count({ where: { isAdmin: true } })) > 0;
-  if (hasAnyAdmin && !user.isAdmin)
-    throw new ForbiddenException('Admin required');
-}
+import { ensureAdminOrBootstrap } from './admin.util';
 
 @Controller('settings')
 export class SettingsController {
