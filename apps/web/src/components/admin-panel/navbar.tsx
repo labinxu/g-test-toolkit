@@ -2,7 +2,7 @@ import { ModeToggle } from '@/components/mode-toggle'
 import { UserNav } from '@/components/admin-panel/user-nav'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { SquarePen, LibraryBig, InspectionPanel } from 'lucide-react'
+import { SquarePen, LibraryBig, InspectionPanel, FileSpreadsheet } from 'lucide-react'
 
 export function Navbar() {
   return (
@@ -23,6 +23,11 @@ export function Navbar() {
             <Button asChild variant="ghost" size="icon" aria-label="Inspector">
               <Link href="/tools/android-inspector">
                 <InspectionPanel />
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="icon" aria-label="Inspector">
+              <Link href="/reports">
+                <FileSpreadsheet />
               </Link>
             </Button>
           </div>

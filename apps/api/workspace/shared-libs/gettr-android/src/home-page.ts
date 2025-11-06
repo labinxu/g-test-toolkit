@@ -9,6 +9,7 @@ export class HomePage extends IPage {
   public async sideMenuButton(): Promise<void> {
     await this.page.$('~side menu button').click();
   }
+  
   public async exploreTab(): Promise<void> {
     await this.page.$('~Explore\nTab 1 of 3').click();
   }
@@ -34,7 +35,9 @@ export class HomePage extends IPage {
     await this.page.$('~Post from SteveBannon').click();
   }
   public async remindMeLater(): Promise<void> {
-    await this.page.$('~Remind me later').click();
+    await this.testcase.clickIfPresent('~Remind me later')
+    //await this.page.$('~Remind me later').click();
+    await this.page.pause(1000)
   }
   public async startTheTour(): Promise<void> {
     await this.page.$('~Start the tour').click();

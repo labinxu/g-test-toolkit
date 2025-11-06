@@ -74,7 +74,9 @@ export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {
   sendExitTo(clientId: string) {
     this.server.to(clientId).emit('ctl', 'exit')
   }
-
+  sendComplete(clientId: string, message: string) {
+    this.server.to(clientId).emit('ctl', message)
+  }
   // 监听客户端发来的自定义消息（可选）
   @SubscribeMessage('hello')
   handleHello(@MessageBody() data: string, @ConnectedSocket() client: Socket) {

@@ -13,9 +13,9 @@ export class LoginPage extends IPage {
     await this.page.pause(1000)
     await allInputs[2].click()
     await allInputs[2].setValue(password) // 第二个
-    await this.page.pause(500)
+    await this.page.pause(1000)
     await this.page.$('//android.view.View[@content-desc="Log In" and @clickable="true"]').click()
-    await this.page.pause(500)
+    await this.page.pause(1000)
     return new HomePage(this.testcase);
   }
 }

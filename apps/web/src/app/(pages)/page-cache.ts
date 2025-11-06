@@ -74,3 +74,36 @@ export const useTestcasesPageCache = create<TestcasesPageCache>((set) => ({
     }),
 }))
 
+type ReportsPageCache = {
+  hasCache: boolean
+  currentFile: string
+  currentDir: string
+  refreshKey: number
+  fileCache: Record<string, string>
+  save: (state: Partial<Omit<ReportsPageCache, 'save'>>) => void
+  reset: () => void
+}
+
+export const useReportsPageCache = create<ReportsPageCache>((set) => ({
+  hasCache: false,
+  currentFile: '',
+  currentDir: 'reports',
+  refreshKey: 0,
+  fileCache: {},
+  save: (state) =>
+    set((prev) => ({
+      ...prev,
+      ...state,
+      fileCache:
+        state.fileCache !== undefined ? state.fileCache : prev.fileCache,
+      hasCache: true,
+    })),
+  reset: () =>
+    set({
+      hasCache: false,
+      currentFile: '',
+      currentDir: 'reports',
+      refreshKey: 0,
+      fileCache: {},
+    }),
+}))

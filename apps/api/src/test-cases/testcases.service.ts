@@ -86,6 +86,7 @@ export class TestCasesService {
       keepAppOpen?: boolean
       shareSession?: boolean
       sessionKey?: string
+      userDir?: string
     }
   ): Promise<any> {
     let transformedCode = ''
@@ -98,6 +99,9 @@ export class TestCasesService {
       coreLib = await this.loadCoreLib()
       gettrLib = await this.loadGettrLib()
       gettrAndroidLib = await this.loadGettrAndroidLib()
+      if (typeof coreLib?.clearBddSuites === 'function') {
+        coreLib.clearBddSuites()
+      }
     } catch (err) {
       this.logger.complete(clientId)
       return
@@ -128,23 +132,74 @@ export class TestCasesService {
           keepAppOpen: options?.keepAppOpen,
           shareSession: options?.shareSession,
           sessionKey: options?.sessionKey,
+          userDir: options?.userDir,
         },
+        userDir: options?.userDir,
       }, // 注入传入的参数
       console, // 注入 console 以支持 console.log
       coreMain: coreLib.main,
+      describe: coreLib.describe,
+      it: coreLib.it,
+      test: coreLib.test,
+      beforeAll: coreLib.beforeAll,
+      afterAll: coreLib.afterAll,
+      beforeEach: coreLib.beforeEach,
+      afterEach: coreLib.afterEach,
+      useTestCase: coreLib.useTestCase,
     }
-    // 创建隔离的上下文
-    const context = vm.createContext(sandbox)
-    // 包装代码
-    const wrappedCode = `
-      ${transformedCode}
-      coreMain(params)
-    `
-
     try {
+      // 创建隔离的上下文
+      const context = vm.createContext(sandbox)
+      // 包装代码
+      const wrappedCode = `${transformedCode}
+      globalThis.__gttCorePromise = (async () => {
+        return await coreMain(params)
+      })();`
+
       const script = new vm.Script(wrappedCode, { filename: 'testcase.js' })
       script.runInContext(context)
-      return context.result // 返回结果
+      const corePromise = context.__gttCorePromise
+      const coreResult =
+        corePromise && typeof corePromise.then === 'function' ? await corePromise : undefined
+
+      if (coreResult && Array.isArray(coreResult.results)) {
+        const rawWorkspace = sandbox.params.workspace || process.env.WORKSPACE || 'workspace'
+        const workspaceRoot = path.isAbsolute(rawWorkspace)
+          ? rawWorkspace
+          : path.resolve(process.cwd(), rawWorkspace)
+
+        const normalizeUserDir = (value?: string | null): string | undefined => {
+          if (!value) return undefined
+          let cleaned = value.replace(/[\\]+/g, '/').replace(/^\/+/, '')
+          if (!cleaned) return undefined
+          if (cleaned.startsWith('workspace/')) {
+            cleaned = cleaned.replace(/^workspace\//, '')
+          }
+          return cleaned || undefined
+        }
+
+        for (const entry of coreResult.results) {
+          if (!entry?.report) continue
+          const testName = entry.report?.caseName || entry.className || 'TestCase'
+          try {
+            const normalizedUserDir = normalizeUserDir(entry.report?.metadata?.userDir)
+            const reportWorkspace = normalizedUserDir
+              ? path.join(workspaceRoot, normalizedUserDir, 'reports')
+              : path.join(workspaceRoot, 'reports')
+
+            entry.report.metadata = {
+              ...(entry.report.metadata ?? {}),
+              userDir: normalizedUserDir ?? undefined,
+            }
+
+            await this.reportService.generate(reportWorkspace, testName, entry.report)
+          } catch (generateErr) {
+            this.logger.error(`Failed to generate report for ${testName}: ${generateErr}`)
+          }
+        }
+      }
+
+      return coreResult
     } catch (error) {
       console.error('Sandbox execution failed:', error)
       throw error
@@ -629,6 +684,7 @@ export class TestCasesService {
   }
   async buildLibsComplete(clientId: string) {
     this.logger.sendTo(clientId, 'libs build complete')
+    this.logger.complete(clientId, 'lbcpt')
   }
   /**
    * Emit TypeScript declaration files (.d.ts) for a lib directory using its tsconfig.json.

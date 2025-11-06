@@ -23,6 +23,9 @@ import { RunTestCaseFileDto } from './dto/run-testcase-dto'
 import { InstallAppDto } from './dto/install-app.dto'
 import { remote } from 'webdriverio'
 import { AndroidService } from 'src/mobile/android/android.service'
+import * as dotcfg from 'dotenv'
+dotcfg.config()
+
 @Controller('testcase')
 export class TestCasesController {
   constructor(
@@ -118,7 +121,9 @@ export class TestCasesController {
     }
     try {
       const absolutePath = await this.filesService.getAppFileAbsolutePath(installAppDto.filePath)
-      const result = await this.androidService.installAppOnEmulators(serials, absolutePath, { force: !!installAppDto.force })
+      const result = await this.androidService.installAppOnEmulators(serials, absolutePath, {
+        force: !!installAppDto.force,
+      })
       return {
         result: 'ok',
         installed: result.installed,
@@ -135,7 +140,6 @@ export class TestCasesController {
     @Query('scriptpath') scriptpath: string,
     @Query('clientId') clientId: string
   ) {
-    console.log('clientid', clientId)
     try {
       const absPath = path.resolve(process.cwd(), scriptpath)
       const stat = fs.statSync(absPath)
@@ -246,7 +250,8 @@ export class TestCasesController {
     }
   }
   @Post('runpath')
-  async runTestCaseFile(@Body() runTestCaseFileDto: RunTestCaseFileDto) {
+  @UseGuards(AuthGuard('jwt'))
+  async runTestCaseFile(@Req() req: Request, @Body() runTestCaseFileDto: RunTestCaseFileDto) {
     const baseDir = path.resolve(__dirname, '../..')
     const dir = runTestCaseFileDto.filePath
 
@@ -260,14 +265,34 @@ export class TestCasesController {
     if (!absPath.startsWith(baseDir)) {
       throw new Error('Path traversal attempt detected')
     }
-
-    console.log(absPath)
     const code = fs.readFileSync(absPath)
+    const username = typeof req?.user === 'object' ? (req.user as any)?.username : undefined
+
+    const reportUserDir = path.normalize(path.join(process.env.USERS_DIR, username))
+
+    // if (typeof username === 'string' && username) {
+    //   try {
+    //     const safeName = checkPath(username)
+    //     reportUserDir = checkPath(path.join('users', safeName))
+    //   } catch {
+    //     reportUserDir = undefined
+    //   }
+    // }
+    const keepAppOpenOption =
+      runTestCaseFileDto.keepAppOpen === undefined
+        ? undefined
+        : !!runTestCaseFileDto.keepAppOpen
+    const shareSessionOption =
+      runTestCaseFileDto.shareSession === undefined
+        ? undefined
+        : !!runTestCaseFileDto.shareSession
+
     try {
-      this.testCasesService.runInSandbox(code.toString('utf-8'), runTestCaseFileDto.clientId, {
-        keepAppOpen: !!runTestCaseFileDto.keepAppOpen,
-        shareSession: !!runTestCaseFileDto.shareSession,
+      void this.testCasesService.runInSandbox(code.toString('utf-8'), runTestCaseFileDto.clientId, {
+        keepAppOpen: keepAppOpenOption,
+        shareSession: shareSessionOption,
         sessionKey: runTestCaseFileDto.sessionKey,
+        userDir: reportUserDir,
       })
     } catch (err) {
       throw new NotFoundException(getErrorMessage(err))

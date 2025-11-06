@@ -20,10 +20,11 @@ coverage
 test-results/
 playwright/.cache/
 playwright-report/
-apps/api/workspace/bin
+apps/api/workspace/bin/*.txt
 apps/api/workspace/app
-apps/api/workspace/users
 apps/api/tmp
+apps/api/workspace/artifacts/
+apps/api/workspace/users/*/reports
 apps/api/user-cases
 # Turbo
 .turbo

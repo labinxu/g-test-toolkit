@@ -12,7 +12,8 @@ import {
   RefreshCwOff,
   Server,
   ServerOff,
-  Clover,
+  FileScan,
+  ListRestart,
 } from 'lucide-react'
 import { AppiumToggleButton } from '@/components/appium-toggle-button'
 import { SlidersHorizontal } from 'lucide-react'
@@ -28,7 +29,9 @@ import {
 } from '@/components/ui/dialog'
 import { ParametersForm, type ParametersFormHandle } from '@/components/settings/parameters-form'
 import DirectoryTreePanel from '@/components/files/directory-tree-panel'
-import MonacoScriptEditor, { type MonacoScriptEditorHandle } from '@/components/files/monaco-script-editor'
+import MonacoScriptEditor, {
+  type MonacoScriptEditorHandle,
+} from '@/components/files/monaco-script-editor'
 import { PackagePlus } from 'lucide-react'
 import { OutputPanel } from '@/components/output-panel'
 import { useSocket } from '../socket-content'
@@ -47,9 +50,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { MousePointer, Type, Braces, Timer, Check, Sparkles } from 'lucide-react'
+import { Check, Sparkles } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -114,6 +116,8 @@ export default function Page() {
   const [typesOpen, setTypesOpen] = useState(false)
   const [typesGlobal, setTypesGlobal] = useState<string[]>([])
   const [typesRelatives, setTypesRelatives] = useState<string[]>([])
+  const [reloadTypings, setReloadTypings] = useState(false)
+
   const updateTypesStatus = useCallback(() => {
     try {
       const s = editorRef.current?.getTypingsStatus?.()
@@ -156,7 +160,7 @@ export default function Page() {
       return 80
     }
   })
-  
+
   useEffect(() => {
     const handler = () => {
       try {
@@ -183,7 +187,7 @@ export default function Page() {
       window.removeEventListener('gtt-parameters-updated', handler as any)
     }
   }, [])
-  
+
   const [longPressMs, setLongPressMs] = useState<number>(() => {
     if (typeof window === 'undefined') return 800
     const raw = localStorage.getItem('gtt:longPressMs')
@@ -387,22 +391,15 @@ export default function Page() {
       setAiLoading(false)
     }
   }, [aiPrompt, selectedDeviceId, currentFile])
-  const { logs, connected, clientId, clearLogs, running, setRunning } = useSocket()
+  const { logs, connected, clientId, building, setBuilding } = useSocket()
   // Auto refresh typings when server logs report lib build completion
-  const lastTypingsReloadIdxRef = useRef<number>(0)
   useEffect(() => {
-    const start = Math.max(0, lastTypingsReloadIdxRef.current)
-    const pattern = /(core|gettr|android)\s+lib\s+build/i
-    const L = logs?.length || 0
-    for (let i = start; i < L; i++) {
-      const msg = logs[i] || ''
-      if (pattern.test(msg)) {
-        try { setTimeout(() => editorRef.current?.reloadTypings?.(), 200) } catch {}
-        lastTypingsReloadIdxRef.current = L
-        break
-      }
+    if (!building && reloadTypings) {
+      console.log('reload typings', building, reloadTypings)
+      setTimeout(() => editorRef.current?.reloadTypings?.({ force: true }), 200)
+      setReloadTypings(false)
     }
-  }, [logs])
+  }, [building, reloadTypings])
   const [fileCache, setFileCache] = useState<Record<string, { content: string; original: string }>>(
     {}
   )
@@ -469,39 +466,8 @@ export default function Page() {
     } catch {}
   }, [selectedDeviceId])
 
-  const buildGettrLib = useCallback(async () => {
-    fetch(`/api/testcase/gettrlib?clientId=${clientId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-      .then((resp) => {
-        if (resp.ok) {
-          toast.message('building...')
-        }
-      })
-      .catch((err) => {
-        toast.error(`${err}`)
-      })
-  }, [clientId])
-  const buildCoreLib = useCallback(async () => {
-    fetch(`/api/testcase/corelib?clientId=${clientId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-      .then((resp) => {
-        if (resp.ok) {
-          toast.message('Building...')
-        }
-      })
-      .catch((err) => {
-        toast.error(`${err}`)
-      })
-  }, [clientId])
   const buildLibs = useCallback(async () => {
+    setBuilding(true)
     fetch(`/api/testcase/buildlibs?clientId=${clientId}`, {
       method: 'GET',
       headers: {
@@ -510,40 +476,16 @@ export default function Page() {
     })
       .then((resp) => {
         if (resp.ok) {
+          setReloadTypings(true)
           toast.message('Building...')
         }
       })
       .catch((err) => {
+        setBuilding(false)
+        setReloadTypings(false)
         toast.error(`${err}`)
       })
   }, [clientId])
-  const runPath = useCallback(async () => {
-    clearLogs()
-    try {
-      const csrfResp = await fetch(`/api/csrf-token`, {
-        credentials: 'include',
-      })
-      const csrf = csrfResp.ok ? ((await csrfResp.json()) as { token: string }) : null
-      const csrfToken = csrf?.token
-      await fetch(`/api/testcase/runpath`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-        },
-        body: JSON.stringify({
-          filePath: currentFile,
-          clientId,
-          shareSession: true,
-          sessionKey: selectedDeviceId || undefined,
-        }),
-      })
-      toast.message('Start successful...')
-      setOpenLog(true)
-    } catch (err) {
-      // ignore
-    }
-  }, [currentFile, clientId, clearLogs])
   // Poll Android device list when inspector panel is open
   useEffect(() => {
     if (!showAndroidInspector) return
@@ -655,290 +597,310 @@ export default function Page() {
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pl-1 transition-all duration-300">
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-row items-stretch overflow-auto rounded-lg border">
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <MonacoScriptEditor
-              ref={editorRef}
-              filePath={currentFile}
-              wrapAtColumn={wrapColumn}
-              cachedValue={currentFile ? fileCache[currentFile] : undefined}
-              extraActions={
-                <>
-                  {/* Build libs */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full"
-                        onClick={buildLibs}
-                        aria-label="Build libs"
-                      >
-                        <PackagePlus className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                  <TooltipContent sideOffset={6}>Build Libs</TooltipContent>
-                  </Tooltip>
-                  {/* Refresh typings */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full"
-                        onClick={async () => { await editorRef.current?.reloadTypings?.(); updateTypesStatus() }}
-                        aria-label="Refresh types"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent sideOffset={6}>Refresh Types</TooltipContent>
-                  </Tooltip>
-                  {/* Types inspector */}
-                  <Tooltip>
-                    <Dialog open={typesOpen} onOpenChange={setTypesOpen}>
+                ref={editorRef}
+                filePath={currentFile}
+                wrapAtColumn={wrapColumn}
+                cachedValue={currentFile ? fileCache[currentFile] : undefined}
+                extraActions={
+                  <>
+                    {/* Build libs */}
+                    <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 rounded-full"
-                          aria-label="Show loaded types"
-                          type="button"
-                          onClick={() => { setTypesOpen(true); /* useEffect will update */ }}
+                          onClick={buildLibs}
+                          aria-label="Build libs"
+                          disabled={building}
                         >
-                          <Braces className="h-4 w-4" />
+                          <PackagePlus className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                          <DialogTitle>Loaded Types</DialogTitle>
-                        </DialogHeader>
-                        <div className="max-h-[60vh] overflow-auto space-y-3">
-                          <div>
-                            <div className="mb-1 text-sm font-medium">Global typings ({typesGlobal.length})</div>
-                            <ul className="text-xs">
-                              {typesGlobal.map((p) => (
-                                <li key={p} className="truncate">{p}</li>
-                              ))}
-                            </ul>
-                          </div>
-                          <div>
-                            <div className="mb-1 text-sm font-medium">Relative imports ({typesRelatives.length})</div>
-                            <ul className="text-xs">
-                              {typesRelatives.map((p) => (
-                                <li key={p} className="truncate">
-                                  <button
-                                    type="button"
-                                    className="hover:underline text-left"
-                                    onClick={() => {
-                                      try { setCurrentFile(p) } catch {}
-                                      setTypesOpen(false)
-                                    }}
-                                  >
-                                    {p}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <DialogClose asChild>
-                            <Button variant="outline">Close</Button>
-                          </DialogClose>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                    <TooltipContent sideOffset={6}>Show Types</TooltipContent>
-                  </Tooltip>
-                  {/* AI generate */}
-                  <Tooltip>
-                    <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+                      <TooltipContent sideOffset={6}>Build Libs</TooltipContent>
+                    </Tooltip>
+                    {/* Refresh typings */}
+                    <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 rounded-full"
-                          aria-label="AI 生成脚本片段"
-                          type="button"
-                          onClick={() => {
-                            setAiOpen(true)
-                            setAiPrompt('')
+                          onClick={async () => {
+                            await editorRef.current?.reloadTypings?.({ force: true })
+                            updateTypesStatus()
                           }}
+                          aria-label="Refresh types"
                         >
-                          <Sparkles className="h-4 w-4" />
+                          <ListRestart className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <DialogContent
-                        className="max-w-2xl"
-                        onEscapeKeyDown={(e) => e.preventDefault()}
-                        onPointerDownOutside={(e) => e.preventDefault()}
-                        onInteractOutside={(e) => e.preventDefault()}
-                      >
-                        <DialogHeader>
-                          <DialogTitle>AI 生成脚本片段</DialogTitle>
-                          <DialogDescription>
-                            根据当前页面上下文生成可粘贴的脚本代码片段。
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex flex-col gap-2">
-                          <label className="text-muted-foreground text-xs">
-                            需求描述（例如：点击“登录”，或在“用户名”输入框输入“test_user”）
-                          </label>
-                          <Textarea
-                            value={aiPrompt}
-                            onChange={(e) => setAiPrompt(e.target.value)}
-                            placeholder="描述你要在当前页面执行的操作"
-                            className="min-h-24"
-                          />
-                          <div className="flex items-center gap-2">
-                            <Button onClick={handleGenerateAi} disabled={aiLoading}>
-                              {aiLoading ? '生成中…' : '生成'}
-                            </Button>
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-4 rounded-md border p-2">
-                            <div className="flex items-center gap-2">
-                              <Switch
-                                id="ai-rules-only"
-                                checked={aiUseRulesOnly}
-                                onCheckedChange={(v) => setAiUseRulesOnly(!!v)}
-                              />
-                              <label
-                                htmlFor="ai-rules-only"
-                                className="cursor-pointer text-xs select-none"
-                              >
-                                仅规则生成（禁用LLM）
-                              </label>
+                      <TooltipContent sideOffset={6}>Refresh Types</TooltipContent>
+                    </Tooltip>
+                    {/* Types inspector */}
+                    <Tooltip>
+                      <Dialog open={typesOpen} onOpenChange={setTypesOpen}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            aria-label="Show loaded types"
+                            type="button"
+                            onClick={() => {
+                              setTypesOpen(true) /* useEffect will update */
+                            }}
+                          >
+                            <FileScan className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Loaded Types</DialogTitle>
+                          </DialogHeader>
+                          <div className="max-h-[60vh] space-y-3 overflow-auto">
+                            <div>
+                              <div className="mb-1 text-sm font-medium">
+                                Global typings ({typesGlobal.length})
+                              </div>
+                              <ul className="text-xs">
+                                {typesGlobal.map((p) => (
+                                  <li key={p} className="truncate">
+                                    {p}
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <label
-                                htmlFor="ai-max-lines"
-                                className="text-muted-foreground text-xs"
-                              >
-                                最大行数
-                              </label>
-                              <Input
-                                id="ai-max-lines"
-                                type="number"
-                                min={0}
-                                max={200}
-                                className="h-8 w-20"
-                                value={aiMaxLines}
-                                onChange={(e) => {
-                                  const n = parseInt(e.target.value || '0', 10)
-                                  if (!Number.isFinite(n)) {
-                                    setAiMaxLines(0)
-                                  } else if (n <= 0) {
-                                    setAiMaxLines(0)
-                                  } else {
-                                    setAiMaxLines(Math.max(0, Math.min(200, n)))
-                                  }
-                                }}
-                              />
-                              <span className="text-muted-foreground text-xs">0 表示不限制</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <label htmlFor="ai-max-col" className="text-muted-foreground text-xs">
-                                最大列宽
-                              </label>
-                              <Input
-                                id="ai-max-col"
-                                type="number"
-                                min={0}
-                                max={400}
-                                className="h-8 w-24"
-                                value={aiMaxCol}
-                                onChange={(e) => {
-                                  const n = parseInt(e.target.value || '0', 10)
-                                  if (!Number.isFinite(n)) {
-                                    setAiMaxCol(0)
-                                  } else if (n <= 0) {
-                                    setAiMaxCol(0)
-                                  } else {
-                                    setAiMaxCol(Math.max(0, Math.min(400, n)))
-                                  }
-                                }}
-                              />
-                              <span className="text-muted-foreground text-xs">0 表示不限制</span>
+                            <div>
+                              <div className="mb-1 text-sm font-medium">
+                                Relative imports ({typesRelatives.length})
+                              </div>
+                              <ul className="text-xs">
+                                {typesRelatives.map((p) => (
+                                  <li key={p} className="truncate">
+                                    <button
+                                      type="button"
+                                      className="text-left hover:underline"
+                                      onClick={() => {
+                                        try {
+                                          setCurrentFile(p)
+                                        } catch {}
+                                        setTypesOpen(false)
+                                      }}
+                                    >
+                                      {p}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
                           </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                    <TooltipContent sideOffset={6}>AI 生成脚本</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full"
-                        aria-label="Server status"
-                      >
-                        {connected ? (
-                          <Server className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <ServerOff className="h-4 w-4 text-red-600" />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      sideOffset={6}
-                    >{`${connected ? 'connected' : 'disconnect'}`}</TooltipContent>
-                  </Tooltip>
-                </>
-              }
-              onContentLoaded={({ content, original }, { filePath }) => {
-                if (!filePath) return
-                setFileCache((prev) => ({
-                  ...prev,
-                  [filePath]: { content, original },
-                }))
-                try {
-                  localStorage.setItem(
-                    `gtt:fileCache:libs:${filePath}`,
-                    JSON.stringify({ content, original })
-                  )
-                } catch {}
-              }}
-              onContentChange={(value, info) => {
-                const fileKey = info?.filePath ?? currentFile
-                if (!fileKey) return
-                setFileCache((prev) => {
-                  const existing = prev[fileKey]
-                  const original = existing?.original ?? value
-                  return {
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button variant="outline">Close</Button>
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                      <TooltipContent sideOffset={6}>Show Types</TooltipContent>
+                    </Tooltip>
+                    {/* AI generate */}
+                    <Tooltip>
+                      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            aria-label="AI 生成脚本片段"
+                            type="button"
+                            onClick={() => {
+                              setAiOpen(true)
+                              setAiPrompt('')
+                            }}
+                          >
+                            <Sparkles className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <DialogContent
+                          className="max-w-2xl"
+                          onEscapeKeyDown={(e) => e.preventDefault()}
+                          onPointerDownOutside={(e) => e.preventDefault()}
+                          onInteractOutside={(e) => e.preventDefault()}
+                        >
+                          <DialogHeader>
+                            <DialogTitle>AI 生成脚本片段</DialogTitle>
+                            <DialogDescription>
+                              根据当前页面上下文生成可粘贴的脚本代码片段。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="flex flex-col gap-2">
+                            <label className="text-muted-foreground text-xs">
+                              需求描述（例如：点击“登录”，或在“用户名”输入框输入“test_user”）
+                            </label>
+                            <Textarea
+                              value={aiPrompt}
+                              onChange={(e) => setAiPrompt(e.target.value)}
+                              placeholder="描述你要在当前页面执行的操作"
+                              className="min-h-24"
+                            />
+                            <div className="flex items-center gap-2">
+                              <Button onClick={handleGenerateAi} disabled={aiLoading}>
+                                {aiLoading ? '生成中…' : '生成'}
+                              </Button>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-4 rounded-md border p-2">
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  id="ai-rules-only"
+                                  checked={aiUseRulesOnly}
+                                  onCheckedChange={(v) => setAiUseRulesOnly(!!v)}
+                                />
+                                <label
+                                  htmlFor="ai-rules-only"
+                                  className="cursor-pointer text-xs select-none"
+                                >
+                                  仅规则生成（禁用LLM）
+                                </label>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <label
+                                  htmlFor="ai-max-lines"
+                                  className="text-muted-foreground text-xs"
+                                >
+                                  最大行数
+                                </label>
+                                <Input
+                                  id="ai-max-lines"
+                                  type="number"
+                                  min={0}
+                                  max={200}
+                                  className="h-8 w-20"
+                                  value={aiMaxLines}
+                                  onChange={(e) => {
+                                    const n = parseInt(e.target.value || '0', 10)
+                                    if (!Number.isFinite(n)) {
+                                      setAiMaxLines(0)
+                                    } else if (n <= 0) {
+                                      setAiMaxLines(0)
+                                    } else {
+                                      setAiMaxLines(Math.max(0, Math.min(200, n)))
+                                    }
+                                  }}
+                                />
+                                <span className="text-muted-foreground text-xs">0 表示不限制</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <label
+                                  htmlFor="ai-max-col"
+                                  className="text-muted-foreground text-xs"
+                                >
+                                  最大列宽
+                                </label>
+                                <Input
+                                  id="ai-max-col"
+                                  type="number"
+                                  min={0}
+                                  max={400}
+                                  className="h-8 w-24"
+                                  value={aiMaxCol}
+                                  onChange={(e) => {
+                                    const n = parseInt(e.target.value || '0', 10)
+                                    if (!Number.isFinite(n)) {
+                                      setAiMaxCol(0)
+                                    } else if (n <= 0) {
+                                      setAiMaxCol(0)
+                                    } else {
+                                      setAiMaxCol(Math.max(0, Math.min(400, n)))
+                                    }
+                                  }}
+                                />
+                                <span className="text-muted-foreground text-xs">0 表示不限制</span>
+                              </div>
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                      <TooltipContent sideOffset={6}>AI 生成脚本</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          aria-label="Server status"
+                        >
+                          {connected ? (
+                            <Server className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <ServerOff className="h-4 w-4 text-red-600" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        sideOffset={6}
+                      >{`${connected ? 'connected' : 'disconnect'}`}</TooltipContent>
+                    </Tooltip>
+                  </>
+                }
+                onContentLoaded={({ content, original }, { filePath }) => {
+                  if (!filePath) return
+                  setFileCache((prev) => ({
                     ...prev,
-                    [fileKey]: { content: value, original },
-                  }
-                })
-                try {
-                  localStorage.setItem(
-                    `gtt:fileCache:libs:${fileKey}`,
-                    JSON.stringify({ content: value, original: value })
-                  )
-                } catch {}
-              }}
-              onContentSaved={({ content, original }, { filePath }) => {
-                if (!filePath) return
-                setFileCache((prev) => ({
-                  ...prev,
-                  [filePath]: { content, original },
-                }))
-                try {
-                  localStorage.setItem(
-                    `gtt:fileCache:libs:${filePath}`,
-                    JSON.stringify({ content, original })
-                  )
-                } catch {}
-              }}
+                    [filePath]: { content, original },
+                  }))
+                  try {
+                    localStorage.setItem(
+                      `gtt:fileCache:libs:${filePath}`,
+                      JSON.stringify({ content, original })
+                    )
+                  } catch {}
+                }}
+                onContentChange={(value, info) => {
+                  const fileKey = info?.filePath ?? currentFile
+                  if (!fileKey) return
+                  setFileCache((prev) => {
+                    const existing = prev[fileKey]
+                    const original = existing?.original ?? value
+                    return {
+                      ...prev,
+                      [fileKey]: { content: value, original },
+                    }
+                  })
+                  try {
+                    localStorage.setItem(
+                      `gtt:fileCache:libs:${fileKey}`,
+                      JSON.stringify({ content: value, original: value })
+                    )
+                  } catch {}
+                }}
+                onContentSaved={({ content, original }, { filePath }) => {
+                  if (!filePath) return
+                  setFileCache((prev) => ({
+                    ...prev,
+                    [filePath]: { content, original },
+                  }))
+                  try {
+                    localStorage.setItem(
+                      `gtt:fileCache:libs:${filePath}`,
+                      JSON.stringify({ content, original })
+                    )
+                  } catch {}
+                }}
               />
             </div>
             <div
               className={cn(
-                'flex overflow-hidden rounded-lg border flex-none relative z-10',
+                'relative z-10 flex flex-none overflow-hidden rounded-lg border',
                 showAndroidInspector ? 'p-2' : 'p-1'
               )}
-              style={{ width: showAndroidInspector ? 420 : 32, transition: 'width 240ms ease' }}
+              style={{
+                width: showAndroidInspector ? 420 : 32,
+                transition: 'width 240ms ease',
+              }}
             >
               <div className="self-center">
                 <Tooltip>

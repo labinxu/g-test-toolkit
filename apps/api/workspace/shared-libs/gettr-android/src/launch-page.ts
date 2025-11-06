@@ -19,7 +19,7 @@ export class LaunchPage extends IPage {
     }
     async loginPage(): Promise<LoginPage> {
         await this.page.$('~Log in').click();
-        await this.page.pause(500);
+        await this.page.pause(1000);
         return new LoginPage(this.testcase);
     }
 }

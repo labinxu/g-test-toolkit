@@ -12,13 +12,14 @@ import {
   PackagePlus,
   SlidersHorizontal,
   Activity,
-  Braces,
   RouteOff,
   Unplug,
   Server,
   ServerOff,
   Smartphone,
   Check,
+  FileScan,
+  ListRestart,
 } from 'lucide-react'
 import { AppiumToggleButton } from '@/components/appium-toggle-button'
 // removed Switch in favor of icon toggle for Keep App Open
@@ -231,7 +232,7 @@ export default function Page() {
       const msg = logs[i] || ''
       if (pattern.test(msg)) {
         try {
-          setTimeout(() => editorRef.current?.reloadTypings?.(), 200)
+          setTimeout(() => editorRef.current?.reloadTypings?.({ force: true }), 200)
         } catch {}
         lastTypingsReloadIdxRef.current = L
         break
@@ -543,12 +544,12 @@ export default function Page() {
                           size="icon"
                           className="ml-1 h-8 w-8 rounded-full"
                           onClick={async () => {
-                            await editorRef.current?.reloadTypings?.()
+                            await editorRef.current?.reloadTypings?.({ force: true })
                             updateTypesStatus()
                           }}
                           aria-label="Refresh types"
                         >
-                          <RefreshCw className="h-4 w-4" />
+                          <ListRestart className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent sideOffset={6}>Refresh Types</TooltipContent>
@@ -565,7 +566,7 @@ export default function Page() {
                             }}
                             aria-label="Show types"
                           >
-                            <Braces className="h-4 w-4" />
+                            <FileScan className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
                         <DialogContent className="max-w-2xl">

@@ -79,8 +79,8 @@ export class CustomLogger {
     this.logger.verbose(message)
     this.sendTo(this.clientId, message, tag ? tag : 'verbose')
   }
-  complete(clientId?: string) {
+  complete(clientId?: string, message = 'exit') {
     this.logger.info(`send exit to ${clientId}`)
-    this.loggerGateway.sendExitTo(clientId ? clientId : this.clientId)
+    this.loggerGateway.sendComplete(clientId ? clientId : this.clientId, message)
   }
 }

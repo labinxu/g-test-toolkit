@@ -17,6 +17,7 @@ import {
 import { AuthGuard } from '@nestjs/passport'
 import { FastifyRequest as Request, FastifyReply as Response } from 'fastify'
 import * as fs from 'fs/promises'
+import { createReadStream } from 'fs'
 import * as path from 'path'
 import { FilesService } from './files.service'
 import { existsSync } from 'fs'
@@ -48,13 +49,7 @@ export class FilesController {
     @Query('depth') depth: number = 3
   ) {
     const dpath = checkPath(dir)
-    const user = req.user
-    const username = sanitizeUsername(user['username'])
-    const absPath = path.normalize(path.join(process.cwd(), 'workspace', 'users', username, dpath))
-    const baseDir = path.resolve(process.cwd())
-    if (!absPath.startsWith(baseDir)) {
-      throw new Error('Access to paths outside the working directory is forbidden')
-    }
+    const absPath = path.resolve(path.join(process.env.REPORTS_DIR, dpath))
     if (!existsSync(absPath)) {
       await fs.mkdir(absPath, { recursive: true })
     }
@@ -88,15 +83,50 @@ export class FilesController {
   async getFile(@Query('path') filePath: string, @Res() res: Response) {
     const absP = path.join(process.env.RUNTIME_DIR, filePath)
     const absPath = path.resolve(absP)
-    const content = await fs.readFile(absPath, 'utf-8')
-    res.status(200).send({ content })
+    if (existsSync(absPath)) {
+      const content = await fs.readFile(absPath, 'utf-8')
+      res.status(200).send({ content })
+    } else {
+      res.status(200).send({ message: `file ${filePath} not found!` })
+    }
   }
   @Get('read')
   @UseGuards(AuthGuard('jwt'))
   async readFile(@Query('path') filePath: string, @Res() res: Response) {
     const absPath = path.resolve(process.cwd(), filePath)
+    if (!existsSync(absPath)) {
+      res.status(404).send({ message: `${filePath} not found!` })
+      return
+    }
     const content = await fs.readFile(absPath, 'utf-8')
     res.send(content)
+  }
+
+  @Get('raw')
+  @UseGuards(AuthGuard('jwt'))
+  async rawFile(@Query('path') filePath: string, @Res() res: Response) {
+    if (!filePath) {
+      throw new NotFoundException('path is required')
+    }
+    const absPath = path.resolve(process.cwd(), filePath)
+    if (!existsSync(absPath)) {
+      throw new NotFoundException(`File ${filePath} not found`)
+    }
+    const ext = path.extname(absPath).toLowerCase()
+    const mimeMap: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.json': 'application/json',
+      '.html': 'text/html',
+    }
+    const type = mimeMap[ext] || 'application/octet-stream'
+    res.type(type)
+    res.header('Content-Disposition', `inline; filename="${path.basename(absPath)}"`)
+    const stream = createReadStream(absPath)
+    res.send(stream)
   }
   @Get('types')
   @UseGuards(AuthGuard('jwt'))
@@ -224,12 +254,5 @@ export class FilesController {
       const message = error instanceof Error ? error.message : String(error)
       throw new BadRequestException(message)
     }
-  }
-
-  @Get('buildhelper')
-  //@UseGuards(AuthGuard('jwt'))
-  async buildHelperModule(@Res() res: Response) {
-    await this.filesService.generateModule()
-    return res.send({ code: 'ok' })
   }
 }

@@ -1,38 +1,36 @@
-'use client';
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
-import io, { Socket } from 'socket.io-client';
+'use client'
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
+import io, { Socket } from 'socket.io-client'
 
 interface SocketContextProps {
-  socket: Socket | null;
-  connected: boolean;
-  running: boolean;
-  logs: string[];
-  clientId?: string;
-  emit: (event: string, ...args: any[]) => void;
-  clearLogs: () => void;
-  setRunning: (value: boolean) => void;
+  socket: Socket | null
+  connected: boolean
+  running: boolean
+  building: boolean
+  logs: string[]
+  clientId?: string
+  emit: (event: string, ...args: any[]) => void
+  clearLogs: () => void
+  setRunning: (value: boolean) => void
+  setBuilding: (value: boolean) => void
 }
 
-const SocketContext = createContext<SocketContextProps | undefined>(undefined);
+const SocketContext = createContext<SocketContextProps | undefined>(undefined)
 
 export function useSocket() {
-  const ctx = useContext(SocketContext);
-  if (!ctx) throw new Error('useSocket must be used within a SocketProvider');
-  return ctx;
+  const ctx = useContext(SocketContext)
+  if (!ctx) throw new Error('useSocket must be used within a SocketProvider')
+  return ctx
 }
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
-  const [connected, setConnected] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [clientId, setClientId] = useState<string>();
-  const [running, setRunning] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
+  const [connected, setConnected] = useState(false)
+  const [logs, setLogs] = useState<string[]>([])
+  const [clientId, setClientId] = useState<string>()
+  const [running, setRunning] = useState(false)
+  const [building, setBuilding] = useState(false)
+
+  const socketRef = useRef<Socket | null>(null)
 
   useEffect(() => {
     // Prefer WebSocket directly to avoid extra polling handshake; use env for base URL
@@ -44,47 +42,49 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
       withCredentials: true,
-    });
+    })
 
-    socketRef.current = socket;
+    socketRef.current = socket
 
     socket.on('connect', () => {
-      setConnected(true);
-      setClientId(socket.id);
-      socket.emit('hello', 'Hello from client!');
-    });
+      setConnected(true)
+      setClientId(socket.id)
+      socket.emit('hello', 'Hello from client!')
+    })
 
-    socket.on('log', (msg: string) => setLogs((prev) => [...prev, msg]));
+    socket.on('log', (msg: string) => setLogs((prev) => [...prev, msg]))
     socket.on('close', (msg: string) => {
-      setLogs((prev) => [...prev, msg]);
-      setRunning(false);
-    });
+      setLogs((prev) => [...prev, msg])
+      setRunning(false)
+    })
     socket.on('disconnect', () => {
-      setConnected(false);
-      setRunning(false);
-      console.log('Disconnected');
-    });
+      setConnected(false)
+      setRunning(false)
+      setBuilding(false)
+      setLogs((prev) => [...prev, 'Disconnected'])
+    })
     // 可以添加更多事件
     socket.on('ctl', (msg: string) => {
-      console.log('ctl message from server', msg);
+      console.log('ctl message from server', msg)
       if (msg.toLocaleLowerCase() === 'exit') {
-        console.log('set running to false');
-        setRunning(false);
+        setRunning(false)
+      } else if (msg.toLocaleLowerCase() === 'lbcpt') {
+        setBuilding(false)
       }
-    });
+    })
     return () => {
       try {
-        socket.removeAllListeners();
+        socket.removeAllListeners()
       } catch {}
-      socket.disconnect();
-    };
-  }, []);
+      socket.disconnect()
+    }
+  }, [])
 
   const emit = (event: string, ...args: any[]) => {
-    socketRef.current?.emit(event, ...args);
-  };
+    socketRef.current?.emit(event, ...args)
+  }
 
-  const clearLogs = () => setLogs([]);
+  const clearLogs = () => setLogs([])
 
   return (
     <SocketContext.Provider
@@ -97,9 +97,11 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         clearLogs,
         running,
         setRunning,
+        building,
+        setBuilding,
       }}
     >
       {children}
     </SocketContext.Provider>
-  );
+  )
 }

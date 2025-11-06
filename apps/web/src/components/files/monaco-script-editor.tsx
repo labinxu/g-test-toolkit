@@ -27,11 +27,19 @@ export type MonacoScriptEditorHandle = {
   insertAtCursor: (text: string, opts?: { ensureNewLine?: boolean }) => void
   getCursor: () => number | null
   setCursor: (pos: number) => void
-  reloadTypings: () => Promise<void>
+  reloadTypings: (opts?: { force?: boolean }) => Promise<void>
   getTypingsStatus: () => { global: string[]; relatives: string[] }
 }
 
 type CachedFileEntry = { content: string; original: string }
+
+const globalFileContentCache: Map<string, CachedFileEntry> = (() => {
+  const g = globalThis as any
+  if (!g.__gttFileContentCache) {
+    g.__gttFileContentCache = new Map<string, CachedFileEntry>()
+  }
+  return g.__gttFileContentCache as Map<string, CachedFileEntry>
+})()
 
 interface Props {
   filePath: string
@@ -58,6 +66,11 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
   const monacoRef = useRef<any>(null)
   const extraLibDisposablesRef = useRef<any[]>([])
   const globalTypingUrisRef = useRef<string[]>([])
+  const typingsCacheRef = useRef<{ files: { path: string; content: string }[] } | null>(null)
+  const initialLoadLockRef = useRef<{ path: string | null; promise: Promise<unknown> | null }>({
+    path: null,
+    promise: null,
+  })
   const extraFileLibsRef = useRef<Record<string, any>>({})
   const importScanTimerRef = useRef<any>(null)
   const { theme } = useTheme()
@@ -100,6 +113,9 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
         setContent(next)
         originalRef.current = next
         setChanged(false)
+        if (filePath) {
+          globalFileContentCache.set(filePath, { content: next, original: next })
+        }
         onContentLoaded?.({ content: next, original: next }, { filePath })
         onContentChange?.(next, { dirty: false, filePath })
         // apply saved cursor
@@ -243,9 +259,44 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
       setContent(cachedValue.content)
       originalRef.current = cachedValue.original
       setChanged(cachedValue.content !== cachedValue.original)
+      globalFileContentCache.set(filePath, {
+        content: cachedValue.content,
+        original: cachedValue.original,
+      })
       return
     }
-    fetchServerContent({ showSkeleton: true })
+    const cached = globalFileContentCache.get(filePath)
+    if (cached) {
+      setLoading(false)
+      setError(null)
+      setContent(cached.content)
+      originalRef.current = cached.original
+      setChanged(cached.content !== cached.original)
+      onContentLoaded?.({ content: cached.content, original: cached.original }, { filePath })
+      onContentChange?.(cached.content, {
+        dirty: cached.content !== cached.original,
+        filePath,
+      })
+      initialLoadLockRef.current = { path: null, promise: null }
+      return
+    }
+    const lock = initialLoadLockRef.current
+    if (lock.path === filePath && lock.promise) return
+    const pending = fetchServerContent({ showSkeleton: true })
+    if (pending && typeof (pending as any).then === 'function') {
+      initialLoadLockRef.current = { path: filePath, promise: pending }
+      ;(async () => {
+        try {
+          await pending
+        } finally {
+          if (initialLoadLockRef.current.path === filePath) {
+            initialLoadLockRef.current = { path: null, promise: null }
+          }
+        }
+      })()
+    } else {
+      initialLoadLockRef.current = { path: null, promise: null }
+    }
   }, [filePath, cachedValue, fetchServerContent])
 
   // Save file
@@ -267,6 +318,7 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
       setChanged(false)
       onContentSaved?.({ content, original: content }, { filePath })
       onContentChange?.(content, { dirty: false, filePath })
+      globalFileContentCache.set(filePath, { content, original: content })
     } catch (e: any) {
       setError(e?.message || 'Save failed')
     } finally {
@@ -275,7 +327,8 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
   }, [filePath, content, changed, saving, onContentChange, onContentSaved])
 
   // Inject typings from backend
-  const reloadTypings = useCallback(async () => {
+  const reloadTypings = useCallback(async (opts?: { force?: boolean }) => {
+    const force = !!opts?.force
     const monaco = monacoRef.current
     if (!monaco) return
     if ((reloadTypings as any)._busy) return
@@ -290,13 +343,30 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
       try { globalTypingUrisRef.current = [] } catch {}
 
       // Try to fetch real typings from backend; fall back gracefully on error
-      const res = await fetch('/api/testcase/typings', { cache: 'no-store' })
       let files: { path: string; content: string }[] = []
-      if (res.ok) {
+      if (!force && typingsCacheRef.current) {
+        files = typingsCacheRef.current.files
+      } else {
+        let fetched: { path: string; content: string }[] | undefined
         try {
-          const json = await res.json()
-          files = json?.files || []
+          const res = await fetch('/api/testcase/typings', { cache: 'no-store' })
+          if (res.ok) {
+            try {
+              const json = await res.json()
+              fetched = (json?.files as typeof files) || []
+            } catch {
+              fetched = []
+            }
+          }
         } catch {}
+        if (fetched !== undefined) {
+          files = fetched
+          typingsCacheRef.current = { files: fetched }
+        } else if (typingsCacheRef.current) {
+          files = typingsCacheRef.current.files
+        } else {
+          typingsCacheRef.current = { files: [] }
+        }
       }
       monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
         target: monaco.languages.typescript.ScriptTarget.ESNext,
@@ -484,6 +554,18 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
     try { const model = editor.getModel(); if (model) attachRelativeImports(model.getValue(), 2) } catch {}
   }, [filePath, save, reloadTypings])
 
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && (event.key === 's' || event.key === 'S')) {
+        if (!filePath || saving || !changed) return
+        event.preventDefault()
+        save()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [filePath, changed, saving, save])
+
   if (!filePath) {
     return (
       <div className="flex h-full flex-1 items-center justify-center rounded-xl text-lg shadow-lg">
@@ -559,6 +641,12 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
                 const dirty = next !== originalRef.current
                 setChanged(dirty)
                 onContentChange?.(next, { dirty, filePath })
+                if (filePath) {
+                  globalFileContentCache.set(filePath, {
+                    content: next,
+                    original: originalRef.current,
+                  })
+                }
                 scheduleAttachImports(next)
               }}
             />
