@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, Save } from 'lucide-react'
+import { ChevronDown, Save, XIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import CodeMirror from '@uiw/react-codemirror'
@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useTheme } from 'next-themes'
+import { RedisControl } from '@/components/redis-control'
+import { OptionsSelect } from '@/components/select/options-select'
 
 const defaultScript = `/**
  * FAST USER DB calculator.
@@ -110,7 +112,7 @@ export default function FastUserDbToolPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
-  const [scriptOpen, setScriptOpen] = useState(true)
+  const [scriptOpen, setScriptOpen] = useState(false)
   const [isFetchingScript, setIsFetchingScript] = useState(false)
   const userEditedRef = useRef(false)
   const [fetchedUserRaw, setFetchedUserRaw] = useState('')
@@ -179,7 +181,7 @@ export default function FastUserDbToolPage() {
     setIsDirty(script !== lastSavedScript)
   }, [script, lastSavedScript])
 
-  const isUserReady = useMemo(() => userId.trim().length > 0, [userId])
+  const isUserReady = useMemo(() => (userId ?? '').trim().length > 0, [userId])
 
   const codeMirrorExtensions = useMemo(() => [javascript({ jsx: true, typescript: true })], [])
 
@@ -201,8 +203,11 @@ export default function FastUserDbToolPage() {
       if (fetched === undefined || fetched === null || fetched === '') {
         throw new Error('CDATE not found in response')
       }
+      const fetchedId =
+        typeof data?.result?.data?._id === 'string' ? data.result.data._id : undefined
       return {
         cdate: String(fetched),
+        userId: fetchedId,
         raw: data,
       }
     },
@@ -218,20 +223,29 @@ export default function FastUserDbToolPage() {
       return
     }
     setIsRunning(true)
+    let resolvedUserId = trimmedUserId
     try {
       let effectiveCdate = cdate.trim()
       if (!effectiveCdate) {
         const response = await fetchCdateForUser(trimmedUserId)
         effectiveCdate = response.cdate
+        const fetchedUserId =
+          typeof response.userId === 'string' && response.userId.trim().length > 0
+            ? response.userId.trim()
+            : trimmedUserId
+        resolvedUserId = fetchedUserId
         setCdate(effectiveCdate)
+        setUserId(fetchedUserId)
         setFetchedUserRaw(stringifyResult(response.raw))
+      } else {
+        resolvedUserId = trimmedUserId
       }
       const runner = new Function('userId', 'cdate', 'previousResult', script) as (
         userId: string,
         cdate: string,
         previousResult: string
       ) => unknown
-      const rawResult = runner(trimmedUserId, effectiveCdate, output)
+      const rawResult = runner(resolvedUserId, effectiveCdate, output)
       setOutput(stringifyResult(rawResult))
       setError('')
     } catch (err: unknown) {
@@ -267,7 +281,7 @@ export default function FastUserDbToolPage() {
     } finally {
       setIsRunning(false)
     }
-    setUserId(userId)
+    setUserId(trimmed)
   }, [userId, qaEnv])
 
   const handleSave = useCallback(async () => {
@@ -299,7 +313,7 @@ export default function FastUserDbToolPage() {
   }, [script])
 
   return (
-    <div className="mx-auto flex w-full flex-1 flex-col gap-6 overflow-y-auto rounded-lg border-2 p-6 shadow-lg">
+    <div className="mx-auto flex w-full flex-1 flex-col gap-6 overflow-auto rounded-lg border-2 p-6 shadow-lg">
       <div className="space-y-2">
         <h1 className="text-xl font-semibold">FastUserInfo</h1>
         <p className="text-muted-foreground text-sm">
@@ -309,7 +323,8 @@ export default function FastUserDbToolPage() {
           <p className="text-destructive text-sm">Failed to load script: {loadError}</p>
         )}
       </div>
-
+      {/** redis control */}
+      <RedisControl defaultKey={'ntf:def_notif_whitelist'} defaultType={'Set'} />
       <div className="bg-muted/20 w-full rounded-lg border p-4">
         <div className="grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
           <div className="flex flex-col gap-2">
@@ -343,25 +358,47 @@ export default function FastUserDbToolPage() {
             <Label htmlFor="fast-user-db-user-id" className="text-sm font-medium">
               User ID
             </Label>
-            <Input
-              id="fast-user-db-user-id"
-              value={userId}
-              onChange={(event) => setUserId(event.target.value)}
-              placeholder="Enter user ID"
-              className="h-10 text-sm"
-            />
+            <div className="relative">
+              <Input
+                id="fast-user-db-user-id"
+                value={userId}
+                onChange={(event) => setUserId(event.target.value)}
+                placeholder="Enter user ID"
+                className="h-10 pr-10 text-sm"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute top-1 right-1 h-8 w-8"
+                onClick={() => setUserId('')}
+              >
+                <XIcon className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="fast-user-db-cdate" className="text-sm font-medium">
               CDATE
             </Label>
-            <Input
-              id="fast-user-db-cdate"
-              value={cdate}
-              onChange={(event) => setCdate(event.target.value)}
-              placeholder="Enter created time (numeric)"
-              className="h-10 text-sm"
-            />
+            <div className="relative">
+              <Input
+                id="fast-user-db-cdate"
+                value={cdate}
+                onChange={(event) => setCdate(event.target.value)}
+                placeholder="Enter created time (numeric)"
+                className="h-10 pr-10 text-sm"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute top-1 right-1 h-8 w-8"
+                onClick={() => setCdate('')}
+              >
+                <XIcon className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3 lg:self-end">
             <Button
@@ -427,7 +464,7 @@ export default function FastUserDbToolPage() {
           <div className="w-full overflow-hidden rounded-md border">
             <CodeMirror
               value={script}
-              height="280px"
+              height="380px"
               minHeight="220px"
               maxHeight="300px"
               extensions={codeMirrorExtensions}
@@ -448,7 +485,7 @@ export default function FastUserDbToolPage() {
         )}
       </div>
 
-      <div className="grid w-full gap-4 rounded-lg border p-4 sm:grid-cols-1 md:grid-cols-2">
+      <div className="grid h-full w-full gap-4 overflow-auto rounded-lg border p-4 sm:grid-cols-1 md:grid-cols-2">
         <div className="bg-muted/20 flex flex-col gap-2 rounded-md border p-3">
           <Label htmlFor="fast-user-db-fetch-response" className="text-sm font-medium">
             User Fetch Response

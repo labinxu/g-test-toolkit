@@ -94,6 +94,11 @@ export function getMenuList(pathname: string): Group[] {
           icon: UtensilsCrossedIcon,
           submenus: [
             {
+              label: 'Notif Whitelist',
+              href: '/tools/whitelist-post',
+            },
+
+            {
               label: 'DateTime',
               href: '/tools/trans-datetime',
             },

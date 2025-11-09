@@ -27,7 +27,6 @@ import { HomePage,LaunchPage,LoginPage ,LiveStreamPage} from 'gettr-android-lib'
       //await tc.prepareSession?.({ reinstall: true })
     })
      
-
     it('Verify login', async () => {
       const lp = new LaunchPage(tc);
       const lgp = await lp.loginPage();
