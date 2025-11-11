@@ -214,6 +214,28 @@ export class TestCase {
     this.sharedState.currentCase?.artifacts.push(artifact)
   }
 
+  // Add tags to current case metadata (used for traceability/export overrides)
+  addCaseTags(tags: string | string[]) {
+    const entry = this.sharedState.currentCase
+    if (!entry) return
+    const arr = Array.isArray(tags) ? tags.slice() : [tags]
+    const meta = (entry.metadata = { ...(entry.metadata || {}) })
+    const existing: string[] = Array.isArray(meta.tags) ? meta.tags.slice() : []
+    const next = Array.from(new Set([...existing, ...arr.filter((s) => typeof s === 'string')]))
+    meta.tags = next
+  }
+
+  // Set per-case TestRail override metadata
+  setCaseTestrail(override: { template?: string; type?: string; priority?: string; section?: string }) {
+    const entry = this.sharedState.currentCase
+    if (!entry || !override || typeof override !== 'object') return
+    const meta = (entry.metadata = { ...(entry.metadata || {}) })
+    meta.testrail = {
+      ...(meta.testrail || {}),
+      ...override,
+    }
+  }
+
   setReportMetadata(meta?: CaseMetadata) {
     if (!isRecord(meta)) return
     this.sharedState.reportMetadata = {

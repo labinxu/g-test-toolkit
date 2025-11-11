@@ -5,7 +5,7 @@ node_modules
 .projectile
 .pnp
 .pnp.js
-./apps/api/user-cases
+apps/api/workspace/reports/*
 # Local env files
 .env
 .env.local

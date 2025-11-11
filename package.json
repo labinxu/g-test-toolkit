@@ -12,6 +12,9 @@
     "test:e2e": "turbo run test:e2e",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "allure:gen": "node scripts/allure.js gen",
+    "allure:open": "node scripts/allure.js open",
+    "allure:clean": "node scripts/allure.js clean",
     "ios:doctor": "npx appium-doctor --ios",
     "ios:version": "npx appium --version",
     "ios:drivers": "npx appium driver list --installed"

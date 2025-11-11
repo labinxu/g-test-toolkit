@@ -1,7 +1,12 @@
-import { TestCase, Test, withBrowser, useBrowser } from 'test-case'
+import { TestCase, Test, withBrowser, useBrowser } from 'core-lib'
 @Test({ module: 'notification' })
 @withBrowser({ headless: false, debug: true })
 export class TestNotifSwitchUI extends TestCase {
+  async tearUp() {
+    await super.tearUp?.()
+    // Attach requirement tag for traceability suggestions
+    this.setReportMetadata({ tags: ['REQ:PRD:feat-proj-0001'] })
+  }
   async test_check_notif_setting() {
     const result = await this.login({
       url: 'https://qa1-prod.gettr-qa.com/login?step=sea_login_with_email',

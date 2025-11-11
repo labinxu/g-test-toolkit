@@ -67,6 +67,10 @@ export function getMenuList(pathname: string): Group[] {
               href: '/testcases/app',
               label: 'APP',
             },
+            {
+              href: '/traceability',
+              label: 'Tranceability',
+            },
           ],
         },
         {

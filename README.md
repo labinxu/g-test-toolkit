@@ -272,3 +272,44 @@ Common ADB commands to discover the Android package name and main Activity for u
   ```bash
   adb shell monkey -p com.gettr.gettr -c android.intent.category.LAUNCHER 1
   ```
+
+### Allure 集成（报告）
+
+- 适用范围
+  - API（NestJS）内置的测试运行器会在每次执行后生成 HTML 与 JSON 报告；现已新增可选的 Allure 结果输出，不会影响现有功能。
+  - 只在存在 `allure-js-commons` 时启用（可选依赖检测）。`apps/api` 已带有 `allure-mocha`（会带入 `allure-js-commons`），通常无需额外安装即可工作。
+
+- 结果目录
+  - 执行后会在对应用户目录生成 `allure-results`：
+    - `apps/api/workspace/users/<user>/allure-results`
+    - HTML/JSON 仍写入：`apps/api/workspace/users/<user>/reports`
+
+- 本地查看 Allure 报告
+  - 安装 Allure CLI（任选其一）：
+    - Homebrew（macOS）：`brew install allure`
+    - NPM（跨平台）：`npm i -D allure-commandline && npx allure --version`
+  - 生成与打开：
+    - 以本地用户 `labin` 为例：
+      - 生成：`allure generate --clean apps/api/workspace/users/labin/allure-results -o apps/api/workspace/users/labin/allure-report`
+      - 打开：`allure open apps/api/workspace/users/labin/allure-report`
+
+- NPM 脚本（推荐）
+  - 生成：`npm run allure:gen -- <user>` 例：`npm run allure:gen -- labin`
+  - 打开：`npm run allure:open -- <user>` 例：`npm run allure:open -- labin`
+  - 清理：`npm run allure:clean -- <user>`（仅删除生成的 `allure-report` 目录）
+
+- 内容说明
+  - 每个用例会写入 Allure 的测试结果（状态、耗时、错误信息）。
+  - 截图等产物会作为附件写入（PNG/JPEG 自动识别，其它以文本写入）。
+  - `suite` 标签根据 BDD 元数据（`suitePath`）自动设置，便于在 Allure UI 中分组浏览。
+
+- 关闭/禁用
+  - 若未安装 `allure-js-commons`，Allure 输出将自动跳过，不影响现有 HTML 报告。
+
+## Traceability（需求 ⇄ 测试）
+
+- 页面：`/traceability`（Web 应用内）支持录入需求、建立映射、自动建议与导出（TestRail/Xray）。
+- 测试报告中的 `metadata.tags` 支持 `REQ:<SYSTEM>:<KEY>` 语法，可用于“建议映射”。
+- 文档：
+  - docs/traceability/feature-follow-notify.md
+  - docs/traceability/feature-traceability-template.md

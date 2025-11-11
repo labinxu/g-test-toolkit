@@ -5,6 +5,11 @@ import {TestCaseHelper} from 'testcase-common';
 @Test({ module: 'notification' })
 @withBrowser({ headless: true, debug: false })
 export class TestEvent extends TestCase {
+  async tearUp(){
+    await super.tearUp?.()
+    // Attach requirement tag for traceability suggestions
+    this.setReportMetadata({ tags: ['REQ:PRD:feat-proj-0001'] })
+  }
   async eventHandler(event:any){
     this.printInfo('this is event handler')
   }

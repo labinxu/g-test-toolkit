@@ -119,6 +119,7 @@ export class AuthController {
         id: user.id,
         username: user.username,
         email: user.email,
+        isAdmin: !!(user as any).isAdmin,
       },
     }
   }

@@ -6,6 +6,7 @@ import path from 'path';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TestCase } from './entities/testcase.entity';
+import { tryGenerateAllure } from './allure-adapter';
 @Injectable()
 export class ReportService {
   private logger: CustomLogger;
@@ -285,6 +286,18 @@ export class ReportService {
 
     const reportMetaFile = reportFile.replace(/\.html?$/i, '.json');
     writeFileSync(reportMetaFile, JSON.stringify(reportMeta, null, 2));
+
+    // Additionally emit allure-results (optional; only if allure-js-commons is available)
+    try {
+      const resultsRoot = path.resolve(reportRoot, '..', 'allure-results');
+      const ok = tryGenerateAllure(resultsRoot, testName, data, this.logger);
+      if (ok) {
+        this.logger.debug?.(`Allure results updated at ${resultsRoot}`);
+      }
+    } catch (e) {
+      this.logger.warn?.(`Allure generation failed: ${e}`);
+    }
+
     return { testcase, reportFile };
   }
 }

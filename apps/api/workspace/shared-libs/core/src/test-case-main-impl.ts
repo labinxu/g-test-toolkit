@@ -1,6 +1,7 @@
 import { __testCaseClasses, withAndroid, withBrowser } from './test-case-decorator'
 import { TestCase } from './test-case-base'
 import { remote } from 'webdriverio'
+import { spawnSync } from 'child_process'
 import {
   getBddRootSuites,
   clearBddSuites,
@@ -501,6 +502,62 @@ export async function main({
             throw new Error(
               'Install 模式需要提供 apk（@withAndroid），或改为 launch 模式并提供 appPackage/appActivity',
             )
+          }
+
+          // Pre-uninstall conflicting packages when using install mode
+          try {
+            const preUnPkgs: string[] | undefined = (Ctor as any).__androidPreUninstall
+            const doPreUn = (Ctor as any).__androidPreUninstallOnInstall !== false
+            const udid: string | undefined =
+              selectedCaps['appium:udid'] || selectedCaps['udid'] || androidOpts?.capabilities?.['appium:udid']
+            if (installMode === 'install' && doPreUn && udid) {
+              // Try to derive package name from APK via aapt if available
+              const apkPath: string | undefined = selectedCaps['appium:app']
+              let derivedPkg: string | undefined = undefined
+              if (apkPath && typeof apkPath === 'string') {
+                try {
+                  const aaptBin = process.env.AAPT_BIN || 'aapt'
+                  const r = spawnSync(aaptBin, ['dump', 'badging', apkPath], {
+                    stdio: 'pipe',
+                    encoding: 'utf-8',
+                  })
+                  const out = (r.stdout || '').toString()
+                  const m = /package:\s+name='([^']+)'/.exec(out)
+                  if (r.status === 0 && m && m[1]) {
+                    derivedPkg = m[1]
+                    logger.info?.(`aapt derived package: ${derivedPkg}`)
+                  } else {
+                    const err = (r.stderr || '').toString()
+                    logger.debug?.(`aapt parse failed code=${r.status} out=${out?.slice(0, 200)} err=${err?.slice(0, 200)}`)
+                  }
+                } catch (e) {
+                  logger.debug?.(`aapt not available or failed: ${e}`)
+                }
+              }
+
+              const pkgsBase = Array.isArray(preUnPkgs) ? preUnPkgs.filter((s) => !!s).map(String) : []
+              if (derivedPkg && !pkgsBase.includes(derivedPkg)) pkgsBase.push(derivedPkg)
+              const unique = Array.from(new Set(pkgsBase))
+              if (!unique.length) {
+                logger.debug?.('pre-uninstall skipped: no packages gathered')
+              }
+              for (const pkg of unique) {
+                try {
+                  logger.info?.(`pre-uninstall package before install: ${pkg}`)
+                  const r = spawnSync('adb', ['-s', String(udid), 'uninstall', String(pkg)], {
+                    stdio: 'pipe',
+                    encoding: 'utf-8',
+                  })
+                  const out = (r.stdout || '').trim()
+                  const err = (r.stderr || '').trim()
+                  logger.debug?.(`adb uninstall ${pkg} -> code=${r.status} out=${out} err=${err}`)
+                } catch (e) {
+                  logger.warn?.(`pre-uninstall failed for ${pkg}: ${e}`)
+                }
+              }
+            }
+          } catch (e) {
+            logger.warn?.(`pre-uninstall step skipped due to error: ${e}`)
           }
 
           try {

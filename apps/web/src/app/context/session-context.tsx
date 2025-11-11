@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { normalizeResponseError } from '@/lib/error';
 interface SessionContextType {
   isAuthenticated: boolean;
-  user: { username: string; email: string } | null;
+  user: { username: string; email: string; isAdmin?: boolean } | null;
   login: (email: string, password: string) => Promise<void>;
   register: (
     username: string,
@@ -23,7 +23,7 @@ interface SessionContextType {
   csrfToken: string | null;
 }
 
-type User = { username: string; email: string };
+type User = { username: string; email: string; isAdmin?: boolean };
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
@@ -67,7 +67,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         setIsAuthenticated(true);
-        setUser({ username: data.user.username, email: data.user.email });
+        setUser({ username: data.user.username, email: data.user.email, isAdmin: !!data.user.isAdmin });
       } else {
         setIsAuthenticated(false);
         setUser(null);

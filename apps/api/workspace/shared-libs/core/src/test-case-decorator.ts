@@ -80,6 +80,10 @@ export type WithAndroidOptions = {
   dontStopAppOnReset?: boolean
   /** Whether to bring the app to foreground after session (create/reuse). Default: true */
   bringToFront?: boolean
+  /** Packages to uninstall before installing APK (install mode only) */
+  preUninstallPackages?: string[]
+  /** Whether to perform pre-uninstall when in install mode (default true if preUninstallPackages provided) */
+  preUninstallOnInstall?: boolean
 }
 
 export function withAndroid(options: WithAndroidOptions): ClassDecorator {
@@ -184,6 +188,12 @@ export function withAndroid(options: WithAndroidOptions): ClassDecorator {
       : undefined
     ;(constructor as any).__androidInstallBehavior = autoInstallBehavior
     ;(constructor as any).__androidBringToFront = !!opts.bringToFront
+    // Persist pre-uninstall options for install mode
+    ;(constructor as any).__androidPreUninstall = Array.isArray(opts.preUninstallPackages)
+      ? opts.preUninstallPackages.filter((x) => typeof x === 'string' && x.trim().length > 0)
+      : undefined
+    ;(constructor as any).__androidPreUninstallOnInstall =
+      opts.preUninstallOnInstall ?? (Array.isArray(opts.preUninstallPackages) && opts.preUninstallPackages.length > 0)
 
     // 为向后兼容保留 __androidOpts（默认按“安装模式”构造）
     ;(constructor as any).__androidOpts = {

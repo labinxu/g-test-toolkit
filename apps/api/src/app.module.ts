@@ -17,12 +17,15 @@ import { LoggerModule } from './logger/logger.module';
 import { InspectorModule } from './mobile/inspector/inspector.module';
 import { SettingsModule } from './settings/settings.module';
 import { AiModule } from './ai/ai.module';
+import { TraceabilityModule } from './traceability/traceability.module';
+import { Requirement } from './traceability/entities/requirement.entity';
+import { ReqTestMap } from './traceability/entities/req-test-map.entity';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: '../../database/auth_db.sqlite',
-      entities: [User, TestCase, Setting],
+      entities: [User, TestCase, Setting, Requirement, ReqTestMap],
       synchronize: true,
     }),
     AndroidModule,
@@ -35,6 +38,7 @@ import { AiModule } from './ai/ai.module';
     InspectorModule,
     AiModule,
     SettingsModule,
+    TraceabilityModule,
   ],
   controllers: [AppController],
   providers: [AppService, LoggerService, LoggerGateway],

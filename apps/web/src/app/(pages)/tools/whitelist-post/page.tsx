@@ -10,15 +10,17 @@ import CodeMirror from '@uiw/react-codemirror'
 import { ListX, ListPlus, ListCheck } from 'lucide-react'
 import { TooltipTrigger, TooltipContent, Tooltip } from '@/components/ui/tooltip'
 type EnvKey = 'qa1x' | 'qa4'
-type Env = { label: string; api: string }
+type Env = { label: string; apiKey: string; api: string }
 
 const ENVIRONMENTS: Record<EnvKey, Env> = {
   qa1x: {
     label: 'QA1X',
+    apiKey: 'hwfPHZbB4d4dPgRLy',
     api: ' https://next-backend-notif.qa1.ue1.oke.gettr-qa.com/api/v1/def-notif-whitelist',
   },
   qa4: {
     label: 'QA4',
+    apiKey: 'hwfPHZbB4d4dPgRLyqa4',
     api: 'https://next-backend-notif.qa4.ue1.oke.gettr-qa.com/api/v1/def-notif-whitelist',
   },
 }
@@ -38,22 +40,42 @@ export default function WhitelistPostPage() {
   const handleViewWhitelist = useCallback(async () => {
     const response = await fetch(qaEnv.api, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-api-key': qaEnv.apiKey,
+      },
     })
     const wl = await response.json()
     setWhitelist(JSON.stringify(wl))
-  }, [qaEnv.api])
+  }, [qaEnv.api, qaEnv.apiKey])
   const handleAddWhitelist = useCallback(async () => {
     if (payload === '') {
       return
     }
     await fetch(qaEnv.api, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-api-key': qaEnv.apiKey,
+      },
       body: payload,
     })
     await handleViewWhitelist()
-  }, [payload, qaEnv.api])
+  }, [payload, qaEnv.api, qaEnv.apiKey])
+  const handleDelete = useCallback(async () => {
+    if (payload === '') {
+      return
+    }
+    await fetch(qaEnv.api, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-api-key': qaEnv.apiKey,
+      },
+      body: payload,
+    })
+    await handleViewWhitelist()
+  }, [payload, qaEnv.api, qaEnv.apiKey])
   const handlePayloadChange = useCallback((value: string) => {
     setPayload(value)
   }, [])
@@ -120,7 +142,7 @@ export default function WhitelistPostPage() {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" onClick={handleDelete}>
                 <ListX />
               </Button>
             </TooltipTrigger>
