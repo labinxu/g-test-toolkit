@@ -1,4 +1,4 @@
-import { TestCase, Test, withBrowser } from 'test-case';
+import { TestCase, Test, withBrowser } from 'core-lib';
 @Test()
 @withBrowser({ headless: false, debug: true })
 export class TestQA_14848 extends TestCase {
@@ -45,7 +45,7 @@ export class TestQA_14848 extends TestCase {
     };
     await do_post();
     const do_delete = async () => {
-      this.printDebug('do delete')
+      
       let counter = 2;
       while (counter > 0) {
         const post_actions = await this.$(

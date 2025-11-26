@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
         source: '/api/auth/:path*',
         destination: '/api/auth/:path*',
       },
+      // Keep routes-configs API handled by Next.js app routes
+      {
+        source: '/api/routes-configs/:path*',
+        destination: '/api/routes-configs/:path*',
+      },
       {
         source: '/api/:path*',
         destination: `${process.env.BACK_SERVER_API_URL}/:path*`,

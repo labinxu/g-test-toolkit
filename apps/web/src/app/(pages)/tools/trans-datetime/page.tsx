@@ -101,7 +101,7 @@ export default function Page() {
   }
   return (
     <div className="flex w-full pt-8">
-      <div className="flex w-full flex-1 flex-col gap-4 rounded-lg border-2 shadow-lg">
+      <div className="flex w-full flex-1 flex-col gap-2 rounded-lg border-2 shadow-lg">
         <div className="flex flex-row items-start rounded-lg p-4 shadow-lg">
           <Label htmlFor="current-local" className="flex w-full flex-col gap-1 text-left">
             Current Date:

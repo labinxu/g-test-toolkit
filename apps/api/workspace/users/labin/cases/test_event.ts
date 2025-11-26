@@ -1,5 +1,5 @@
-import { TestCase, Test, withBrowser, useBrowser } from 'test-case';
-import {TestCaseHelper} from 'testcase-common';
+import { TestCase, Test, withBrowser, useBrowser } from 'core-lib';
+import {TestCaseHelper} from 'gettr-lib';
 
 
 @Test({ module: 'notification' })

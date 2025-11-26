@@ -29,7 +29,7 @@ export const DeviceHoverCard = React.memo(
           <Button variant="link">Preview</Button>
         </HoverCardTrigger>
         <HoverCardContent className="w-80">
-          <div className="flex justify-between gap-4">
+          <div className="flex justify-between gap-2">
             {imgUrl ? (
               <img src={imgUrl} alt="screenshot" />
             ) : (

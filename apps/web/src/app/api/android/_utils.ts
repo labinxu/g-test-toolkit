@@ -4,7 +4,10 @@ export function getBackendBase() {
   return process.env.API_BASE_URL || process.env.INSPECTOR_BASE_URL || '';
 }
 
-function withForwardedAuth(req?: NextRequest, extra?: HeadersInit): HeadersInit | undefined {
+export function withForwardedAuth(
+  req?: NextRequest,
+  extra?: HeadersInit,
+): HeadersInit | undefined {
   const headers: Record<string, string> = {};
   if (req) {
     const cookie = req.headers.get('cookie');
@@ -23,7 +26,10 @@ function withForwardedAuth(req?: NextRequest, extra?: HeadersInit): HeadersInit 
 export async function proxyJson(path: string, init?: RequestInit) {
   const base = getBackendBase();
   if (!base) {
-    return NextResponse.json({ error: 'API_BASE_URL or INSPECTOR_BASE_URL not set' }, { status: 503 });
+    return NextResponse.json(
+      { error: 'API_BASE_URL or INSPECTOR_BASE_URL not set' },
+      { status: 503 },
+    );
   }
   const url = `${base.replace(/\/$/, '')}${path}`;
   const res = await fetch(url, { cache: 'no-store', ...init });
@@ -35,7 +41,10 @@ export async function proxyJson(path: string, init?: RequestInit) {
 export async function proxyJsonWithReq(req: NextRequest, path: string, init?: RequestInit) {
   const base = getBackendBase();
   if (!base) {
-    return NextResponse.json({ error: 'API_BASE_URL or INSPECTOR_BASE_URL not set' }, { status: 503 });
+    return NextResponse.json(
+      { error: 'API_BASE_URL or INSPECTOR_BASE_URL not set' },
+      { status: 503 },
+    );
   }
   const url = `${base.replace(/\/$/, '')}${path}`;
   const res = await fetch(url, {

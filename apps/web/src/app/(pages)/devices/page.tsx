@@ -784,7 +784,7 @@ export default function Page() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-1 flex-col gap-6 overflow-auto rounded-lg border-2 p-4 shadow-lg">
+      <div className="flex flex-1 flex-col gap-2 overflow-auto rounded-lg border-2 p-4 shadow-lg">
         <div>
           <div className="flex items-center justify-between">
             <span className="text-lg font-medium">Android Devices</span>

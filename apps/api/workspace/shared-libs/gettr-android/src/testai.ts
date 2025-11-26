@@ -12,7 +12,10 @@ export class PostPage extends IPage{
   }
   async johannesVk9h() {
     await this.page.$('~@johannes_vk · 9h').click();
-  }
+const el = await this.page.$('//android.widget.EditText')
+await el.click()
+await el.setValue('your text')
+}
   async johannes() {
     await this.page.$('~Johannes').click();
   }

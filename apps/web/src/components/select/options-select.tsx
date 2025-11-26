@@ -18,6 +18,7 @@ type OptionsSelectProps<TValue extends string = string> = {
   id?: string
   placeholder?: string
   defaultValue?: TValue
+  value?: TValue
   items: OptionsSelectItem<TValue>[]
   onSelect: (item: OptionsSelectItem<TValue>) => void
   triggerClassName?: string
@@ -28,14 +29,18 @@ export function OptionsSelect<TValue extends string = string>({
   id,
   placeholder = 'Select',
   defaultValue,
+  value,
   items,
   onSelect,
   triggerClassName,
   contentClassName,
 }: OptionsSelectProps<TValue>) {
+  const selectProps: any = {}
+  if (value !== undefined) selectProps.value = value
+  else if (defaultValue !== undefined) selectProps.defaultValue = defaultValue
   return (
     <Select
-      defaultValue={defaultValue}
+      {...selectProps}
       onValueChange={(value) => {
         const selectedItem = items.find((item) => item.value === value)
         if (selectedItem) {
@@ -53,8 +58,8 @@ export function OptionsSelect<TValue extends string = string>({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className={cn('max-h-[160px] w-[160px] overflow-y-auto', contentClassName)}>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
+        {items.map((item, index) => (
+          <SelectItem key={`${item.value}#${index}`} value={item.value}>
             {item.label}
           </SelectItem>
         ))}

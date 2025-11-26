@@ -15,6 +15,7 @@ import * as path from 'path'
 import { FastifyReply as Response } from 'fastify'
 import { ApiBody, ApiConsumes } from '@nestjs/swagger'
 import { TestCasesService } from './testcases.service'
+import { LoggerGateway } from 'src/logger/logger.gateway'
 import { FilesService } from 'src/files/files.service'
 import * as fs from 'fs'
 import { FastifyRequest as Request } from 'fastify'
@@ -31,7 +32,8 @@ export class TestCasesController {
   constructor(
     private readonly testCasesService: TestCasesService,
     private readonly filesService: FilesService,
-    private readonly androidService: AndroidService
+    private readonly androidService: AndroidService,
+    private readonly loggerGateway: LoggerGateway
   ) {}
 
   @Post('/')
@@ -201,7 +203,7 @@ export class TestCasesController {
   @Get('gettrlib')
   async gettrlib(@Query('clientId') clientId: string) {
     try {
-      await this.testCasesService.buildGettrLib(clientId)
+      await this.testCasesService.buildGettrWebLib(clientId)
     } catch (error) {
       throw new NotFoundException(getErrorMessage(error))
     }
@@ -230,7 +232,7 @@ export class TestCasesController {
   async buildLibs(@Query('clientId') clientId: string) {
     try {
       await this.testCasesService.buildCoreLib(clientId)
-      await this.testCasesService.buildGettrLib(clientId)
+      await this.testCasesService.buildGettrWebLib(clientId)
       await this.testCasesService.buildGettrAndroidLib(clientId)
       await this.testCasesService.buildLibsComplete(clientId)
     } catch (error) {
@@ -270,30 +272,23 @@ export class TestCasesController {
 
     const reportUserDir = path.normalize(path.join(process.env.USERS_DIR, username))
 
-    // if (typeof username === 'string' && username) {
-    //   try {
-    //     const safeName = checkPath(username)
-    //     reportUserDir = checkPath(path.join('users', safeName))
-    //   } catch {
-    //     reportUserDir = undefined
-    //   }
-    // }
     const keepAppOpenOption =
-      runTestCaseFileDto.keepAppOpen === undefined
-        ? undefined
-        : !!runTestCaseFileDto.keepAppOpen
+      runTestCaseFileDto.keepAppOpen === undefined ? undefined : !!runTestCaseFileDto.keepAppOpen
     const shareSessionOption =
-      runTestCaseFileDto.shareSession === undefined
-        ? undefined
-        : !!runTestCaseFileDto.shareSession
-
+      runTestCaseFileDto.shareSession === undefined ? undefined : !!runTestCaseFileDto.shareSession
+    console.log(`==== ${JSON.stringify((runTestCaseFileDto as any).envConfig)}`)
     try {
-      void this.testCasesService.runInSandbox(code.toString('utf-8'), runTestCaseFileDto.clientId, {
-        keepAppOpen: keepAppOpenOption,
-        shareSession: shareSessionOption,
-        sessionKey: runTestCaseFileDto.sessionKey,
-        userDir: reportUserDir,
-      })
+      void this.testCasesService.runInChildProcess(
+        code.toString('utf-8'),
+        runTestCaseFileDto.clientId,
+        {
+          keepAppOpen: keepAppOpenOption,
+          shareSession: shareSessionOption,
+          sessionKey: runTestCaseFileDto.sessionKey,
+          userDir: reportUserDir,
+          envConfig: (runTestCaseFileDto as any).envConfig,
+        }
+      )
     } catch (err) {
       throw new NotFoundException(getErrorMessage(err))
     }
@@ -309,6 +304,48 @@ export class TestCasesController {
     }
 
     return { result: 'ok', message: 'pushing livestream' }
+  }
+
+  @Post('stop')
+  @UseGuards(AuthGuard('jwt'))
+  async stop(@Body('clientId') clientId?: string, @Body('sessionKey') sessionKey?: string) {
+    try {
+      if (!clientId && !sessionKey) {
+        throw new BadRequestException('clientId or sessionKey is required')
+      }
+      if (clientId) {
+        try {
+          this.loggerGateway.sendExitTo(clientId)
+        } catch {}
+      }
+      // cooperative stop flag for currently running sandbox
+      if (clientId) {
+        try {
+          const g = globalThis as any
+          const flags: Map<string, { requested: boolean }> | undefined = g.__gttStopFlags
+          const ref = flags?.get(clientId)
+          if (ref) {
+            ref.requested = true
+          }
+        } catch {}
+      }
+      if (clientId) {
+        try {
+          await this.testCasesService.killRunnerForClient(clientId)
+        } catch {}
+      }
+      // Best-effort cleanup of sessions
+      try {
+        if (sessionKey) {
+          await this.testCasesService.cleanupSharedSessionByKey(sessionKey)
+        } else if (clientId) {
+          await this.testCasesService.cleanupKeptAndroidSessionsFor(clientId)
+        }
+      } catch {}
+      return { result: 'ok', message: 'Stop requested' }
+    } catch (error) {
+      throw new NotFoundException(getErrorMessage(error))
+    }
   }
   @Get('test-ios')
   async testios() {

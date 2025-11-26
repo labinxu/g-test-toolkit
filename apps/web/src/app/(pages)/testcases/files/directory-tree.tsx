@@ -50,6 +50,7 @@ export default function DirectoryTree({
   selectedPath: selectedPathProp,
   cacheEnabled = true,
   cacheTtlMs = 60_000,
+  filterText = '',
 }: {
   api: string;
   currentDir: string;
@@ -62,6 +63,7 @@ export default function DirectoryTree({
   selectedPath?: string | null;
   cacheEnabled?: boolean;
   cacheTtlMs?: number;
+  filterText?: string;
 }) {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -173,6 +175,81 @@ export default function DirectoryTree({
     setExpanded({});
   }
 
+  const filterTokens = useMemo(
+    () =>
+      (filterText || '')
+        .split(/[\s,]+/g)
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    [filterText],
+  );
+
+  // When filtering, auto-expand folders that contain matches
+  useEffect(() => {
+    if (!filterTokens.length || !tree.length) return;
+    const auto: Record<string, boolean> = {};
+
+    const visit = (nodes: FileNode[]): boolean => {
+      let hasMatch = false;
+      for (const node of nodes) {
+        const name = (node.name || '').toLowerCase();
+        const path = node.path.toLowerCase();
+        const haystack = name || path;
+        const selfMatch = filterTokens.every((t) => haystack.includes(t));
+
+        let childMatch = false;
+        if (node.children && node.children.length > 0) {
+          childMatch = visit(node.children);
+        }
+
+        if ((selfMatch || childMatch) && node.isDirectory) {
+          auto[node.path] = true;
+        }
+        if (selfMatch || childMatch) {
+          hasMatch = true;
+        }
+      }
+      return hasMatch;
+    };
+
+    try {
+      visit(tree);
+      if (Object.keys(auto).length) {
+        setExpanded((prev) => ({ ...prev, ...auto }));
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterTokens.join('|'), tree]);
+
+  function filterTree(nodes: FileNode[], tokens: string[]): FileNode[] {
+    if (!tokens.length) return nodes;
+    const result: FileNode[] = [];
+    for (const node of nodes) {
+      const name = (node.name || '').toLowerCase();
+      const path = node.path.toLowerCase();
+      const haystack = name || path;
+      const selfMatch = tokens.every((t) => haystack.includes(t));
+
+      let children: FileNode[] | undefined;
+      if (node.children && node.children.length > 0) {
+        children = filterTree(node.children, tokens);
+      }
+
+      if (selfMatch || (children && children.length > 0)) {
+        result.push({
+          ...node,
+          children,
+        });
+      }
+    }
+    return result;
+  }
+
+  const visibleTree = useMemo(
+    () => (filterTokens.length ? filterTree(tree, filterTokens) : tree),
+    [tree, filterTokens],
+  );
+
   const handleDelete = useCallback(
     async (node: FileNode) => {
       setDeleting(true);
@@ -215,6 +292,46 @@ export default function DirectoryTree({
     },
     [clientId],
   );
+
+  const handleRename = useCallback(
+    async (node: FileNode) => {
+      try {
+        const currentName = node.name || node.path.split('/').pop() || ''
+        const input = window.prompt('Rename to', currentName)
+        if (input == null) return
+        const newName = input.trim()
+        if (!newName || newName === currentName) return
+        const res = await fetch('/api/files/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ path: node.path, newName }),
+        })
+        if (!res.ok) {
+          const err = await normalizeResponseError(res)
+          throw new Error(err.message || 'Rename failed')
+        }
+        const data = await res.json().catch(() => ({} as any))
+        const newPath: string | undefined = data?.newPath
+        setRefreshKey(refreshKey + 1)
+        if (newPath) {
+          setSelectedPath(newPath)
+          if (!node.isDirectory) {
+            onSelect(newPath)
+          } else {
+            onDirSelect?.(newPath)
+          }
+        }
+      } catch (e: any) {
+        // Prefer toast error if available; fallback to alert
+        try {
+          const msg = e?.message || 'Rename failed'
+          ;(toast as any)?.error ? toast.error(msg) : alert(msg)
+        } catch {}
+      }
+    },
+    [refreshKey, setRefreshKey, onSelect, onDirSelect]
+  )
 
   function renderNode(node: FileNode, level = 0, isLast = false) {
     const isSelected = selectedPath === node.path;
@@ -288,13 +405,14 @@ export default function DirectoryTree({
                   <FileIcon size={16} />
                 </span>
               )}
-              <span>{node.name}</span>
+              <span className="whitespace-nowrap">{node.name}</span>
             </div>
           </ContextMenuTrigger>
           <FileContextMenu
             node={node}
             onDelete={setDeleteTarget}
             onRun={setRunTarget}
+            onRename={handleRename}
           />
         </ContextMenu>
         {/* Child nodes */}
@@ -336,9 +454,11 @@ export default function DirectoryTree({
           </Button>
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-auto">
-        {typeof tree?.map === 'function' ? (
-          tree.map((node, idx) => renderNode(node, 0, idx === tree.length - 1))
+      <div className="flex-1 min-h-0 overflow-auto overflow-x-auto">
+        {typeof visibleTree?.map === 'function' ? (
+          visibleTree.map((node, idx) =>
+            renderNode(node, 0, idx === visibleTree.length - 1),
+          )
         ) : (
           <div>No Files</div>
         )}

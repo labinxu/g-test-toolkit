@@ -11,6 +11,7 @@ import { AndroidModule } from 'src/mobile/android/android.module';
 import { ReportModule } from 'src/report/report.module';
 import { FilesModule } from 'src/files/files.module';
 import { IosModule } from 'src/mobile/ios/ios.module';
+import { SettingsModule } from 'src/settings/settings.module';
 @Module({
   imports: [
     FastifyMulterModule.register({
@@ -31,6 +32,7 @@ import { IosModule } from 'src/mobile/ios/ios.module';
     IosModule,
     ReportModule,
     FilesModule,
+    SettingsModule,
   ],
   controllers: [TestCasesController],
   providers: [

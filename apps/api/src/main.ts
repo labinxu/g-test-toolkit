@@ -24,8 +24,8 @@ async function bootstrap() {
     fastifyAdapter,
   );
 
-  // Explicitly cast the Fastify instance
-  const fastifyInstance = app.getHttpAdapter().getInstance() as FastifyInstance;
+  // Explicitly cast the Fastify instance (via unknown to bridge nested fastify typings)
+  const fastifyInstance = app.getHttpAdapter().getInstance() as unknown as FastifyInstance;
 
   // Register plugins directly on the Fastify instance
   await fastifyInstance.register(fastifyStatic, {

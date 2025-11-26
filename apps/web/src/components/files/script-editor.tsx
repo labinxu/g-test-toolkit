@@ -268,7 +268,7 @@ export const ScriptEditor = forwardRef<ScriptEditorHandle, ScriptEditorProps>(fu
     [content, filePath, onContentChange]
   )
 
-  // Ctrl+S/Cmd+S 快捷保存
+  // Ctrl+S/Cmd+S 快捷保存（捕获阶段，防止被下游阻止）
   useEffect(() => {
     if (filePath.endsWith('ts')) {
       setLanguage('typescript')
@@ -282,8 +282,8 @@ export const ScriptEditor = forwardRef<ScriptEditorHandle, ScriptEditorProps>(fu
         save()
       }
     }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown as any, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown as any, { capture: true } as any)
   }, [filePath, changed, saving, content])
 
   if (!filePath) {

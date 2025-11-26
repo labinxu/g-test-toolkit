@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -17,12 +17,42 @@ export default function DirectoryTreePanel({
 
   const sidebarWidth = 288;
   const collapsedWidth = 28;
+
+  const [width, setWidth] = useState(sidebarWidth);
+  const isResizingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(sidebarWidth);
+
+  const startResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (collapsed) return;
+    isResizingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = width;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const delta = event.clientX - startXRef.current;
+      const next = Math.max(180, Math.min(640, startWidthRef.current + delta));
+      setWidth(next);
+    };
+
+    const handleMouseUp = () => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   return (
     <div
       className="relative h-full flex flex-row items-stretch rounded-xl shadow-lg dark:bg-zinc-800 bg-white"
       style={{
         minWidth: collapsed ? collapsedWidth : 180,
-        width: collapsed ? collapsedWidth : sidebarWidth,
+        width: collapsed ? collapsedWidth : width,
         transition: 'width 0.2s',
       }}
     >
@@ -30,7 +60,7 @@ export default function DirectoryTreePanel({
       <div
         className={`flex-1 h-full flex flex-col`}
         style={{
-          width: collapsed ? 0 : sidebarWidth,
+          width: collapsed ? 0 : width,
           minWidth: 0,
           overflow: 'hidden',
           display: collapsed ? 'none' : undefined,
@@ -40,12 +70,13 @@ export default function DirectoryTreePanel({
       </div>
       {/* 折叠/展开按钮 */}
       <div
-        className="relative flex flex-col items-center justify-center flex-shrink-0"
+        className="relative flex flex-col items-center justify-center flex-shrink-0 cursor-col-resize select-none"
         style={{
           width: 28,
           zIndex: 20,
           userSelect: 'none',
         }}
+        onMouseDown={startResize}
       >
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40">
           <Button

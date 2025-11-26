@@ -1,5 +1,6 @@
 'use client'
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import DirectoryTreePanel from '@/components/files/directory-tree-panel'
 import MonacoScriptEditor, {
   type MonacoScriptEditorHandle,
@@ -20,6 +21,7 @@ import {
   Check,
   FileScan,
   ListRestart,
+  Square,
 } from 'lucide-react'
 import { AppiumToggleButton } from '@/components/appium-toggle-button'
 // removed Switch in favor of icon toggle for Keep App Open
@@ -28,6 +30,8 @@ import { useSocket } from './socket-content'
 import NewFileOrFolder from '@/components/files/new-file-folder'
 import DirectoryTree from './files/directory-tree'
 import { toast } from 'sonner'
+import { Label } from '@/components/ui/label'
+import { OptionsSelect } from '@/components/select/options-select'
 import {
   Dialog,
   DialogClose,
@@ -35,6 +39,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import {
@@ -57,6 +62,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 export default function Page() {
+  const router = useRouter()
   const tcCache = useTestcasesPageCache()
   const [currentFile, setCurrentFile] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
@@ -95,6 +101,24 @@ export default function Page() {
   const { logs, connected, clientId, clearLogs, running, setRunning } = useSocket()
   const [fileCache, setFileCache] = useState<Record<string, { content: string; original: string }>>(
     {}
+  )
+  const [envRunDialogOpen, setEnvRunDialogOpen] = useState(false)
+  const [envRunDialogLoading, setEnvRunDialogLoading] = useState(false)
+  const [envRunTemplates, setEnvRunTemplates] = useState<
+    {
+      id: number
+      platform: string
+      driver: 'browser' | 'android' | 'ios' | 'other'
+      key: string
+      name: string
+      description?: string | null
+      config?: any
+    }[]
+  >([])
+  const [envRunSelectedId, setEnvRunSelectedId] = useState<number | 'none' | null>('none')
+  const [envRunPlatform, setEnvRunPlatform] = useState<string>('gettr-web')
+  const [envRunDriver, setEnvRunDriver] = useState<'browser' | 'android' | 'ios' | 'other'>(
+    'browser'
   )
   const [appiumAutoRefresh, setAppiumAutoRefresh] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
@@ -157,6 +181,7 @@ export default function Page() {
       window.removeEventListener('gtt-parameters-updated', handler as any)
     }
   }, [])
+  const [dirFilterText, setDirFilterText] = useState('')
   // Poll device list when auto refresh is enabled
   useEffect(() => {
     let id: any
@@ -201,6 +226,13 @@ export default function Page() {
       return 60000
     }
   })
+  const [linkedScenario, setLinkedScenario] = useState<{
+    id: number
+    code: string
+    title: string
+    platform: string
+  } | null>(null)
+  const [linkingScenario, setLinkingScenario] = useState(false)
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (!e.key || !e.storageArea) return
@@ -235,11 +267,91 @@ export default function Page() {
           setTimeout(() => editorRef.current?.reloadTypings?.({ force: true }), 200)
         } catch {}
         lastTypingsReloadIdxRef.current = L
+        // 构建完成后重新允许点击 Build Libs
+        setBuildingLibs(false)
         break
       }
     }
   }, [logs])
-  const runPath = useCallback(async () => {
+  const getEnvRunStorageKey = (platform: string, driver: string) =>
+    `gtt:testcases:envTemplate:${platform || 'default'}:${driver || 'browser'}`
+
+  const inferPlatformAndDriverFromPath = (filePath: string): {
+    platform: string
+    driver: 'browser' | 'android'
+  } => {
+    const parts = (filePath || '').split('/').filter(Boolean)
+    const idx = parts.findIndex((p) => p === 'cases')
+    const platform = idx >= 0 && parts[idx + 1] ? parts[idx + 1] : 'gettr-web'
+    const driver = platform === 'gettr-android' ? 'android' : 'browser'
+    return { platform, driver }
+  }
+
+  const openRunEnvDialog = useCallback(async () => {
+    if (!currentFile) {
+      toast.error('请先在左侧选择一个用例文件')
+      return
+    }
+    const { platform, driver } = inferPlatformAndDriverFromPath(currentFile)
+    setEnvRunPlatform(platform)
+    setEnvRunDriver(driver)
+    setEnvRunDialogOpen(true)
+    setEnvRunDialogLoading(true)
+    setEnvRunSelectedId('none')
+    try {
+      const qs = new URLSearchParams()
+      qs.set('platform', platform)
+      qs.set('driver', driver)
+      const res = await fetch(`/api/env-templates?${qs.toString()}`, { cache: 'no-store' })
+      if (!res.ok) {
+        const err = await normalizeResponseError(res as any)
+        throw new Error(err.message || '加载环境模板失败')
+      }
+      const data = await res.json()
+      const list: any[] = Array.isArray(data?.items) ? data.items : []
+      const mapped = list.map((it) => {
+        let cfg: any = {}
+        try {
+          cfg =
+            it.config && typeof it.config === 'string'
+              ? JSON.parse(it.config)
+              : it.config || {}
+        } catch {
+          cfg = {}
+        }
+        return {
+          id: Number(it.id),
+          platform: String(it.platform || platform),
+          driver: (it.driver || driver) as 'browser' | 'android' | 'ios' | 'other',
+          key: String(it.key || ''),
+          name: String(it.name || it.key || ''),
+          description: (it.description as string | null | undefined) ?? null,
+          config: cfg,
+        }
+      })
+      setEnvRunTemplates(mapped)
+      if (mapped.length === 1) {
+        setEnvRunSelectedId(mapped[0]!.id)
+      } else if (mapped.length > 1) {
+        try {
+          const raw = localStorage.getItem(getEnvRunStorageKey(platform, driver))
+          if (raw) {
+            const lastId = Number(raw)
+            if (Number.isFinite(lastId) && mapped.some((tpl) => tpl.id === lastId)) {
+              setEnvRunSelectedId(lastId)
+            }
+          }
+        } catch {}
+      }
+    } catch (e: any) {
+      toast.error(e?.message || '加载环境模板失败')
+      setEnvRunTemplates([])
+    } finally {
+      setEnvRunDialogLoading(false)
+    }
+  }, [currentFile])
+  const runPath = useCallback(
+    async (envConfig?: any) => {
     clearLogs()
     // 1) fetch csrf token first (cookie must be present and credentials included)
     const csrfResp = await fetch(`/api/csrf-token`, { credentials: 'include' })
@@ -259,6 +371,7 @@ export default function Page() {
         keepAppOpen,
         shareSession: true,
         sessionKey: selectedDeviceId || undefined,
+        envConfig,
       }),
     })
       .then((resp) => {
@@ -271,7 +384,94 @@ export default function Page() {
         setRunning(false)
       })
     setOpenLog(true)
-  }, [currentFile, clientId])
+  },
+  [currentFile, clientId, keepAppOpen, selectedDeviceId, clearLogs])
+
+  // Resolve current testcase file back to UserScenario (if generated from scenarios)
+  useEffect(() => {
+    if (!currentFile || !currentFile.startsWith('workspace/users/')) {
+      setLinkedScenario(null)
+      return
+    }
+    let cancelled = false
+    const run = async () => {
+      try {
+        setLinkingScenario(true)
+        const qs = new URLSearchParams({ path: currentFile })
+        const res = await fetch(`/api/user-scenarios/resolve-testcase?${qs.toString()}`, {
+          cache: 'no-store',
+        })
+        if (!res.ok) {
+          if (!cancelled) setLinkedScenario(null)
+          return
+        }
+        const data = await res.json()
+        const scenario = (data && data.scenario) || null
+        if (cancelled) return
+        if (!scenario) {
+          setLinkedScenario(null)
+        } else {
+          setLinkedScenario({
+            id: scenario.id,
+            code: scenario.code,
+            title: scenario.title,
+            platform: scenario.platform,
+          })
+        }
+      } catch {
+        if (!cancelled) setLinkedScenario(null)
+      } finally {
+        if (!cancelled) setLinkingScenario(false)
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [currentFile])
+
+  const stopRun = useCallback(async () => {
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm('确认要停止当前用例吗？')
+      if (!confirmed) {
+        return
+      }
+    }
+    try {
+      const csrfResp = await fetch(`/api/csrf-token`, {
+        credentials: 'include',
+      })
+      const csrf = csrfResp.ok ? ((await csrfResp.json()) as { token: string }) : null
+      const csrfToken = csrf?.token
+      const res = await fetch('/api/testcase/stop', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        },
+        body: JSON.stringify({
+          clientId,
+          sessionKey: selectedDeviceId || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const err = await (async () => {
+          try {
+            const mod = await import('@/lib/error')
+            return mod.normalizeResponseError(res)
+          } catch {
+            return { message: res.statusText }
+          }
+        })()
+        toast.error(err.message || 'Stop failed')
+      } else {
+        toast.message('Stop requested')
+        setRunning(false)
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Stop failed')
+    }
+  }, [clientId, selectedDeviceId])
   const closeKeptSessions = useCallback(async () => {
     try {
       const csrfResp = await fetch(`/api/csrf-token`, {
@@ -324,22 +524,27 @@ export default function Page() {
       toast.error(String(e))
     }
   }, [])
+  const [buildingLibs, setBuildingLibs] = useState(false)
   const buildLibs = useCallback(async () => {
-    fetch(`/api/testcase/buildlibs?clientId=${clientId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-      .then((resp) => {
-        if (resp.ok) {
-          toast.message('Building...')
-        }
+    if (buildingLibs) return
+    setBuildingLibs(true)
+    try {
+      const resp = await fetch(`/api/testcase/buildlibs?clientId=${clientId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       })
-      .catch((err) => {
-        toast.error(`${err}`)
-      })
-  }, [clientId])
+      if (resp.ok) {
+        toast.message('Building libs...')
+      } else {
+        const text = await resp.text()
+        toast.error(text || 'Build libs request failed')
+      }
+    } catch (err: any) {
+      toast.error(String(err))
+    }
+  }, [buildingLibs, clientId])
 
   const renderLogs = () => {
     return logs.map((log, index) => {
@@ -372,35 +577,55 @@ export default function Page() {
       )
     })
   }
-  // Restore cached state on mount
+  // Restore cached state on mount, with support for "forceReload" (from Scenarios page)
   useEffect(() => {
+    let lastFromStorage = ''
+    let forceReload = false
+    try {
+      lastFromStorage = localStorage.getItem('gtt:testcases:lastFile') || ''
+      forceReload = localStorage.getItem('gtt:testcases:forceReload') === '1'
+    } catch {}
     const s = useTestcasesPageCache.getState()
-    if (s.hasCache) {
+    if (s.hasCache && !forceReload) {
       setCurrentFile(s.currentFile)
       setCurrentDir(s.currentDir)
       setFileCache(s.fileCache)
       setOpenLog(s.openLog)
-    } else {
-      // Fallback: restore last opened file from localStorage
-      try {
-        const last = localStorage.getItem('gtt:testcases:lastFile')
-        if (last) {
-          setCurrentFile(last)
-          const i = last.lastIndexOf('/')
-          setCurrentDir(i > 0 ? last.slice(0, i) : '')
-          // Bootstrap editor cache for instant show
+    } else if (lastFromStorage) {
+      const last = lastFromStorage
+      setCurrentFile(last)
+      const i = last.lastIndexOf('/')
+      setCurrentDir(i > 0 ? last.slice(0, i) : '')
+      if (!forceReload) {
+        // Bootstrap editor cache for instant show（仅在不强制刷新的情况下）
+        try {
           const raw = localStorage.getItem(`gtt:fileCache:testcases:${last}`)
           if (raw) {
-            try {
-              const obj = JSON.parse(raw) as {
-                content: string
-                original: string
-              }
-              setFileCache((prev) => ({ ...prev, [last]: obj }))
-            } catch {}
+            const obj = JSON.parse(raw) as {
+              content: string
+              original: string
+            }
+            setFileCache((prev) => ({ ...prev, [last]: obj }))
           }
-        }
-      } catch {}
+        } catch {}
+      } else {
+        // 强制刷新：清除该文件的本地缓存（内存 + localStorage + 全局缓存），确保从服务器重新加载
+        try {
+          localStorage.removeItem(`gtt:fileCache:testcases:${last}`)
+          localStorage.removeItem('gtt:testcases:forceReload')
+        } catch {}
+        setFileCache((prev) => {
+          const next = { ...prev }
+          delete next[last]
+          return next
+        })
+        try {
+          const g = globalThis as any
+          const cache: Map<string, { content: string; original: string }> | undefined =
+            g.__gttFileContentCache
+          cache?.delete(last)
+        } catch {}
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -429,6 +654,8 @@ export default function Page() {
             key={currentDir}
             parentDir={currentDir}
             onCreated={() => setRefreshKey((k) => k + 1)}
+            filterText={dirFilterText}
+            onFilterChange={setDirFilterText}
           />
           <DirectoryTree
             api={'/api/testcase/listcases?&depth=3'}
@@ -441,11 +668,39 @@ export default function Page() {
             cacheEnabled={!dirCacheDisabled}
             cacheTtlMs={dirCacheTtlMs}
             collapsible={false}
+            filterText={dirFilterText}
             run={runPath}
           />
         </DirectoryTreePanel>
       </div>
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pl-4 transition-all duration-300">
+        {currentFile && linkedScenario && (
+          <div className="mb-1 flex items-center justify-between rounded-md border bg-muted/40 px-2 py-1 text-[11px]">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate">
+                映射用例：[{linkedScenario.platform}] {linkedScenario.code}（ID:{' '}
+                {linkedScenario.id}）
+              </span>
+              <span className="text-muted-foreground truncate">
+                {linkedScenario.title}
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              className="ml-2 h-6 px-2 text-[11px]"
+              onClick={() => {
+                try {
+                  localStorage.setItem('gtt:scenarios:lastCaseId', String(linkedScenario.id))
+                } catch {}
+                router.push('/scenarios')
+              }}
+            >
+              在「用户场景」中查看
+            </Button>
+          </div>
+        )}
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 justify-between">
             <MonacoScriptEditor
@@ -458,23 +713,17 @@ export default function Page() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
-                          variant="ghost"
+                          variant={running ? 'destructive' : 'ghost'}
                           size="icon"
                           className="h-8 w-8 rounded-full"
-                          onClick={() => runPath()}
-                          disabled={!currentFile || running}
-                          aria-label="Execute"
+                          onClick={() => (running ? stopRun() : openRunEnvDialog())}
+                          disabled={!currentFile}
+                          aria-label={running ? 'Stop' : 'Execute'}
                         >
-                          {running ? (
-                            <RefreshCw className={`h-4 w-4 animate-spin text-green-400`} />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
+                          {running ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>
-                        {running ? 'Running...' : 'Execute'}
-                      </TooltipContent>
+                      <TooltipContent sideOffset={6}>{running ? 'Stop' : 'Execute'}</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -529,6 +778,7 @@ export default function Page() {
                           variant="ghost"
                           size="icon"
                           className="ml-1 h-8 w-8 rounded-full"
+                          disabled={buildingLibs}
                           onClick={() => buildLibs()}
                           aria-label="Build libs"
                         >
@@ -544,7 +794,9 @@ export default function Page() {
                           size="icon"
                           className="ml-1 h-8 w-8 rounded-full"
                           onClick={async () => {
-                            await editorRef.current?.reloadTypings?.({ force: true })
+                            await editorRef.current?.reloadTypings?.({
+                              force: true,
+                            })
                             updateTypesStatus()
                           }}
                           aria-label="Refresh types"
@@ -832,6 +1084,124 @@ export default function Page() {
           </AlertDialog>
         </div>
       </div>
+      {/* 运行用例时选择环境模板 */}
+      <Dialog open={envRunDialogOpen} onOpenChange={setEnvRunDialogOpen}>
+        <DialogContent
+          className="sm:max-w-md"
+          onEscapeKeyDown={(e) => {
+            if (envRunDialogLoading) e.preventDefault()
+          }}
+          onPointerDownOutside={(e) => {
+            if (envRunDialogLoading) e.preventDefault()
+          }}
+          onInteractOutside={(e) => {
+            if (envRunDialogLoading) e.preventDefault()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>选择运行环境模板</DialogTitle>
+            <DialogDescription>
+              为当前用例选择一套 useTestCase 环境配置。不同用户可选择不同模板，但复用同一套用例代码。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground">
+              当前平台：{envRunPlatform} · 驱动：
+              {envRunDriver === 'android'
+                ? 'Android'
+                : envRunDriver === 'browser'
+                ? 'Browser'
+                : envRunDriver}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">环境模板</Label>
+              <OptionsSelect<string>
+                value={
+                  envRunSelectedId == null
+                    ? 'none'
+                    : envRunSelectedId === 'none'
+                    ? 'none'
+                    : String(envRunSelectedId)
+                }
+                items={[
+                  {
+                    value: 'none',
+                    label: '不使用模板（使用代码中的默认配置）',
+                  },
+                  ...envRunTemplates.map((tpl) => ({
+                    value: String(tpl.id),
+                    label: `${tpl.name} (${tpl.key})`,
+                  })),
+                ]}
+                onSelect={(item) => {
+                  if (item.value === 'none') {
+                    setEnvRunSelectedId('none')
+                  } else {
+                    const n = Number(item.value)
+                    setEnvRunSelectedId(Number.isFinite(n) ? n : null)
+                  }
+                }}
+                disabled={envRunDialogLoading}
+                triggerClassName="h-9 text-xs"
+              />
+              {envRunTemplates.length === 0 && !envRunDialogLoading && (
+                <p className="text-[11px] text-muted-foreground">
+                  当前平台尚未配置环境模板，将按用例代码中的默认 useTestCase 配置运行。
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={envRunDialogLoading}
+              onClick={() => {
+                if (envRunDialogLoading) return
+                setEnvRunDialogOpen(false)
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={envRunDialogLoading || !currentFile}
+              onClick={async () => {
+                if (!currentFile) return
+                const tplId =
+                  envRunSelectedId && envRunSelectedId !== 'none'
+                    ? Number(envRunSelectedId)
+                    : null
+                let envConfig: any = undefined
+                if (tplId != null) {
+                  const tpl = envRunTemplates.find((t) => t.id === tplId)
+                  if (tpl && tpl.config && typeof tpl.config === 'object') {
+                    envConfig =
+                      envRunDriver === 'android'
+                        ? { android: tpl.config }
+                        : { browser: tpl.config }
+                    try {
+                      localStorage.setItem(
+                        getEnvRunStorageKey(envRunPlatform, envRunDriver),
+                        String(tplId)
+                      )
+                    } catch {}
+                  }
+                }
+                setEnvRunDialogLoading(true)
+                try {
+                  await runPath(envConfig)
+                  setEnvRunDialogOpen(false)
+                } finally {
+                  setEnvRunDialogLoading(false)
+                }
+              }}
+            >
+              执行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

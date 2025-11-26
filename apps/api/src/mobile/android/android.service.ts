@@ -2,15 +2,25 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CommandService } from 'src/command/command.service';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { XMLParser } from 'fast-xml-parser';
 import { FastifyReply as Response } from 'fastify';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
+import * as os from 'os';
 
 @Injectable()
 export class AndroidService {
   private readonly creatableAvdTemplates = [
+    {
+      id: 'pixel5-android13',
+      label: 'Pixel 5 - Android 13 (API 33)',
+      description:
+        'Google APIs image, Android 13 (API level 33), arm64-v8a architecture, Pixel 5 profile.',
+      deviceId: 'pixel_5',
+      systemImage: 'system-images;android-33;google_apis;arm64-v8a',
+      defaultName: 'pixel5-api33',
+    },
     {
       id: 'pixel8-android15',
       label: 'Pixel 8 - Android 15 (API 36)',
@@ -25,6 +35,9 @@ export class AndroidService {
   private dumpedObj: any;
   private appiumProc: ChildProcess | null = null;
   private appiumPort: number | null = null;
+  private mitmProc: ChildProcess | null = null;
+  private mitmPort: number | null = null;
+  private mitmDumpFile?: string;
   private devicesCache?: { at: number; output: string };
   constructor(
     private readonly commandService: CommandService,
@@ -270,6 +283,352 @@ export class AndroidService {
     }
   }
 
+  async startMitmproxy(options: { port?: number; outFile?: string } = {}) {
+    if (this.mitmProc && !this.mitmProc.killed) {
+      this.logger.info(
+        `mitmproxy already running on port ${this.mitmPort ?? options.port}`,
+      );
+      return {
+        started: false,
+        port: this.mitmPort ?? options.port,
+        dumpFile: this.mitmDumpFile,
+      };
+    }
+
+    const port =
+      options.port ??
+      (process.env.MITM_PROXY_PORT
+        ? Number(process.env.MITM_PROXY_PORT)
+        : 8081);
+    if (!Number.isFinite(port) || port <= 0) {
+      throw new Error(`Invalid mitmproxy port: ${options.port}`);
+    }
+
+    const defaultDumpDir = './tmp/mitm';
+    const dumpFile =
+      options.outFile ??
+      path.join(defaultDumpDir, `flows-${Date.now().toString()}.mitm`);
+
+    try {
+      const dir = path.dirname(dumpFile);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to ensure mitmproxy output directory: ${(err as Error)?.message ?? err}`,
+      );
+    }
+
+    this.logger.info(
+      `Starting mitmproxy (mitmdump) on port ${port}, output: ${dumpFile}`,
+    );
+
+    const args = ['-p', String(port), '-w', dumpFile];
+    const proc = spawn('mitmdump', args, {
+      stdio: 'pipe',
+      env: process.env as NodeJS.ProcessEnv,
+    });
+
+    this.mitmProc = proc;
+    this.mitmPort = port;
+    this.mitmDumpFile = dumpFile;
+
+    proc.stdout?.on('data', (data) => {
+      this.logger.info(`[mitmproxy] ${data.toString().trimEnd()}`);
+    });
+    proc.stderr?.on('data', (data) => {
+      this.logger.warn(`[mitmproxy] ${data.toString().trimEnd()}`);
+    });
+    proc.on('exit', (code) => {
+      this.logger.warn(`mitmproxy exited with code ${code}`);
+      this.mitmProc = null;
+      this.mitmPort = null;
+    });
+
+    return { started: true, port, dumpFile };
+  }
+
+  async stopMitmproxy() {
+    if (!this.mitmProc || this.mitmProc.killed) {
+      this.mitmProc = null;
+      const lastPort = this.mitmPort;
+      const lastDump = this.mitmDumpFile;
+      this.mitmPort = null;
+      this.mitmDumpFile = undefined;
+      return { stopped: false, port: lastPort ?? undefined, dumpFile: lastDump };
+    }
+
+    this.logger.info('Stopping mitmproxy...');
+    const proc = this.mitmProc;
+    const port = this.mitmPort ?? undefined;
+    const dumpFile = this.mitmDumpFile;
+    try {
+      const killed = proc.kill();
+      if (!killed) {
+        process.kill(proc.pid, 'SIGTERM');
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to stop mitmproxy: ${(err as Error)?.message ?? err}`,
+      );
+    }
+    this.mitmProc = null;
+    this.mitmPort = null;
+    this.mitmDumpFile = undefined;
+    return { stopped: true, port, dumpFile };
+  }
+
+  getMitmproxyStatus() {
+    const running = !!this.mitmProc && !this.mitmProc.killed;
+    return {
+      running,
+      port: this.mitmPort ?? undefined,
+      dumpFile: this.mitmDumpFile,
+    };
+  }
+
+  async setDeviceHttpProxy(deviceId: string, host: string, port: number) {
+    const trimmedHost = (host || '').trim();
+    if (!trimmedHost) {
+      throw new Error('Proxy host is required');
+    }
+    if (!Number.isFinite(port) || port <= 0) {
+      throw new Error('Proxy port must be a positive number');
+    }
+    this.logger.info(
+      `Setting HTTP proxy for ${deviceId} to ${trimmedHost}:${port}`,
+    );
+    await this.run(
+      `adb -s ${deviceId} shell settings put global http_proxy ${trimmedHost}:${port}`,
+    );
+  }
+
+  async clearDeviceHttpProxy(deviceId: string) {
+    this.logger.info(`Clearing HTTP proxy for ${deviceId}`);
+    try {
+      await this.run(
+        `adb -s ${deviceId} shell settings put global http_proxy :0`,
+      );
+      return;
+    } catch {
+      await this.run(
+        `adb -s ${deviceId} shell settings put global http_proxy ''`,
+      );
+    }
+  }
+
+  async startFridaServer(options: { devicePath?: string } = {}) {
+    const devicePath = options.devicePath || process.env.FRIDA_SERVER_PATH || '/data/local/tmp/frida-server';
+    this.logger.info(`Starting frida-server on device path: ${devicePath}`);
+    // Best-effort: ensure adb root, ignore failures
+    try {
+      await this.run('adb root');
+    } catch {}
+    try {
+      // Run frida-server in background on device
+      const cmd = `adb shell sh -c "nohup ${devicePath} >/dev/null 2>&1 &"`;
+      await this.run(cmd);
+      return { started: true, devicePath };
+    } catch (err) {
+      const msg = (err as Error)?.message ?? String(err);
+      this.logger.warn(`Failed to start frida-server: ${msg}`);
+      throw new Error(`Failed to start frida-server at ${devicePath}: ${msg}`);
+    }
+  }
+
+  async startGettrFridaBypass() {
+    const scriptPath = path.resolve('./mitm/ssl-bypass-gettr.js');
+    if (!existsSync(scriptPath)) {
+      throw new NotFoundException(`Frida script not found at ${scriptPath}`);
+    }
+    this.logger.info(
+      `Starting Frida SSL bypass for com.gettr.gettr with script ${scriptPath}`,
+    );
+    // Attach to running GETTR process by name. Assumes app is already started.
+    // Run in background so Nest process does not block on Frida CLI.
+    const cmd = `frida -U -n GETTR -l "${scriptPath}" >/tmp/frida-gettr.log 2>&1 &`;
+    try {
+      await this.run(cmd);
+      return { started: true, scriptPath };
+    } catch (err) {
+      const msg = (err as Error)?.message ?? String(err);
+      this.logger.warn(`Failed to start Frida SSL bypass for GETTR: ${msg}`);
+      throw new Error(`Failed to start Frida SSL bypass: ${msg}`);
+    }
+  }
+
+  async getFridaStatus() {
+    let fridaServerRunning = false;
+    let fridaServerProcessLine: string | undefined;
+    let gettrProcessPresent = false;
+    let gettrProcessLine: string | undefined;
+
+    // Check frida-server on device via adb ps (be tolerant to different ps variants / names)
+    try {
+      const { stdout } = await this.run(
+        `adb shell sh -c "ps -A 2>/dev/null | grep -i frida || ps 2>/dev/null | grep -i frida || true"`,
+      );
+      const lines = stdout
+        .toString()
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (lines.length > 0) {
+        fridaServerRunning = true;
+        fridaServerProcessLine = lines[0];
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to inspect frida-server process: ${(err as Error)?.message ?? err}`,
+      );
+    }
+
+    // Check GETTR process visibility via frida-ps
+    try {
+      const { stdout } = await this.run(
+        `frida-ps -Uai | grep -i com.gettr.gettr || true`,
+      );
+      const lines = stdout
+        .toString()
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (lines.length > 0) {
+        gettrProcessPresent = true;
+        gettrProcessLine = lines[0];
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to inspect GETTR process via frida-ps: ${(err as Error)?.message ?? err}`,
+      );
+    }
+
+    return {
+      fridaServerRunning,
+      fridaServerProcessLine,
+      gettrProcessPresent,
+      gettrProcessLine,
+    };
+  }
+
+  async readFridaLog(options: { maxLines?: number } = {}) {
+    const logPath = process.env.FRIDA_LOG_PATH || '/tmp/frida-gettr.log';
+    const maxLines =
+      typeof options.maxLines === 'number' && Number.isFinite(options.maxLines)
+        ? Math.max(1, Math.min(1000, Math.floor(options.maxLines)))
+        : 200;
+
+    if (!existsSync(logPath)) {
+      throw new NotFoundException(`Frida log file not found at ${logPath}`);
+    }
+
+    try {
+      const raw = readFileSync(logPath, 'utf8');
+      const lines = raw.split(/\r?\n/);
+      const tail =
+        lines.length <= maxLines ? lines : lines.slice(lines.length - maxLines);
+      return {
+        path: logPath,
+        totalLines: lines.length,
+        maxLines,
+        lines: tail,
+      };
+    } catch (err) {
+      const msg = (err as Error)?.message ?? String(err);
+      this.logger.warn(`Failed to read Frida log at ${logPath}: ${msg}`);
+      throw new NotFoundException(
+        `Failed to read Frida log at ${logPath}: ${msg}`,
+      );
+    }
+  }
+
+  async readMitmFlows(options: { limit?: number; dumpFile?: string } = {}) {
+    const dumpFile = options.dumpFile || this.mitmDumpFile;
+    if (!dumpFile) {
+      throw new NotFoundException('No mitmproxy dump file available');
+    }
+    if (!existsSync(dumpFile)) {
+      throw new NotFoundException(`mitmproxy dump file not found at ${dumpFile}`);
+    }
+
+    const limit =
+      typeof options.limit === 'number' && Number.isFinite(options.limit)
+        ? Math.max(1, Math.min(500, Math.floor(options.limit)))
+        : 100;
+
+    this.logger.info(`Reading mitmproxy flows from ${dumpFile} (limit=${limit})`);
+
+    let stdout: string;
+    const bin = process.env.MITMDUMP_BIN || 'mitmdump';
+    const scriptPath = path.resolve('./mitm/flows_to_json.py');
+    const cmd = `${bin} -nr "${dumpFile}" -s "${scriptPath}"`;
+    try {
+      const res = await this.run(cmd);
+      stdout = res.stdout.toString();
+    } catch (err) {
+      const msg = (err as Error)?.message ?? String(err);
+      this.logger.warn(`Failed to run mitmdump for dump ${dumpFile}: ${msg}`);
+      throw new NotFoundException(
+        `Failed to read mitmproxy flows. Command "${cmd}" failed: ${msg}`,
+      );
+    }
+
+    const lines = stdout
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const flows: any[] = [];
+    for (const line of lines) {
+      if (flows.length >= limit) break;
+      try {
+        const obj = JSON.parse(line);
+        flows.push(obj);
+      } catch {
+        // ignore malformed lines
+      }
+    }
+
+    const summaries = flows.map((flow, idx) => {
+      const id = typeof flow?.id === 'string' ? (flow.id as string) : `flow-${idx}`;
+      const method = typeof flow?.method === 'string' ? String(flow.method).toUpperCase() : '';
+      const url = typeof flow?.url === 'string' ? (flow.url as string) : '';
+      const statusCode =
+        typeof flow?.statusCode === 'number'
+          ? (flow.statusCode as number)
+          : typeof (flow as any).status_code === 'number'
+          ? ((flow as any).status_code as number)
+          : undefined;
+      const contentType =
+        typeof flow?.contentType === 'string'
+          ? (flow.contentType as string)
+          : typeof (flow as any).content_type === 'string'
+          ? ((flow as any).content_type as string)
+          : undefined;
+      const startedAt =
+        typeof flow?.startedAt === 'string' ? (flow.startedAt as string) : undefined;
+      const durationMs =
+        typeof flow?.durationMs === 'number' ? (flow.durationMs as number) : undefined;
+
+      return {
+        id,
+        method,
+        url,
+        statusCode,
+        contentType,
+        startedAt,
+        durationMs,
+      };
+    });
+
+    return {
+      dumpFile,
+      total: flows.length,
+      flows: summaries,
+    };
+  }
+
   private async listAvds(): Promise<string[]> {
     try {
       const { stdout } = await this.run('emulator -list-avds');
@@ -342,6 +701,31 @@ export class AndroidService {
     }
     const command = `printf 'no\\n' | avdmanager create avd -n "${finalName}" -k "${template.systemImage}" --device "${template.deviceId}" --force`;
     await this.run(command);
+
+    // Ensure AVD config enables hardware keyboard input
+    try {
+      const avdHome = process.env.ANDROID_AVD_HOME || path.join(os.homedir(), '.android', 'avd');
+      const configPath = path.join(avdHome, `${finalName}.avd`, 'config.ini');
+      if (existsSync(configPath)) {
+        const raw = readFileSync(configPath, 'utf8');
+        const lines = raw.split(/\r?\n/);
+        let found = false;
+        const next = lines.map((line) => {
+          if (/^\s*hw\.keyboard\s*=/.test(line)) {
+            found = true;
+            return 'hw.keyboard=yes';
+          }
+          return line;
+        });
+        if (!found) next.push('hw.keyboard=yes');
+        writeFileSync(configPath, next.join('\n'));
+        this.logger.info(`Enabled hardware keyboard for AVD: ${finalName}`);
+      } else {
+        this.logger.warn(`AVD config.ini not found for ${finalName} at ${configPath}`);
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to update AVD config for ${finalName}: ${(e as Error)?.message ?? e}`);
+    }
     return { created: true, avd: finalName, templateId: template.id };
   }
 
@@ -387,6 +771,7 @@ export class AndroidService {
       throw new Error('No valid device serials provided');
     }
     const installed: string[] = [];
+    const gettrPackageCandidates = ['com.gettr.gettr', 'org.app.getter'];
     let packageName: string | null = null;
     if (options?.force) {
       try {
@@ -398,12 +783,29 @@ export class AndroidService {
     for (const serial of uniqueSerials) {
       try {
         this.logger.info(`Installing ${apkPath} on ${serial}`);
-        if (options?.force && packageName) {
-          try {
-            this.logger.info(`Force uninstalling ${packageName} on ${serial}`);
-            await this.run(`adb -s ${serial} uninstall ${packageName}`);
-          } catch (unErr) {
-            this.logger.warn(`Uninstall before install failed (non-fatal) on ${serial}: ${(unErr as Error)?.message ?? unErr}`);
+        if (options?.force) {
+          const candidates: string[] = [];
+          if (packageName && gettrPackageCandidates.includes(packageName)) {
+            // For GETTR app, try both known package names as uninstall options
+            candidates.push(...gettrPackageCandidates);
+          } else if (packageName) {
+            candidates.push(packageName);
+          } else {
+            // Best-effort fallback when package name cannot be derived
+            candidates.push(...gettrPackageCandidates);
+          }
+
+          for (const pkg of candidates) {
+            try {
+              this.logger.info(`Force uninstalling ${pkg} on ${serial}`);
+              await this.run(`adb -s ${serial} uninstall ${pkg}`);
+              // If uninstall succeeds for one candidate, do not try the rest
+              break;
+            } catch (unErr) {
+              this.logger.warn(
+                `Uninstall before install failed (non-fatal) for ${pkg} on ${serial}: ${(unErr as Error)?.message ?? unErr}`,
+              );
+            }
           }
         }
         await this.run(`adb -s ${serial} install -r "${apkPath}"`);

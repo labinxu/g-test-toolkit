@@ -14,6 +14,7 @@ import {
   ServerOff,
   FileScan,
   ListRestart,
+  MoreVertical,
 } from 'lucide-react'
 import { AppiumToggleButton } from '@/components/appium-toggle-button'
 import { SlidersHorizontal } from 'lucide-react'
@@ -49,6 +50,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { Check, Sparkles } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -57,8 +59,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useLibsPageCache } from '../../page-cache'
 import { normalizeResponseError } from '@/lib/error'
+import { OptionsSelect } from '@/components/select/options-select'
+import { useRouter } from 'next/navigation'
 
 export default function Page() {
+  const router = useRouter()
   const libsCache = useLibsPageCache()
   const [currentFile, setCurrentFile] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
@@ -117,6 +122,14 @@ export default function Page() {
   const [typesGlobal, setTypesGlobal] = useState<string[]>([])
   const [typesRelatives, setTypesRelatives] = useState<string[]>([])
   const [reloadTypings, setReloadTypings] = useState(false)
+  const [linkedPage, setLinkedPage] = useState<{
+    id: number
+    key: string
+    label: string
+    platform: string
+    className: string
+  } | null>(null)
+  const [linkingPage, setLinkingPage] = useState(false)
 
   const updateTypesStatus = useCallback(() => {
     try {
@@ -125,6 +138,59 @@ export default function Page() {
       setTypesRelatives(s?.relatives || [])
     } catch {}
   }, [])
+
+  // Resolve current libs file to ActionCatalog page (if any)
+  useEffect(() => {
+    if (!currentFile || !currentFile.startsWith('workspace/shared-libs/')) {
+      setLinkedPage(null)
+      return
+    }
+    let cancelled = false
+    const run = async () => {
+      try {
+        setLinkingPage(true)
+        const qs = new URLSearchParams({ path: currentFile })
+        const res = await fetch(`/api/action-catalog/resolve-lib-path?${qs.toString()}`, {
+          cache: 'no-store',
+        })
+        if (!res.ok) {
+          setLinkedPage(null)
+          return
+        }
+        const data = await res.json()
+        const page = (data && data.page) || null
+        if (cancelled) return
+        if (!page) {
+          setLinkedPage(null)
+        } else {
+          setLinkedPage({
+            id: page.id,
+            key: page.key,
+            label: page.label,
+            platform: page.platform,
+            className: page.className,
+          })
+        }
+      } catch {
+        if (!cancelled) setLinkedPage(null)
+      } finally {
+        if (!cancelled) setLinkingPage(false)
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [currentFile])
+  // Persist inspector expanded state and cache globally on change
+  useEffect(() => {
+    try {
+      localStorage.setItem('gtt:libs:inspector:open', showAndroidInspector ? '1' : '0')
+    } catch {}
+    try {
+      libsCache.save({ showAndroidInspector })
+    } catch {}
+  }, [showAndroidInspector])
   useEffect(() => {
     if (typesOpen) updateTypesStatus()
   }, [typesOpen, updateTypesStatus])
@@ -228,6 +294,11 @@ export default function Page() {
             } catch {}
           }
         }
+        // Restore inspector expanded state
+        try {
+          const v = localStorage.getItem('gtt:libs:inspector:open')
+          if (v != null) setShowAndroidInspector(v === '1' || v === 'true')
+        } catch {}
       } catch {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -350,6 +421,62 @@ export default function Page() {
     } catch {}
   }, [aiMaxCol])
 
+  // Gen (inspector -> libs) dialog state
+  const [genOpen, setGenOpen] = useState(false)
+  const [genClassName, setGenClassName] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    try {
+      return localStorage.getItem('gtt:libs:gen:className') || ''
+    } catch {}
+    return ''
+  })
+  const [genTemplate, setGenTemplate] = useState<'bdd'>('bdd')
+  const [genLoading, setGenLoading] = useState(false)
+
+  const handleGenConfirm = useCallback(async () => {
+    try {
+      setGenLoading(true)
+      const snap = inspectorRef.current?.exportState()?.data ?? null
+      if (!snap || !Array.isArray((snap as any).nodes) || !(snap as any).nodes.length) {
+        throw new Error('Inspector 尚无数据，请先抓取快照')
+      }
+      const clickableCount = ((snap as any).nodes || []).filter((n: any) => !!n?.clickable).length
+      if (clickableCount <= 0) {
+        toast.message('当前快照没有可点击节点')
+        setGenLoading(false)
+        return
+      }
+      const payload: any = {
+        snapshot: snap,
+        focusNodeId: inspectorRef.current?.exportState()?.selectedId ?? undefined,
+        template: genTemplate,
+        className: genClassName || undefined,
+      }
+      const res = await fetch('/api/ai/inspector-gen', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const err = await normalizeResponseError(res)
+        throw new Error(err.message || '生成失败')
+      }
+      const data = await res.json()
+      const code = (data?.code || '').toString()
+      if (!code.trim()) throw new Error('后端返回为空')
+      editorRef.current?.insertAtCursor(code, { ensureNewLine: true })
+      setGenOpen(false)
+      toast.success('已插入生成代码')
+      try {
+        localStorage.setItem('gtt:libs:gen:className', genClassName || '')
+      } catch {}
+    } catch (e: any) {
+      toast.error(e?.message || '生成失败')
+    } finally {
+      setGenLoading(false)
+    }
+  }, [genTemplate, genClassName])
+
   const handleGenerateAi = useCallback(async () => {
     try {
       setAiLoading(true)
@@ -403,6 +530,7 @@ export default function Page() {
   const [fileCache, setFileCache] = useState<Record<string, { content: string; original: string }>>(
     {}
   )
+  const [dirFilterText, setDirFilterText] = useState('')
 
   // Keep latest state in a ref and save on unmount
   const lastRef = useRef<any>(null)
@@ -572,16 +700,18 @@ export default function Page() {
     })
   }
   return (
-    <div className="flex w-full flex-1 gap-0 rounded-lg">
+    <div className="flex w-full flex-1 gap-0 rounded-lg p-2">
       <div className="flex h-full flex-col" style={{ minWidth: 0 }}>
         <DirectoryTreePanel>
           <NewFileOrFolder
             key={currentDir}
             parentDir={currentDir}
             onCreated={() => setRefreshKey((k) => k + 1)}
+            filterText={dirFilterText}
+            onFilterChange={setDirFilterText}
           />
           <DirectoryTree
-            api={'/api/testcase/listcore?depth=3'}
+            api={'/api/testcase/listcore?depth=4'}
             currentDir={currentDir}
             refreshKey={refreshKey}
             setRefreshKey={setRefreshKey}
@@ -591,10 +721,36 @@ export default function Page() {
             cacheEnabled={!dirCacheDisabled}
             cacheTtlMs={dirCacheTtlMs}
             collapsible={false}
+            filterText={dirFilterText}
           />
         </DirectoryTreePanel>
       </div>
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pl-1 transition-all duration-300">
+        {currentFile && linkedPage && (
+          <div className="mb-1 flex items-center justify-between rounded-md border bg-muted/40 px-2 py-1 text-[11px]">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate">
+                映射页面：[{linkedPage.platform}] {linkedPage.key}（ID: {linkedPage.id}，类名:{' '}
+                {linkedPage.className}）
+              </span>
+              <span className="text-muted-foreground truncate">
+                {linkedPage.label}
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              className="ml-2 h-6 px-2 text-[11px]"
+              onClick={() => {
+                // 跳转到 Action Catalog，并预先选择对应平台，页面可再在那边选中
+                router.push('/settings/action-catalog')
+              }}
+            >
+              在页面映射中查看
+            </Button>
+          </div>
+        )}
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-row items-stretch overflow-auto rounded-lg border">
             <div className="min-w-0 flex-1">
@@ -602,9 +758,95 @@ export default function Page() {
                 ref={editorRef}
                 filePath={currentFile}
                 wrapAtColumn={wrapColumn}
+                // 保持 libs 代码时也自动执行一次 Monaco 的格式化
+                formatOnSave={true}
                 cachedValue={currentFile ? fileCache[currentFile] : undefined}
                 extraActions={
-                  <>
+                  showAndroidInspector ? (
+                    <>
+                      {/* Inspector 展开时：保留 Build Libs，并用 Popover 收纳其他操作，竖直展开在按钮下方 */}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            onClick={buildLibs}
+                            aria-label="Build libs"
+                            disabled={building}
+                          >
+                            <PackagePlus className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>Build Libs</TooltipContent>
+                      </Tooltip>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            aria-label="More editor actions"
+                            type="button"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent side="bottom" align="end" className="w-60 space-y-2 p-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start gap-2"
+                            onClick={async () => {
+                              await editorRef.current?.reloadTypings?.({
+                                force: true,
+                              })
+                              updateTypesStatus()
+                            }}
+                          >
+                            <ListRestart className="h-4 w-4" />
+                            <span className="text-xs">Refresh Types</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start gap-2"
+                            type="button"
+                            onClick={() => {
+                              setTypesOpen(true)
+                            }}
+                          >
+                            <FileScan className="h-4 w-4" />
+                            <span className="text-xs">Show Types</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start gap-2"
+                            type="button"
+                            onClick={() => {
+                              setAiOpen(true)
+                              setAiPrompt('')
+                            }}
+                          >
+                            <Sparkles className="h-4 w-4" />
+                            <span className="text-xs">AI 生成脚本</span>
+                          </Button>
+                          <div className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs">
+                            {connected ? (
+                              <Server className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <ServerOff className="h-3.5 w-3.5 text-red-600" />
+                            )}
+                            <span className="truncate">
+                              {connected ? 'Server: connected' : 'Server: disconnected'}
+                            </span>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </>
+                  ) : (
+                    <>
                     {/* Build libs */}
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -629,7 +871,9 @@ export default function Page() {
                           size="icon"
                           className="h-8 w-8 rounded-full"
                           onClick={async () => {
-                            await editorRef.current?.reloadTypings?.({ force: true })
+                            await editorRef.current?.reloadTypings?.({
+                              force: true,
+                            })
                             updateTypesStatus()
                           }}
                           aria-label="Refresh types"
@@ -751,7 +995,7 @@ export default function Page() {
                                 {aiLoading ? '生成中…' : '生成'}
                               </Button>
                             </div>
-                            <div className="mt-2 flex flex-wrap items-center gap-4 rounded-md border p-2">
+                            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border p-2">
                               <div className="flex items-center gap-2">
                                 <Switch
                                   id="ai-rules-only"
@@ -844,7 +1088,8 @@ export default function Page() {
                         sideOffset={6}
                       >{`${connected ? 'connected' : 'disconnect'}`}</TooltipContent>
                     </Tooltip>
-                  </>
+                    </>
+                  )
                 }
                 onContentLoaded={({ content, original }, { filePath }) => {
                   if (!filePath) return
@@ -914,7 +1159,14 @@ export default function Page() {
                           const st = inspectorRef.current?.exportState()
                           if (st) setCachedInspectorState(st)
                         }
-                        setShowAndroidInspector((v) => !v)
+                        const next = !showAndroidInspector
+                        setShowAndroidInspector(next)
+                        try {
+                          localStorage.setItem('gtt:libs:inspector:open', next ? '1' : '0')
+                        } catch {}
+                        try {
+                          libsCache.save({ showAndroidInspector: next })
+                        } catch {}
                       }}
                       aria-expanded={showAndroidInspector}
                       tabIndex={-1}
@@ -1058,6 +1310,64 @@ export default function Page() {
                       queryKey={['appium-status', 'libs']}
                       pollIntervalMs={appiumAutoRefresh ? 5000 : false}
                     />
+
+                    {/* Gen from inspector */}
+                    <Tooltip>
+                      <Dialog open={genOpen} onOpenChange={setGenOpen}>
+                        <TooltipTrigger asChild>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-full"
+                              aria-label="Gen"
+                            >
+                              <span className="text-[10px] font-medium">Gen</span>
+                            </Button>
+                          </DialogTrigger>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>生成定位器类</TooltipContent>
+                        <DialogContent className="sm:max-w-[460px]">
+                          <DialogHeader>
+                            <DialogTitle>从 Inspector 生成</DialogTitle>
+                            <DialogDescription>
+                              输入文件名与模板，点击确定生成并插入当前文件。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="mt-2 flex flex-col gap-3">
+                            <div className="flex items-center gap-2">
+                              <label className="text-muted-foreground w-16 text-sm">类名</label>
+                              <Input
+                                value={genClassName}
+                                onChange={(e) => setGenClassName(e.target.value)}
+                                placeholder="如: MyLib"
+                                className="h-9 flex-1"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-muted-foreground w-16 text-sm">模板</label>
+                              <div className="flex-1">
+                                <OptionsSelect
+                                  id="gen-template"
+                                  value={genTemplate}
+                                  items={[{ label: 'BDD', value: 'bdd' }] as any}
+                                  onSelect={(it) => setGenTemplate(it.value as any)}
+                                  triggerClassName="h-9"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button onClick={handleGenConfirm} disabled={genLoading}>
+                              {genLoading ? '生成中...' : '确定'}
+                            </Button>
+                            <DialogClose asChild>
+                              <Button variant="outline">取消</Button>
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </Tooltip>
                     <Tooltip>
                       <Dialog>
                         <TooltipTrigger asChild>
@@ -1127,29 +1437,39 @@ export default function Page() {
                         if (meta?.isInput) {
                           const txt = insertText || 'your text'
                           snippet = [
-                            `const el = await this.page.$('${selector}')`,
-                            `await el.click()`,
-                            `await el.setValue('${esc(txt)}')`,
+                            `this.curEl = await this.page.$('${selector}')`,
+                            `await this.curEl.click()`,
+                            `await this.curEl.setValue('${esc(txt)}')`,
                           ].join('\n')
                         } else {
-                          snippet = `await this.page.$('${selector}').click()`
+                          snippet = [
+                            `this.curEl = await this.page.$('${selector}')`,
+                            `await this.curEl.click()`,
+                          ].join('\n')
                         }
                       } else if (insertMode === 'setValue') {
                         const txt = insertText || 'your text'
                         snippet = [
-                          `const el = await this.page.$('${selector}')`,
-                          `await el.click()`,
-                          `await el.setValue('${esc(txt)}')`,
+                          `this.curEl = await this.page.$('${selector}')`,
+                          `await this.curEl.click()`,
+                          `await this.curEl.setValue('${esc(txt)}')`,
                         ].join('\n')
                       } else if (insertMode === 'longPress') {
                         const ms = Math.max(200, Math.min(3000, longPressMs | 0))
-                        snippet = `await (await this.page.$('${selector}')).touchAction({ action: 'longPress', duration: ${ms} })`
+                        snippet = [
+                          `this.curEl = await this.page.$('${selector}')`,
+                          `await this.curEl.touchAction({ action: 'longPress', duration: ${ms} })`,
+                        ].join('\n')
                       } else {
                         snippet = `'${selector}'`
                       }
                       editorRef.current?.insertAtCursor(snippet, {
                         ensureNewLine: true,
                       })
+                      // 尝试在插入后立即格式化文档，改善缩进/对齐体验
+                      editorRef.current?.formatDocument?.()
+                      // 点击 Inspector 元素后，强制刷新一次快照，确保 libs 页面中的预览能及时反映手机上的页面变更。
+                      setRefreshKeyInspector((k) => k + 1)
                     }}
                   />
                 </div>

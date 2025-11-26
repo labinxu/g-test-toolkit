@@ -29,6 +29,8 @@ export type MonacoScriptEditorHandle = {
   setCursor: (pos: number) => void
   reloadTypings: (opts?: { force?: boolean }) => Promise<void>
   getTypingsStatus: () => { global: string[]; relatives: string[] }
+  /** Format the whole document in-place using Monaco's formatter. */
+  formatDocument: () => Promise<void>
 }
 
 type CachedFileEntry = { content: string; original: string }
@@ -49,10 +51,12 @@ interface Props {
   onContentSaved?: (payload: CachedFileEntry, context: { filePath: string }) => void
   extraActions?: ReactNode
   wrapAtColumn?: number
+  /** Enable format-on-save for Monaco (default: true) */
+  formatOnSave?: boolean
 }
 
 export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(function MonacoScriptEditor(
-  { filePath, cachedValue, onContentChange, onContentLoaded, onContentSaved, extraActions, wrapAtColumn },
+  { filePath, cachedValue, onContentChange, onContentLoaded, onContentSaved, extraActions, wrapAtColumn, formatOnSave = true },
   ref
 ) {
   const [loading, setLoading] = useState(false)
@@ -90,6 +94,8 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
       tabSize: 2,
       insertSpaces: true,
       renderWhitespace: 'none',
+      formatOnPaste: true,
+      formatOnType: true,
     } as any
   }, [loading, saving, wrapAtColumn])
 
@@ -305,26 +311,44 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
     setSaving(true)
     setError(null)
     try {
+      // Optional: format document before saving
+      let dataToSave = content
+      if (formatOnSave && editorRef.current) {
+        try {
+          const action = editorRef.current.getAction?.('editor.action.formatDocument')
+          if (action && action.run) {
+            await action.run()
+            // Read latest value from editor after formatting
+            const editorValue = editorRef.current.getValue?.()
+            if (typeof editorValue === 'string') {
+              dataToSave = editorValue
+              if (editorValue !== content) {
+                setContent(editorValue)
+              }
+            }
+          }
+        } catch {}
+      }
       const res = await fetch('/api/files', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: filePath, content }),
+        body: JSON.stringify({ path: filePath, content: dataToSave }),
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
         throw new Error(err.message || 'Save failed')
       }
-      originalRef.current = content
+      originalRef.current = dataToSave
       setChanged(false)
-      onContentSaved?.({ content, original: content }, { filePath })
-      onContentChange?.(content, { dirty: false, filePath })
-      globalFileContentCache.set(filePath, { content, original: content })
+      onContentSaved?.({ content: dataToSave, original: dataToSave }, { filePath })
+      onContentChange?.(dataToSave, { dirty: false, filePath })
+      globalFileContentCache.set(filePath, { content: dataToSave, original: dataToSave })
     } catch (e: any) {
       setError(e?.message || 'Save failed')
     } finally {
       setSaving(false)
     }
-  }, [filePath, content, changed, saving, onContentChange, onContentSaved])
+  }, [filePath, content, changed, saving, onContentChange, onContentSaved, formatOnSave])
 
   // Inject typings from backend
   const reloadTypings = useCallback(async (opts?: { force?: boolean }) => {
@@ -380,24 +404,14 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
         baseUrl: 'file:///',
         typeRoots: [],
       })
-      // Provide robust fallback shims so `import 'core-lib'` resolves even if paths fail
+      // Provide robust fallback shims so `import 'core-lib'` resolves even if paths fail.
+      // Other libs (e.g. gettr-web-lib, gettr-android-lib) are wired dynamically from
+      // the backend `/api/testcase/typings` response to avoid hardcoding.
       try {
         extraLibDisposablesRef.current.push(
           monaco.languages.typescript.typescriptDefaults.addExtraLib(
             "export * from 'file:///types/core-lib/dist/index.d.ts'",
             'file:///node_modules/core-lib/index.d.ts'
-          )
-        )
-        extraLibDisposablesRef.current.push(
-          monaco.languages.typescript.typescriptDefaults.addExtraLib(
-            "export * from 'file:///types/gettr-lib/dist/index.d.ts'",
-            'file:///node_modules/gettr-lib/index.d.ts'
-          )
-        )
-        extraLibDisposablesRef.current.push(
-          monaco.languages.typescript.typescriptDefaults.addExtraLib(
-            "export * from 'file:///types/gettr-android-lib/dist/index.d.ts'",
-            'file:///node_modules/gettr-android-lib/index.d.ts'
           )
         )
       } catch {}
@@ -437,30 +451,20 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
         }
         return null
       }
+      // Discover libraries dynamically from backend typings: /types/<lib>/...
+      const libNames = new Set<string>()
+      for (const f of files) {
+        const m = f.path.match(/^\/types\/([^/]+)\//)
+        if (m) libNames.add(m[1])
+      }
 
-      const coreEntry = pickEntryOrBundle('core-lib')
-      const gettrEntry = pickEntryOrBundle('gettr-lib')
-      const androidEntry = pickEntryOrBundle('gettr-android-lib')
+      const entries: Record<string, string | null> = {}
+      for (const lib of Array.from(libNames)) {
+        entries[lib] = pickEntryOrBundle(lib)
+      }
 
       const makeAmbient = (mod: string, target: string | null) =>
         target ? `declare module '${mod}' { export * from '${target}'; }` : `declare module '${mod}' { }`
-
-      const ambientCore = makeAmbient('core-lib', coreEntry)
-      const ambientGettr = makeAmbient('gettr-lib', gettrEntry)
-      const ambientAndroid = makeAmbient('gettr-android-lib', androidEntry)
-
-      extraLibDisposablesRef.current.push(
-        monaco.languages.typescript.typescriptDefaults.addExtraLib(ambientCore, 'file:///ambient/core-lib.d.ts')
-      )
-      pushGlobal('file:///ambient/core-lib.d.ts')
-      extraLibDisposablesRef.current.push(
-        monaco.languages.typescript.typescriptDefaults.addExtraLib(ambientGettr, 'file:///ambient/gettr-lib.d.ts')
-      )
-      pushGlobal('file:///ambient/gettr-lib.d.ts')
-      extraLibDisposablesRef.current.push(
-        monaco.languages.typescript.typescriptDefaults.addExtraLib(ambientAndroid, 'file:///ambient/gettr-android-lib.d.ts')
-      )
-      pushGlobal('file:///ambient/gettr-android-lib.d.ts')
 
       // Node resolution shims under virtual node_modules as additional safety net
       const addNodeShim = (lib: string, target: string | null) => {
@@ -471,9 +475,17 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
         )
         pushGlobal(uri)
       }
-      addNodeShim('core-lib', coreEntry)
-      addNodeShim('gettr-lib', gettrEntry)
-      addNodeShim('gettr-android-lib', androidEntry)
+
+      for (const lib of Array.from(libNames)) {
+        const entry = entries[lib] || null
+        const ambient = makeAmbient(lib, entry)
+        const ambientUri = `file:///ambient/${lib}.d.ts`
+        extraLibDisposablesRef.current.push(
+          monaco.languages.typescript.typescriptDefaults.addExtraLib(ambient, ambientUri)
+        )
+        pushGlobal(ambientUri)
+        addNodeShim(lib, entry)
+      }
     } catch {}
     finally {
       ;(reloadTypings as any)._busy = false
@@ -527,8 +539,34 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
         const global = Array.from(new Set((globalTypingUrisRef.current || []).map((u) => u.replace(/^file:\/\//, ''))))
         return { global, relatives }
       },
+      formatDocument: async () => {
+        const ed = editorRef.current
+        if (!ed) return
+        try {
+          const action = ed.getAction?.('editor.action.formatDocument')
+          if (action && action.run) {
+            await action.run()
+          }
+          const model = ed.getModel?.()
+          if (!model) return
+          const next = model.getValue()
+          if (typeof next !== 'string') return
+          setContent(next)
+          const dirty = next !== originalRef.current
+          setChanged(dirty)
+          onContentChange?.(next, { dirty, filePath })
+          if (filePath) {
+            globalFileContentCache.set(filePath, {
+              content: next,
+              original: originalRef.current,
+            })
+          }
+        } catch {
+          // ignore formatting errors
+        }
+      },
     }),
-    [filePath, reloadTypings]
+    [filePath, reloadTypings, onContentChange]
   )
 
   const handleMount = useCallback((editor: any, monaco: any) => {
@@ -556,14 +594,19 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && (event.key === 's' || event.key === 'S')) {
-        if (!filePath || saving || !changed) return
-        event.preventDefault()
-        save()
+      if (event.metaKey || event.ctrlKey) {
+        const k = event.key
+        if (k === 's' || k === 'S') {
+          if (!filePath || saving || !changed) return
+          try { event.preventDefault() } catch {}
+          try { (event as any).stopImmediatePropagation?.() } catch {}
+          save()
+        }
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    // Capture phase to preempt framework handlers and browser default
+    window.addEventListener('keydown', handler, { capture: true })
+    return () => window.removeEventListener('keydown', handler, { capture: true } as any)
   }, [filePath, changed, saving, save])
 
   if (!filePath) {

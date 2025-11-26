@@ -21,6 +21,7 @@ export function useBrowser() {
       const funcName = String(context.name)
       if (funcName.startsWith('browser')) {
       }
+      console.log(`useBrowser ${className}: ${funcName}`)
       const cloned = this.clone(`${className}.${String(context.name)}`)
       cloned.setPage(args[0])
       __multiTaskClasses[className] = target.apply(cloned, args)
@@ -130,7 +131,9 @@ export function withAndroid(options: WithAndroidOptions): ClassDecorator {
     const resolveApkPath = (apk?: string): string | undefined => {
       if (!apk) return undefined
       if (path.isAbsolute(apk)) return apk
-      const envDir = process.env.APP_DIR ? path.resolve(process.cwd(), process.env.APP_DIR) : undefined
+      const envDir = process.env.APP_DIR
+        ? path.resolve(process.cwd(), process.env.APP_DIR)
+        : undefined
       const candidates = [
         envDir,
         path.resolve(process.cwd(), 'apps/api/workspace/app'),
@@ -145,12 +148,7 @@ export function withAndroid(options: WithAndroidOptions): ClassDecorator {
         } catch {}
       }
       // Fallback to original join (may be incorrect but keeps prior behavior)
-      return path.join(
-        __dirname,
-        '../../../../',
-        process.env.APP_DIR || 'workspace/app',
-        apk
-      )
+      return path.join(__dirname, '../../../../', process.env.APP_DIR || 'workspace/app', apk)
     }
 
     // 安装模式 capabilities（提供 apk 时可用）
@@ -184,8 +182,8 @@ export function withAndroid(options: WithAndroidOptions): ClassDecorator {
     const autoInstallBehavior: 'install' | 'launch' | undefined = opts.apk
       ? 'install'
       : opts.appPackage
-      ? 'launch'
-      : undefined
+        ? 'launch'
+        : undefined
     ;(constructor as any).__androidInstallBehavior = autoInstallBehavior
     ;(constructor as any).__androidBringToFront = !!opts.bringToFront
     // Persist pre-uninstall options for install mode
@@ -193,7 +191,8 @@ export function withAndroid(options: WithAndroidOptions): ClassDecorator {
       ? opts.preUninstallPackages.filter((x) => typeof x === 'string' && x.trim().length > 0)
       : undefined
     ;(constructor as any).__androidPreUninstallOnInstall =
-      opts.preUninstallOnInstall ?? (Array.isArray(opts.preUninstallPackages) && opts.preUninstallPackages.length > 0)
+      opts.preUninstallOnInstall ??
+      (Array.isArray(opts.preUninstallPackages) && opts.preUninstallPackages.length > 0)
 
     // 为向后兼容保留 __androidOpts（默认按“安装模式”构造）
     ;(constructor as any).__androidOpts = {

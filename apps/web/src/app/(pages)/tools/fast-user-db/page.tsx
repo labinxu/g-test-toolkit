@@ -10,13 +10,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+// Select replaced with OptionsSelect for Environment
 import { useTheme } from 'next-themes'
 import { RedisControl } from '@/components/redis-control'
 import { OptionsSelect } from '@/components/select/options-select'
@@ -137,6 +131,11 @@ export default function FastUserDbToolPage() {
     []
   )
   const [qaEnv, setQaEnv] = useState<Env>(environments.qa1x)
+  const qaEnvKey = useMemo<EnvKey>(() => {
+    const keys = Object.keys(environments) as EnvKey[]
+    const found = keys.find((k) => environments[k] === qaEnv)
+    return found ?? 'qa1x'
+  }, [environments, qaEnv])
 
   useEffect(() => {
     let cancelled = false
@@ -313,7 +312,7 @@ export default function FastUserDbToolPage() {
   }, [script])
 
   return (
-    <div className="mx-auto flex w-full flex-1 flex-col gap-6 overflow-auto rounded-lg border-2 p-6 shadow-lg">
+    <div className="mx-auto flex w-full flex-1 flex-col gap-2 overflow-auto rounded-lg border-2 p-6 shadow-lg">
       <div className="space-y-2">
         <h1 className="text-xl font-semibold">FastUserInfo</h1>
         <p className="text-muted-foreground text-sm">
@@ -324,40 +323,31 @@ export default function FastUserDbToolPage() {
         )}
       </div>
       {/** redis control */}
-      <RedisControl defaultKey={'ntf:def_notif_whitelist'} defaultType={'Set'} />
+      <RedisControl
+        defaultKey={'ntf:def_notif_whitelist'}
+        defaultType={'Set'}
+        resultsCollapsible
+        initialResultsOpen={false}
+      />
       <div className="bg-muted/20 w-full rounded-lg border p-4">
-        <div className="grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+        <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="fast-user-db-environment" className="text-sm font-medium">
-              Environment
-            </Label>
-
-            <Select
-              defaultValue="qa1x"
-              onValueChange={(value) => {
+            <OptionsSelect
+              id="fast-user-db-environment"
+              items={(Object.keys(environments) as EnvKey[]).map((key) => ({
+                value: key,
+                label: environments[key].label,
+              }))}
+              value={qaEnvKey}
+              onSelect={({ value }) => {
                 const key = value as EnvKey
                 setQaEnv(environments[key])
               }}
-            >
-              <SelectTrigger
-                id="fast-user-db-environment"
-                className="h-10 w-full justify-between rounded-md border px-3 py-1.5 text-sm"
-              >
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent className="max-h-[160px] w-[160px] overflow-y-auto">
-                {(Object.keys(environments) as EnvKey[]).map((key) => (
-                  <SelectItem key={key} value={key}>
-                    {environments[key].label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              triggerClassName="w-full"
+              contentClassName="w-[160px]"
+            />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="fast-user-db-user-id" className="text-sm font-medium">
-              User ID
-            </Label>
             <div className="relative">
               <Input
                 id="fast-user-db-user-id"
@@ -378,15 +368,12 @@ export default function FastUserDbToolPage() {
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="fast-user-db-cdate" className="text-sm font-medium">
-              CDATE
-            </Label>
             <div className="relative">
               <Input
                 id="fast-user-db-cdate"
                 value={cdate}
                 onChange={(event) => setCdate(event.target.value)}
-                placeholder="Enter created time (numeric)"
+                placeholder="Enter created time (CDATE)"
                 className="h-10 pr-10 text-sm"
               />
               <Button
@@ -422,7 +409,7 @@ export default function FastUserDbToolPage() {
       </div>
       {error && <span className="text-destructive text-sm">{error}</span>}
 
-      <div className="flex w-full flex-col gap-3 overflow-hidden rounded-lg border p-4">
+      <div className="flex w-full flex-col gap-3 rounded-lg border p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-medium">JavaScript (collapsible & saveable)</p>
@@ -461,7 +448,7 @@ export default function FastUserDbToolPage() {
           </div>
         </div>
         {scriptOpen && (
-          <div className="w-full overflow-hidden rounded-md border">
+          <div className="w-full rounded-md border">
             <CodeMirror
               value={script}
               height="380px"
@@ -485,7 +472,7 @@ export default function FastUserDbToolPage() {
         )}
       </div>
 
-      <div className="grid h-full w-full gap-4 overflow-auto rounded-lg border p-4 sm:grid-cols-1 md:grid-cols-2">
+      <div className="grid h-full w-full gap-1 rounded-lg border sm:grid-cols-1 md:grid-cols-2">
         <div className="bg-muted/20 flex flex-col gap-2 rounded-md border p-3">
           <Label htmlFor="fast-user-db-fetch-response" className="text-sm font-medium">
             User Fetch Response
@@ -495,7 +482,7 @@ export default function FastUserDbToolPage() {
             readOnly
             value={fetchedUserRaw}
             placeholder="GET /api/s/uinf response will appear here"
-            className="h-[9.5rem] w-full overflow-auto font-mono text-sm"
+            className="h-[15rem] w-full overflow-auto font-mono text-sm"
           />
         </div>
         <div className="bg-muted/20 flex flex-col gap-2 rounded-md border p-3">
@@ -507,7 +494,7 @@ export default function FastUserDbToolPage() {
             readOnly
             value={output}
             placeholder="Hash result will appear here"
-            className="h-[9.5rem] w-full overflow-auto font-mono text-sm"
+            className="h-[15rem] w-full overflow-auto font-mono text-sm"
           />
         </div>
       </div>

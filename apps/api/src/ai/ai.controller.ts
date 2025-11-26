@@ -81,4 +81,61 @@ export class AiController {
       throw new NotFoundException(e?.message || 'Generation failed');
     }
   }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('generate-from-spec')
+  async generateFromSpec(@Req() req: any, @Body() body: any) {
+    const rawUserId = req?.user?.id;
+    if (rawUserId == null) throw new UnauthorizedException('No user');
+    // The spec is either the body itself or nested under body.spec
+    const spec = body?.spec ?? body;
+    const { code } = await this.ai.generateFromSpec(spec);
+    return { code, generator: 'mcp' };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('generate-inspector-libs')
+  async generateInspectorLibs(@Req() req: any, @Body() body: any) {
+    const rawUserId = req?.user?.id;
+    if (rawUserId == null) throw new UnauthorizedException('No user');
+    // Snapshot can be passed directly
+    const snapshot = body?.snapshot;
+    if (!snapshot || !Array.isArray(snapshot?.nodes)) {
+      throw new NotFoundException('snapshot required');
+    }
+    const focusNodeId = body?.focusNodeId || undefined;
+    const template = body?.template || undefined;
+    const className = body?.className || undefined;
+    const { code } = this.ai.generateInspectorLibs({ snapshot, focusNodeId, template, className });
+    return { code };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('normalize-user-scenarios')
+  async normalizeUserScenarios(@Req() req: any, @Body() body: any) {
+    const rawUserId = req?.user?.id;
+    if (rawUserId == null) throw new UnauthorizedException('No user');
+    const userId = Number(rawUserId);
+    if (!Number.isFinite(userId)) throw new UnauthorizedException('Invalid user');
+    const rawText: string = body?.rawText ?? '';
+    const project: string = body?.project || 'live-stream';
+    const docType: string | undefined = body?.docType || undefined;
+    const moduleIdHint: string | undefined = body?.moduleIdHint || undefined;
+    const moduleNameHint: string | undefined = body?.moduleNameHint || undefined;
+    const sourceDoc: string | undefined = body?.sourceDoc || undefined;
+    try {
+      const result = await this.ai.normalizeUserScenarios({
+        rawText,
+        project,
+        docType,
+        moduleIdHint,
+        moduleNameHint,
+        sourceDoc,
+        userId,
+      });
+      return result ?? { cases: [] };
+    } catch (e: any) {
+      throw new NotFoundException(e?.message || 'Failed to normalize user scenarios');
+    }
+  }
 }

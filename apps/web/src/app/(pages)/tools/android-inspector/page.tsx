@@ -64,7 +64,34 @@ type Snapshot = {
 
 function useSnapshot(deviceId?: string | null) {
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<Snapshot | null>(null)
+  const [data, setData] = useState<Snapshot | null>(() => {
+    try {
+      const warmEnabled = (() => {
+        try { const s = localStorage.getItem('gtt:inspector:cacheWarmEnabled'); return s == null ? true : (s === '1' || s === 'true') } catch { return true }
+      })()
+      if (!warmEnabled) return null
+      const g: any = globalThis as any
+      if (deviceId && g.__inspectorLast && typeof g.__inspectorLast.get === 'function') {
+        return g.__inspectorLast.get(deviceId) || null
+      }
+      if (deviceId) {
+        const raw = sessionStorage.getItem(`gtt:inspector:last:${deviceId}`)
+        if (raw) {
+          const obj = JSON.parse(raw)
+          const ttl = (() => {
+            try {
+              const v = localStorage.getItem('gtt:inspector:cacheTtlMs')
+              const n = v ? parseInt(v, 10) : 15000
+              return Math.max(1000, Math.min(60000, Number.isFinite(n) ? n : 15000))
+            } catch { return 15000 }
+          })()
+          if (!obj.cachedAt || Date.now() - obj.cachedAt <= ttl) return obj
+        }
+      }
+    } catch {}
+    return null
+  })
+  const [warmCached, setWarmCached] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inflightRef = useRef<Promise<Snapshot | null> | null>(null)
   const lastFetchAtRef = useRef<number>(0)
@@ -120,7 +147,7 @@ function useSnapshot(deviceId?: string | null) {
       } catch {}
       const qs = params.toString() ? `?${params.toString()}` : ''
       const req = fetch(`/api/inspector/snapshot${qs}`, { cache: 'no-store' })
-      inflightRef.current = req.then(async (res) => {
+      const p = req.then(async (res) => {
         if (res.status === 503) {
           const mockRes = await fetch('/api/mock/inspector/snapshot', { cache: 'no-store' })
           if (!mockRes.ok) throw new Error(`HTTP ${mockRes.status}`)
@@ -148,9 +175,28 @@ function useSnapshot(deviceId?: string | null) {
         }
         return (await res.json()) as Snapshot
       })
-      const json = await inflightRef.current
-      inflightRef.current = null
+      inflightRef.current = p
+      let json: Snapshot | null = null
+      try {
+        json = await p
+      } finally {
+        inflightRef.current = null
+      }
       setData(json)
+      setWarmCached(false)
+      // Save to warm caches (memory + sessionStorage)
+      try {
+        const warmEnabled = (() => {
+          try { const s = localStorage.getItem('gtt:inspector:cacheWarmEnabled'); return s == null ? true : (s === '1' || s === 'true') } catch { return true }
+        })()
+        const g: any = globalThis as any
+        const payload: any = { ...json, screenshotBase64: undefined, cachedAt: Date.now() }
+        if (warmEnabled && deviceId) {
+          if (!g.__inspectorLast) g.__inspectorLast = new Map<string, any>()
+          g.__inspectorLast.set(deviceId, payload)
+          try { sessionStorage.setItem(`gtt:inspector:last:${deviceId}`, JSON.stringify(payload)) } catch {}
+        }
+      } catch {}
       try {
         if (json && (json as any).fsTriggered) {
           const msg = (json as any).fsMessage || 'ADB 异常，已触发 UiAutomator2 force-stop'
@@ -169,11 +215,45 @@ function useSnapshot(deviceId?: string | null) {
   }
 
   useEffect(() => {
+    // Warm start from in-memory/session cache to avoid flicker
+    try {
+      const warmEnabled = (() => {
+        try { const s = localStorage.getItem('gtt:inspector:cacheWarmEnabled'); return s == null ? true : (s === '1' || s === 'true') } catch { return true }
+      })()
+      const g: any = globalThis as any
+      const ttl = (() => {
+        try {
+          const v = localStorage.getItem('gtt:inspector:cacheTtlMs')
+          const n = v ? parseInt(v, 10) : 15000
+          return Math.max(1000, Math.min(60000, Number.isFinite(n) ? n : 15000))
+        } catch { return 15000 }
+      })()
+      if (!data && deviceId && warmEnabled) {
+        const cached = g.__inspectorLast?.get?.(deviceId)
+        if (cached && (!cached.cachedAt || Date.now() - cached.cachedAt <= ttl)) {
+          setData(cached)
+          setWarmCached(true)
+        } else {
+          try {
+            const raw = sessionStorage.getItem(`gtt:inspector:last:${deviceId}`)
+            if (raw) {
+              const obj = JSON.parse(raw)
+              if (!obj.cachedAt || Date.now() - obj.cachedAt <= ttl) {
+                setData(obj)
+                setWarmCached(true)
+              }
+            }
+          } catch {}
+        }
+      } else {
+        setWarmCached(false)
+      }
+    } catch {}
     fetchSnapshot()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceId])
 
-  return { loading, data, error, refresh: fetchSnapshot }
+  return { loading, data, error, refresh: fetchSnapshot, warmCached }
 }
 
 function formatBounds(b: Bounds) {
@@ -200,12 +280,25 @@ function buildSuggestions(n: NodeInfo, center?: { x: number; y: number }): Sugge
     })
   }
   if (n.resourceId) {
-    suggestions.push({
-      label: 'id (JS)',
-      code: `await $('#${n.resourceId}').click()`,
-      using: 'id',
-      value: n.resourceId,
-    })
+    const rid = n.resourceId
+    const full = /[:/]/.test(rid)
+    if (full) {
+      const escRid = rid.replace(/\"/g, '\\"')
+      suggestions.push({
+        label: 'UiSelector resourceId (JS)',
+        code: `await $('android=new UiSelector().resourceId(\"${escRid}\")').click()`,
+        using: 'android uiautomator',
+        value: `new UiSelector().resourceId(\"${escRid}\")`,
+      })
+    } else {
+      const escRid = rid.replace(/\"/g, '\\"')
+      suggestions.push({
+        label: 'UiSelector resourceIdMatches (JS)',
+        code: `await $('android=new UiSelector().resourceIdMatches(\".*${escRid}\")').click()`,
+        using: 'android uiautomator',
+        value: `new UiSelector().resourceIdMatches(\".*${escRid}\")`,
+      })
+    }
   }
   if (n.text) {
     const esc = n.text.replace(/\"/g, '\\"')
@@ -249,10 +342,21 @@ function generateLocators(n: NodeInfo, center?: { x: number; y: number }) {
     })
   }
   if (n.resourceId) {
-    suggestions.push({
-      label: 'id (JS)',
-      code: `await $('#${n.resourceId}').click()`,
-    })
+    const rid = n.resourceId
+    const full = /[:/]/.test(rid)
+    if (full) {
+      const escRid = rid.replace(/\"/g, '\\"')
+      suggestions.push({
+        label: 'UiSelector resourceId (JS)',
+        code: `await $('android=new UiSelector().resourceId(\"${escRid}\")').click()`,
+      })
+    } else {
+      const escRid = rid.replace(/\"/g, '\\"')
+      suggestions.push({
+        label: 'UiSelector resourceIdMatches (JS)',
+        code: `await $('android=new UiSelector().resourceIdMatches(\".*${escRid}\")').click()`,
+      })
+    }
   }
   if (n.text) {
     const esc = n.text.replace(/"/g, '\\"')
@@ -401,7 +505,18 @@ export default function AndroidInspectorPage() {
   const effectiveDeviceId = selectedDeviceId || paramDeviceId || undefined
   const paramsRef = useRef<ParametersFormHandle | null>(null)
   // Persisting moved to settings page
-  const { data, loading, error, refresh } = useSnapshot(effectiveDeviceId)
+  const { data, loading, error, refresh, warmCached } = useSnapshot(effectiveDeviceId)
+  const [hideWarmTip, setHideWarmTip] = useState<boolean>(() => {
+    try { return (sessionStorage.getItem('gtt:inspector:warmTipDismissed:tools') || '') === '1' } catch { return false }
+  })
+  useEffect(() => {
+    if (warmCached) {
+      try {
+        const dism = (sessionStorage.getItem('gtt:inspector:warmTipDismissed:tools') || '')
+        setHideWarmTip(dism === '1')
+      } catch { setHideWarmTip(false) }
+    }
+  }, [warmCached])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [autoCenterOnClick, setAutoCenterOnClick] = useState(false)
@@ -650,6 +765,7 @@ export default function AndroidInspectorPage() {
 
   const [tapping, setTapping] = useState(false)
   const [startingAppium, setStartingAppium] = useState(false)
+  const preferRef = useRef<boolean | null>(null)
   const [autoRefresh, setAutoRefresh] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     try {
@@ -701,6 +817,31 @@ export default function AndroidInspectorPage() {
       setStartingAppium(false)
     }
   }
+
+  // Force refresh when "preferAppium" changes in Parameters
+  useEffect(() => {
+    const readPrefer = (): boolean => {
+      try {
+        const s = localStorage.getItem('gtt:inspector:preferAppiumSource')
+        return s === '1' || s === 'true'
+      } catch {}
+      return false
+    }
+    preferRef.current = readPrefer()
+    const onPrefChange = () => {
+      const cur = readPrefer()
+      if (preferRef.current !== cur) {
+        preferRef.current = cur
+        void refresh()
+      }
+    }
+    window.addEventListener('storage', onPrefChange)
+    window.addEventListener('gtt-parameters-updated', onPrefChange as any)
+    return () => {
+      window.removeEventListener('storage', onPrefChange)
+      window.removeEventListener('gtt-parameters-updated', onPrefChange as any)
+    }
+  }, [refresh])
 
   // Auto refresh polling
   useEffect(() => {
@@ -973,8 +1114,8 @@ export default function AndroidInspectorPage() {
   }, [snapshotOptions, runningEmu?.serial, usbDeviceSerials, selectedDeviceId])
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-4">
-      <div className="flex gap-4">
+    <div className="flex w-full flex-1 flex-col gap-2">
+      <div className="flex gap-2">
         <div className="flex gap-2">
           <div className="ml-4 flex items-center gap-2">
             <Select value={selectedAvd} onValueChange={(v) => setSelectedAvd(v)}>
@@ -1188,7 +1329,30 @@ export default function AndroidInspectorPage() {
 
       {/* Error messages are shown via toasts */}
 
-      <div className="flex gap-2 overflow-auto">
+      <div className="relative flex gap-2 overflow-auto">
+        {warmCached && !hideWarmTip && (
+          <div className="text-muted-foreground absolute right-4 bottom-4 z-10 flex items-center gap-2 rounded bg-yellow-100/90 px-2 py-1 text-[11px] text-yellow-800 shadow">
+            <span>
+              显示缓存快照
+              {(data as any)?.cachedAt
+                ? `（缓存于 ${(() => {
+                    const ts = (data as any)?.cachedAt as number
+                    const s = Math.max(0, Math.floor((Date.now() - ts) / 1000))
+                    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60 ? s % 60 + 's' : ''}`
+                  })()} 前）`
+                : ''}
+              ，已自动刷新中
+            </span>
+            <button
+              type="button"
+              aria-label="dismiss"
+              className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-yellow-300/60 text-yellow-800 hover:bg-yellow-200/60"
+              onClick={() => { try { sessionStorage.setItem('gtt:inspector:warmTipDismissed:tools', '1') } catch {}; setHideWarmTip(true) }}
+            >
+              ×
+            </button>
+          </div>
+        )}
         {/* Canvas side with zoom/pan */}
         <AndroidInspector
           zoom={zoom}

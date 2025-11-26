@@ -4,8 +4,9 @@
     beforeAll,
     afterAll,
     useTestCase,
-  } from 'core-lib'
-import { HomePage,LaunchPage,LoginPage ,LiveStreamPage} from 'gettr-android-lib';
+} from 'core-lib'
+import { release_1_73_0 as rel1730}  from 'gettr-android-lib';
+import { HomePage,LaunchPage,LoginPage ,LiveStreamPage,} from 'gettr-android-lib';
   describe('Android login flow', () => {
     const tc = useTestCase({
       module: 'android-login',
@@ -28,10 +29,11 @@ import { HomePage,LaunchPage,LoginPage ,LiveStreamPage} from 'gettr-android-lib'
      
 
     it('Verify login', async () => {
-      const lp = new LaunchPage(tc);
-      const lgp = await lp.loginPage();
-      const hp = await lgp.loginWithUsername('qa_lb','a111111');
-      await hp.remindMeLater()
+      const lp = new rel1730.LoginUsernamePage(tc);
+
+      // const lgp = await lp.loginPage();
+      // const hp = await lgp.loginWithUsername('qa_lb','a111111');
+      // await hp.remindMeLater()
 
     })
     it('Verify post', async () => {

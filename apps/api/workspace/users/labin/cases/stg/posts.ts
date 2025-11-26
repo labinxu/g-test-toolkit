@@ -1,6 +1,7 @@
 import { TestCase, Test, withBrowser, useBrowser } from 'core-lib';
 
-import {HomePage} from 'gettr-lib';
+import { HomePage } from 'gettr-web-lib';
+
 @Test({ module: 'post' })
 @withBrowser({ headless: false, debug: true,domain:"https://stg.gettr.com" })
 export class TestDemo extends TestCase {

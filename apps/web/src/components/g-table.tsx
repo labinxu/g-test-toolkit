@@ -1,5 +1,7 @@
-'use client';
-import { useEffect, useState } from 'react';
+'use client'
+
+import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Table,
   TableBody,
@@ -9,45 +11,67 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
+
+export type GTableRow = ReactNode[]
+
+type GTableProps = {
+  caption?: string
+  headers: ReactNode[]
+  rows: GTableRow[]
+  onSelectedRow?: (rowIndex: number) => void
+  onRowDoubleClick?: (rowIndex: number) => void
+  highlightRowIndex?: number | null
+}
 
 export function GTable({
   caption,
   headers,
-  dataRow,
+  rows,
   onSelectedRow,
-}: {
-  caption?: string;
-  headers: string[];
-  dataRow: string[][];
-  onSelectedRow:(row:string[])=>void;
-}) {
-  const [selectedRow, setSelectedRow] = useState<number | null>(null);
+  highlightRowIndex,
+  onRowDoubleClick,
+}: GTableProps) {
+  const [selectedRow, setSelectedRow] = useState<number | null>(null)
 
   useEffect(() => {
-    if(selectedRow===null)return
-    onSelectedRow&&onSelectedRow(dataRow[selectedRow]);
-  }, [selectedRow]);
+    if (selectedRow === null) return
+    if (!onSelectedRow) return
+    if (selectedRow < 0 || selectedRow >= rows.length) return
+    onSelectedRow(selectedRow)
+  }, [selectedRow, rows, onSelectedRow])
 
   return (
     <Table>
-      {caption?<TableCaption>{caption}</TableCaption>:null}
+      {caption ? <TableCaption>{caption}</TableCaption> : null}
       <TableHeader>
         <TableRow>
-          {headers.map((v: string, index: number) => (
+          {headers.map((v, index) => (
             <TableHead key={`head-${index}`}>{v}</TableHead>
           ))}
         </TableRow>
       </TableHeader>
       <TableBody>
-        {dataRow.map((row: string[], rowIndex: number) => (
+        {rows.map((row, rowIndex) => (
           <TableRow
             key={`row-${rowIndex}`}
-            className={selectedRow === rowIndex ? 'bg-blue-100' : ''}
-            onClick={() =>{ setSelectedRow(rowIndex);}}
-            style={{ cursor: 'pointer' }}
+            className={cn(
+              'cursor-pointer transition-colors',
+              selectedRow === rowIndex && 'bg-primary/5 dark:bg-primary/15',
+              highlightRowIndex === rowIndex &&
+                'bg-primary/10 dark:bg-primary/25 text-emerald-700 dark:text-emerald-400'
+            )}
+            onClick={() => {
+              setSelectedRow(rowIndex)
+            }}
+            onDoubleClick={() => {
+              if (onRowDoubleClick) {
+                onRowDoubleClick(rowIndex)
+              }
+            }}
           >
-            {row.map((item: string, i: number) => (
+            {row.map((item, i) => (
               <TableCell key={`item-${rowIndex}-${i}`}>{item}</TableCell>
             ))}
           </TableRow>
@@ -55,11 +79,10 @@ export function GTable({
       </TableBody>
       <TableFooter>
         <TableRow>
-          <TableCell colSpan={1}>Total</TableCell>
-          <TableCell className="text-right">{dataRow.length}</TableCell>
-
+          <TableCell colSpan={Math.max(1, headers.length - 1)}>Total</TableCell>
+          <TableCell className="text-right">{rows.length}</TableCell>
         </TableRow>
       </TableFooter>
     </Table>
-  );
+  )
 }

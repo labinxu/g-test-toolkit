@@ -301,6 +301,91 @@ export class FilesService {
     }
   }
 
+  // -------- Videos workspace helpers (workspace/videos) --------
+
+  private getVideosRootDir() {
+    return path.resolve(process.cwd(), 'workspace', 'videos')
+  }
+
+  private sanitizeVideoRelativePath(inputPath: string) {
+    if (!inputPath) {
+      throw new Error('File path is required')
+    }
+    let sanitized = inputPath.trim()
+    sanitized = sanitized.replace(/\\/g, '/')
+    if (sanitized.startsWith('workspace/videos/')) {
+      sanitized = sanitized.slice('workspace/videos/'.length)
+    }
+    if (sanitized.startsWith('./')) {
+      sanitized = sanitized.slice(2)
+    }
+    if (sanitized.startsWith('/')) {
+      sanitized = sanitized.slice(1)
+    }
+    if (!sanitized) {
+      throw new Error('File path is required')
+    }
+    return checkPath(sanitized)
+  }
+
+  private sanitizeVideoFilename(filename: string) {
+    if (!filename) {
+      throw new Error('Filename is required')
+    }
+    const baseName = path.basename(filename)
+    let normalized = baseName.replace(/[^a-zA-Z0-9_.-]/g, '_')
+    normalized = normalized.replace(/^[.-]+/, '')
+    if (!normalized) {
+      throw new Error('Filename is not valid after sanitization')
+    }
+    return checkPath(normalized)
+  }
+
+  private resolveVideoPath(relativePath: string) {
+    const videoRoot = this.getVideosRootDir()
+    const safeRelativePath = this.sanitizeVideoRelativePath(relativePath)
+    return path.resolve(videoRoot, safeRelativePath)
+  }
+
+  async deleteVideoEntry(relativePath: string) {
+    const videoRoot = this.getVideosRootDir()
+    const targetPath = this.resolveVideoPath(relativePath)
+    if (!targetPath.startsWith(videoRoot)) {
+      throw new Error('Resolved path is outside of the videos workspace')
+    }
+    try {
+      const stat = await fs.lstat(targetPath)
+      if (stat.isDirectory()) {
+        await fs.rm(targetPath, { recursive: true, force: true })
+      } else {
+        await fs.unlink(targetPath)
+      }
+      return {
+        path: path.relative(process.cwd(), targetPath),
+      }
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    }
+  }
+
+  async saveVideoFile(buffer: Buffer | undefined, originalName: string) {
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Uploaded file buffer is empty')
+    }
+    const videoRoot = this.getVideosRootDir()
+    await fs.mkdir(videoRoot, { recursive: true })
+    const fileName = this.sanitizeVideoFilename(originalName)
+    const targetPath = path.resolve(videoRoot, fileName)
+    if (!targetPath.startsWith(videoRoot)) {
+      throw new Error('Resolved path is outside of the videos workspace')
+    }
+    await fs.writeFile(targetPath, buffer)
+    return {
+      filename: fileName,
+      path: path.relative(process.cwd(), targetPath),
+    }
+  }
+
   async getTestcaseCommon(filepath: string) {
     return readFileSync(filepath, 'utf-8')
   }

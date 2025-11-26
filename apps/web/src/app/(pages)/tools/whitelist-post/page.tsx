@@ -83,7 +83,7 @@ export default function WhitelistPostPage() {
   const codeMirrorExtensions = useMemo(() => [javascript({ jsx: true, typescript: true })], [])
 
   return (
-    <div className="mx-auto flex w-full flex-1 flex-col gap-6 overflow-y-auto rounded-lg border-2 p-6 shadow-lg">
+    <div className="mx-auto flex w-full flex-1 flex-col gap-2 overflow-y-auto rounded-lg border-2 p-6 shadow-lg">
       <div className="space-y-2">
         <h1 className="text-xl font-semibold">Whitelist post</h1>
         <p className="text-muted-foreground text-sm">

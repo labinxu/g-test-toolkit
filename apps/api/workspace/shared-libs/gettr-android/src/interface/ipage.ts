@@ -1,6 +1,7 @@
 import {TestCase} from '../../../core/src/test-case-base'
 export class IPage {
   protected testcase: any
+  protected curEl: any
   constructor(testInstance: any) {
     this.testcase = testInstance
   }

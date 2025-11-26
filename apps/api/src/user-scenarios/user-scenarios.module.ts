@@ -1,0 +1,38 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UserScenario } from './entities/user-scenario.entity';
+import { UserScenarioStep } from './entities/user-scenario-step.entity';
+import { ActionPage } from './entities/action-page.entity';
+import { ActionPageAction } from './entities/action-page-action.entity';
+import { ActionParam } from './entities/action-param.entity';
+import { ActionPlatform } from './entities/action-platform.entity';
+import { UserScenarioOption } from './entities/user-scenario-option.entity';
+import { UserScenariosService } from './user-scenarios.service';
+import { UserScenariosController } from './user-scenarios.controller';
+import { AiModule } from '../ai/ai.module';
+import { ActionCatalogService } from './action-catalog.service';
+import { ActionCatalogAdminController } from './action-catalog-admin.controller';
+import { User } from '../auth/entities/user.entity';
+import { EnvTemplate } from './entities/env-template.entity';
+import { EnvTemplatesController } from './env-templates.controller';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([
+      UserScenario,
+      UserScenarioStep,
+      ActionPage,
+      ActionPageAction,
+      ActionParam,
+      ActionPlatform,
+      UserScenarioOption,
+      User,
+      EnvTemplate,
+    ]),
+    AiModule,
+  ],
+  providers: [UserScenariosService, ActionCatalogService],
+  controllers: [UserScenariosController, ActionCatalogAdminController, EnvTemplatesController],
+  exports: [UserScenariosService, ActionCatalogService],
+})
+export class UserScenariosModule {}

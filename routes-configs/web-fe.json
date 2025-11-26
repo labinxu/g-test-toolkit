@@ -1,0 +1,595 @@
+{
+  "id": "web-fe",
+  "name": "web-fe",
+  "routes": [
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/activation",
+      "component": "GettrPayActivationRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/qr-details",
+      "component": "QrDetailsRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/GTR",
+      "component": "WalletRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/select-user",
+      "component": "SelectUserRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/transactions/:transactionId",
+      "component": "TransactionDetailRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/pending-requests",
+      "component": "PendingTransactionRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/redeem",
+      "component": "RedeemRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/send",
+      "component": "PaymentRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/receive",
+      "component": "PaymentRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/logout",
+      "component": "WalletLogout"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/redeem/history",
+      "component": "RedeemHistoryRoute"
+    },
+    {
+      "source": "array:gettrPayRoutes",
+      "path": "/wallet/redeem/redemption",
+      "component": "RedemptionRoute"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/payment/success",
+      "component": "NewDashboard"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/payment/cancel",
+      "component": "NewDashboard"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/hasht/:id",
+      "component": "NewHashtag"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/network-request-failed",
+      "component": "NetworkFailed"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/i/:id",
+      "component": "Invites"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/i",
+      "component": "Invites"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/gtok404",
+      "component": "GTokUnavailableRoute"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/embed-post/:id",
+      "component": "EmbedPostDialog"
+    },
+    {
+      "source": "array:regularRoutes",
+      "path": "/more",
+      "component": "MoreIndex"
+    },
+    {
+      "source": "array:routesWithNewLayout",
+      "path": "/post/:id",
+      "component": "NewPost"
+    },
+    {
+      "source": "array:routesWithNewLayout",
+      "path": "/comment/:id",
+      "component": "NewComment"
+    },
+    {
+      "source": "array:routesWithNewLayout",
+      "path": "/history/:type/:id",
+      "component": "PostHistory"
+    },
+    {
+      "source": "array:notificationRoutes",
+      "path": "/notifications/mentions",
+      "component": "Notifications"
+    },
+    {
+      "source": "array:notificationRoutes",
+      "path": "/notifications/livestream",
+      "component": "Notifications"
+    },
+    {
+      "source": "array:notificationRoutes",
+      "path": "/notifications/polls",
+      "component": "Notifications"
+    },
+    {
+      "source": "array:notificationRoutes",
+      "path": "/notifications/posts",
+      "component": "Notifications"
+    },
+    {
+      "source": "array:notificationRoutes",
+      "path": "/notifications",
+      "component": "Notifications"
+    },
+    {
+      "source": "array:notificationRoutes",
+      "path": "/notifications/verified",
+      "component": "Notifications"
+    },
+    {
+      "source": "array:bookmarksRoutes",
+      "path": "/bookmarks",
+      "component": "Bookmarks"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "(index)",
+      "component": "UserInfoPage"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "comments",
+      "component": "UserInfoPage"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "live",
+      "component": "UserInfoPage"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "gtok",
+      "component": "UserInfoPage"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "medias",
+      "component": "UserInfoPage"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "likes",
+      "component": "UserInfoPage"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "following",
+      "component": "UserFollowsPage"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "followers",
+      "component": "UserFollowsPage"
+    },
+    {
+      "source": "array:userRoutes",
+      "path": "recommend",
+      "component": "UserFollowsPage"
+    },
+    {
+      "source": "array:authRoutes",
+      "path": "/login",
+      "component": "NewLogin"
+    },
+    {
+      "source": "array:authRoutes",
+      "path": "/signup",
+      "component": "NewSignup"
+    },
+    {
+      "source": "array:authRoutes",
+      "path": "/open-app",
+      "component": "OpenInApp"
+    },
+    {
+      "source": "array:authRoutes",
+      "path": "/redirect-app",
+      "component": "RedirectApp"
+    },
+    {
+      "source": "array:authRoutes",
+      "path": "/social/google/callback",
+      "component": "SocialCallback"
+    },
+    {
+      "source": "array:authRoutes",
+      "path": "/social/apple/callback",
+      "component": "SocialCallback"
+    },
+    {
+      "source": "array:authRoutes",
+      "path": "/social/facebook/callback",
+      "component": "SocialCallback"
+    },
+    {
+      "source": "array:authRoutes",
+      "path": "/oauth2/idpresponse",
+      "component": "SocialCallback"
+    },
+    {
+      "source": "array:protectedRoutes",
+      "path": "/messages",
+      "component": "RouteChat"
+    },
+    {
+      "source": "array:protectedRoutes",
+      "path": "/messages/:id",
+      "component": "RouteChat"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/terms",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/coin-terms",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/tipping-terms",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/premium-terms",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/live-policy",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/monthly-giveaway-rules",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/privacy",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/legal",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/disclaimer",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:miscRoutes",
+      "path": "/community-guidelines",
+      "component": "NewHelpCenter"
+    },
+    {
+      "source": "array:emptyAppRoutes",
+      "path": "/coin-terms-app",
+      "component": "CoinTerms"
+    },
+    {
+      "source": "array:emptyAppRoutes",
+      "path": "/terms-app",
+      "component": "Terms"
+    },
+    {
+      "source": "array:emptyAppRoutes",
+      "path": "/premium-terms-app",
+      "component": "PremiumTerms"
+    },
+    {
+      "source": "array:emptyAppRoutes",
+      "path": "/privacy-app",
+      "component": "Privacy"
+    },
+    {
+      "source": "array:emptyAppRoutes",
+      "path": "/pep-popup-app",
+      "component": "PepApp"
+    },
+    {
+      "source": "array:emptyAppRoutes",
+      "path": "/live-policy-app",
+      "component": "LivePolicy"
+    },
+    {
+      "source": "array:noNavBarRoutes",
+      "path": "/landing",
+      "component": "NewLanding"
+    },
+    {
+      "source": "array:noNavBarRoutes",
+      "path": "/onboarding",
+      "component": null
+    },
+    {
+      "source": "array:noNavBarRoutes",
+      "path": "/logout",
+      "component": "NewLogout"
+    },
+    {
+      "source": "array:skipRoutes",
+      "path": "/vision/:id",
+      "component": null
+    },
+    {
+      "source": "array:skipRoutes",
+      "path": "/vision",
+      "component": "GTokRedirect"
+    },
+    {
+      "source": "array:skipRoutes",
+      "path": "/live/:slug",
+      "component": "LiveMaestro"
+    },
+    {
+      "source": "array:skipRoutes",
+      "path": "/live/:slug/:channel",
+      "component": "LiveMaestro"
+    },
+    {
+      "source": "jsx",
+      "path": "/",
+      "component": "NewDashboard"
+    },
+    {
+      "source": "jsx",
+      "path": "/explore",
+      "component": "Navigate"
+    },
+    {
+      "source": "jsx",
+      "path": "/following",
+      "component": "NewDashboard"
+    },
+    {
+      "source": "jsx",
+      "path": "/chill",
+      "component": "NewDashboard"
+    },
+    {
+      "source": "jsx",
+      "path": "/trending",
+      "component": "AnonDashboardRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "/trendingchill",
+      "component": "AnonDashboardRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "/share",
+      "component": "Share"
+    },
+    {
+      "source": "jsx",
+      "path": "/user/:id",
+      "component": "HomeLayout"
+    },
+    {
+      "source": "jsx",
+      "path": "/search",
+      "component": null
+    },
+    {
+      "source": "jsx",
+      "path": "host",
+      "component": "LiveListSearchHostRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "now",
+      "component": "LiveListSearchNowRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "/search/profile",
+      "component": "SearchProfileResults"
+    },
+    {
+      "source": "jsx",
+      "path": "/reset-password",
+      "component": "ResetPassword"
+    },
+    {
+      "source": "jsx",
+      "path": "/step_interest",
+      "component": "Interest"
+    },
+    {
+      "source": "jsx",
+      "path": "/usr/magicemail",
+      "component": "UserRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "/gtok/:id",
+      "component": "GTok"
+    },
+    {
+      "source": "jsx",
+      "path": "/gtok",
+      "component": "GTokFeedRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "/settings/:tab",
+      "component": "NewSettings"
+    },
+    {
+      "source": "jsx",
+      "path": "/analytics",
+      "component": "HomeLayout"
+    },
+    {
+      "source": "jsx",
+      "path": "/hashtag/:id",
+      "component": "TopicsRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "/hashtag",
+      "component": "TopicsRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "/lives",
+      "component": "Navigate"
+    },
+    {
+      "source": "jsx",
+      "path": "/livelist",
+      "component": "Navigate"
+    },
+    {
+      "source": "jsx",
+      "path": "/livenow",
+      "component": null
+    },
+    {
+      "source": "jsx",
+      "path": "popular",
+      "component": "LiveListHomeRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "search",
+      "component": null
+    },
+    {
+      "source": "jsx",
+      "path": "user/:userId",
+      "component": "LiveListUserRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "following",
+      "component": "LiveListFollowingRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "history",
+      "component": "LiveListHistoryRoute"
+    },
+    {
+      "source": "jsx",
+      "path": "/streaming/:postId",
+      "component": "Streaming"
+    },
+    {
+      "source": "jsx",
+      "path": "/streamHostSide",
+      "component": "MainLayout"
+    },
+    {
+      "source": "jsx",
+      "path": "camera",
+      "component": "Camera"
+    },
+    {
+      "source": "jsx",
+      "path": "rtmp4k",
+      "component": "Rtmp4k"
+    },
+    {
+      "source": "jsx",
+      "path": "/invite-friends",
+      "component": "InviteFriends"
+    },
+    {
+      "source": "jsx",
+      "path": "/finance",
+      "component": "HomeLayout"
+    },
+    {
+      "source": "jsx",
+      "path": "watchlist",
+      "component": "WatchlistPage"
+    },
+    {
+      "source": "jsx",
+      "path": "watchlist/edit",
+      "component": "WatchlistPage"
+    },
+    {
+      "source": "jsx",
+      "path": "watchlist/add",
+      "component": "WatchlistPage"
+    },
+    {
+      "source": "jsx",
+      "path": "trends",
+      "component": "TrendsPage"
+    },
+    {
+      "source": "jsx",
+      "path": "news",
+      "component": "NewsPage"
+    },
+    {
+      "source": "jsx",
+      "path": "news/:newsId",
+      "component": "NewsDetailPage"
+    },
+    {
+      "source": "jsx",
+      "path": "coin/:coinId",
+      "component": "CoinDetailPage"
+    },
+    {
+      "source": "jsx",
+      "path": "heatmap",
+      "component": "HeatmapPage"
+    },
+    {
+      "source": "jsx",
+      "path": "*",
+      "component": "HomeLayout"
+    }
+  ],
+  "meta": {
+    "createdAt": "2025-11-27T05:49:41.918Z",
+    "updatedAt": "2025-11-27T05:59:57.405Z"
+  }
+}

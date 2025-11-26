@@ -8,6 +8,9 @@ import {
   UtensilsCrossedIcon,
   Users,
   FileCog,
+  FileText,
+  BrickWall,
+  FilmIcon,
 } from 'lucide-react'
 
 type Submenu = {
@@ -26,7 +29,7 @@ type Menu = {
 }
 
 type Group = {
-  groupLabel: string
+  groupLabel?: string
   menus: Menu[]
 }
 
@@ -44,7 +47,7 @@ export function getMenuList(pathname: string): Group[] {
       ],
     },
     {
-      groupLabel: 'Contents',
+      groupLabel: '',
       menus: [
         {
           href: '',
@@ -53,23 +56,49 @@ export function getMenuList(pathname: string): Group[] {
           submenus: [
             {
               href: '/testcases',
-              label: 'User Case',
+              label: 'Case Code',
             },
             {
               href: '/testcases/libs',
               label: 'Libs',
             },
             {
+              href: '/testcases/libs/routes',
+              label: 'Route Configs',
+            },
+            {
               href: '/reports',
               label: 'Report',
             },
             {
-              href: '/testcases/app',
-              label: 'APP',
-            },
-            {
               href: '/traceability',
               label: 'Tranceability',
+            },
+          ],
+        },
+        {
+          href: '',
+          label: 'Scenarios',
+          icon: FilmIcon,
+          submenus: [
+            {
+              href: '/scenarios',
+              label: 'Scenarios',
+            },
+          ],
+        },
+        {
+          href: '',
+          label: 'API Test',
+          icon: BrickWall,
+          submenus: [
+            {
+              href: '/api-tests/core-be',
+              label: 'Corebe',
+            },
+            {
+              href: '/api-tests/notif',
+              label: 'Notif',
             },
           ],
         },
@@ -93,10 +122,33 @@ export function getMenuList(pathname: string): Group[] {
           ],
         },
         {
+          href: '/resource',
+          label: 'Resource',
+          icon: FileText,
+          submenus: [
+            {
+              href: '/resource/videos',
+              label: 'Videos',
+            },
+            {
+              href: '/resource/app',
+              label: 'APP',
+            },
+          ],
+        },
+        {
           href: '/tools',
           label: 'Tools',
           icon: UtensilsCrossedIcon,
           submenus: [
+            {
+              label: 'Mobile Network',
+              href: '/tools/mobile-network',
+            },
+            {
+              label: 'Live Push',
+              href: '/tools/live-push',
+            },
             {
               label: 'Notif Whitelist',
               href: '/tools/whitelist-post',
@@ -114,6 +166,22 @@ export function getMenuList(pathname: string): Group[] {
               label: 'FastUserInfo',
               href: '/tools/fast-user-db',
             },
+            {
+              label: 'StoreComments',
+              href: '/tools/store-comments',
+            },
+            {
+              label: 'RegistAccount',
+              href: '/tools/register-account',
+            },
+            {
+              label: 'Flutter Pages',
+              href: '/tools/flutter-page-objects',
+            },
+            {
+              label: 'CurlCmd',
+              href: '/tools/curl-command',
+            },
           ],
         },
       ],
@@ -129,6 +197,16 @@ export function getMenuList(pathname: string): Group[] {
         {
           href: '/settings/parameters',
           label: 'Parameters',
+          icon: Settings,
+        },
+        {
+          href: '/settings/action-catalog',
+          label: 'Action Catalog',
+          icon: Settings,
+        },
+        {
+          href: '/settings/env-templates',
+          label: 'Env Templates',
           icon: Settings,
         },
         {

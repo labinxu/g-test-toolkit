@@ -664,7 +664,7 @@ export default function TraceabilityPage() {
                       className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1 text-gray-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-gray-100"
                     />
                   </div>
-                  <div className="flex items-end gap-4">
+                  <div className="flex items-end gap-2">
                     <label className="flex items-center gap-2 text-xs">
                       <input
                         type="checkbox"

@@ -1,13 +1,11 @@
 import { describe, it, beforeAll, afterAll, useTestCase } from 'core-lib'
-
-// BDD 模板：Android 登录流程（直启模式：appPackage + appActivity）
-// 设备、包名与 Activity 均在 useTestCase.android 字段中直接传入，无需环境变量。
+import { HomePage, LaunchPage, LoginPage, LiveStreamPage } from 'gettr-android-lib';
 
 describe('Android login flow (launch mode)', () => {
   const tc = useTestCase({
     module: 'android-login',
     android: {
-      deviceName: 'pixel6',
+      deviceName: 'pixel-8',
       udid: 'emulator-5554',
       appPackage: 'com.gettr.gettr',
       appActivity: '.MainActivity',

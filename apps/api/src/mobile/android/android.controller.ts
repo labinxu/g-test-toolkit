@@ -146,6 +146,184 @@ export class AndroidController {
     }
   }
 
+  // mitmproxy controls (for capturing app network traffic)
+  @Get('/mitm/status')
+  @UseGuards(AuthGuard('jwt'))
+  async mitmStatus() {
+    try {
+      return this.androidService.getMitmproxyStatus()
+    } catch (err) {
+      throw new NotFoundException('Failed to get mitmproxy status')
+    }
+  }
+
+  @Post('/mitm/start')
+  @UseGuards(AuthGuard('jwt'))
+  async mitmStart(@Body() body: { port?: number; dumpFile?: string }) {
+    try {
+      const { started, port, dumpFile } = await this.androidService.startMitmproxy({
+        port: body?.port,
+        outFile: body?.dumpFile,
+      })
+      return {
+        result: 'ok',
+        started,
+        port,
+        dumpFile,
+        message: started
+          ? `mitmproxy started on port ${port}`
+          : `mitmproxy already running on port ${port}`,
+      }
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to start mitmproxy'
+      )
+    }
+  }
+
+  @Post('/mitm/stop')
+  @UseGuards(AuthGuard('jwt'))
+  async mitmStop() {
+    try {
+      const { stopped, port, dumpFile } = await this.androidService.stopMitmproxy()
+      return {
+        result: 'ok',
+        stopped,
+        port,
+        dumpFile,
+        message: stopped ? 'mitmproxy stopped' : 'mitmproxy was not running',
+      }
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to stop mitmproxy'
+      )
+    }
+  }
+
+  @Get('/mitm/flows')
+  @UseGuards(AuthGuard('jwt'))
+  async mitmFlows(@Query('limit') limit?: string) {
+    try {
+      const n = limit ? parseInt(limit, 10) : NaN
+      const safeLimit =
+        Number.isFinite(n) && n > 0 ? Math.min(500, Math.max(1, n)) : 100
+      return await this.androidService.readMitmFlows({ limit: safeLimit })
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to read mitmproxy flows'
+      )
+    }
+  }
+
+  // Configure Android device HTTP proxy to point at mitmproxy
+  @Post('/mitm/device-proxy')
+  @UseGuards(AuthGuard('jwt'))
+  async mitmDeviceProxy(
+    @Body()
+    body: {
+      deviceId: string
+      host?: string
+      port?: number
+    },
+  ) {
+    const deviceId = body?.deviceId?.trim()
+    if (!deviceId) {
+      throw new NotFoundException('deviceId is required')
+    }
+    const hasProxy =
+      typeof body?.host === 'string' &&
+      !!body.host &&
+      typeof body?.port === 'number'
+    try {
+      if (hasProxy) {
+        await this.androidService.setDeviceHttpProxy(deviceId, body.host!, body.port!)
+        return {
+          result: 'ok',
+          mode: 'set',
+          deviceId,
+          host: body.host,
+          port: body.port,
+        }
+      }
+      await this.androidService.clearDeviceHttpProxy(deviceId)
+      return { result: 'ok', mode: 'clear', deviceId }
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to update device proxy'
+      )
+    }
+  }
+
+  // Frida / SSL pinning helpers (GETTR app)
+  @Post('/frida/start-server')
+  @UseGuards(AuthGuard('jwt'))
+  async fridaStartServer(@Body() body: { devicePath?: string }) {
+    try {
+      const { started, devicePath } = await this.androidService.startFridaServer({
+        devicePath: body?.devicePath,
+      })
+      return {
+        result: 'ok',
+        started,
+        devicePath,
+        message: started
+          ? `frida-server start command issued for ${devicePath}`
+          : 'frida-server start command did not run',
+      }
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to start frida-server',
+      )
+    }
+  }
+
+  @Post('/frida/start-gettr-bypass')
+  @UseGuards(AuthGuard('jwt'))
+  async fridaStartGettrBypass() {
+    try {
+      const { started, scriptPath } =
+        await this.androidService.startGettrFridaBypass()
+      return {
+        result: 'ok',
+        started,
+        scriptPath,
+        message: 'Frida SSL bypass script attached for GETTR (best-effort)',
+      }
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) ||
+          'Failed to start Frida SSL bypass for GETTR',
+      )
+    }
+  }
+
+  @Get('/frida/status')
+  @UseGuards(AuthGuard('jwt'))
+  async fridaStatus() {
+    try {
+      return await this.androidService.getFridaStatus()
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to get Frida status',
+      )
+    }
+  }
+
+  @Get('/frida/log')
+  @UseGuards(AuthGuard('jwt'))
+  async fridaLog(@Query('limit') limit?: string) {
+    try {
+      const n = limit ? parseInt(limit, 10) : NaN
+      const maxLines =
+        Number.isFinite(n) && n > 0 ? Math.min(1000, Math.max(1, n)) : 200
+      return await this.androidService.readFridaLog({ maxLines })
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to read Frida log',
+      )
+    }
+  }
+
   @Get('/emulators/creatable')
   @UseGuards(AuthGuard('jwt'))
   async getCreatableEmulators() {

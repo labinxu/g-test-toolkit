@@ -8,5 +8,6 @@ import { SettingsModule } from '../settings/settings.module';
   imports: [InspectorModule, SettingsModule],
   controllers: [AiController],
   providers: [AiService],
+  exports: [AiService],
 })
 export class AiModule {}

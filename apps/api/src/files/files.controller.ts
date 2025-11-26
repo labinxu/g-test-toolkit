@@ -104,7 +104,7 @@ export class FilesController {
 
   @Get('raw')
   @UseGuards(AuthGuard('jwt'))
-  async rawFile(@Query('path') filePath: string, @Res() res: Response) {
+  async rawFile(@Query('path') filePath: string, @Req() req: Request, @Res() res: Response) {
     if (!filePath) {
       throw new NotFoundException('path is required')
     }
@@ -119,10 +119,50 @@ export class FilesController {
       '.jpeg': 'image/jpeg',
       '.gif': 'image/gif',
       '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.mov': 'video/quicktime',
+      '.webm': 'video/webm',
+      '.ogg': 'video/ogg',
       '.json': 'application/json',
       '.html': 'text/html',
     }
     const type = mimeMap[ext] || 'application/octet-stream'
+
+    const stat = await fs.stat(absPath)
+    const fileSize = stat.size
+    const range = (req.headers as any)?.range as string | undefined
+
+    if (range) {
+      const bytesPrefix = 'bytes='
+      if (!range.startsWith(bytesPrefix)) {
+        res.status(416).send('Malformed Range header')
+        return
+      }
+      const [startStr, endStr] = range.slice(bytesPrefix.length).split('-')
+      let start = Number.parseInt(startStr, 10)
+      let end = endStr ? Number.parseInt(endStr, 10) : fileSize - 1
+
+      if (Number.isNaN(start) || start < 0) start = 0
+      if (Number.isNaN(end) || end >= fileSize) end = fileSize - 1
+      if (start > end) {
+        start = 0
+        end = fileSize - 1
+      }
+
+      const chunkSize = end - start + 1
+      res.status(206)
+      res.header('Content-Range', `bytes ${start}-${end}/${fileSize}`)
+      res.header('Accept-Ranges', 'bytes')
+      res.header('Content-Length', String(chunkSize))
+      res.type(type)
+      res.header('Content-Disposition', `inline; filename="${path.basename(absPath)}"`)
+      const stream = createReadStream(absPath, { start, end })
+      res.send(stream)
+      return
+    }
+
+    res.header('Accept-Ranges', 'bytes')
+    res.header('Content-Length', String(fileSize))
     res.type(type)
     res.header('Content-Disposition', `inline; filename="${path.basename(absPath)}"`)
     const stream = createReadStream(absPath)
@@ -219,6 +259,37 @@ export class FilesController {
     }
   }
 
+  @Post('rename')
+  @UseGuards(AuthGuard('jwt'))
+  async renameFileOrFolder(@Body() body: { path: string; newName: string }) {
+    const { path: srcPath, newName } = body || ({} as any)
+    if (!srcPath || typeof srcPath !== 'string') {
+      throw new BadRequestException('Path is required')
+    }
+    if (!newName || typeof newName !== 'string') {
+      throw new BadRequestException('New name is required')
+    }
+    const trimmed = newName.trim()
+    if (!trimmed) {
+      throw new BadRequestException('New name cannot be empty')
+    }
+    if (/[\\/]/.test(trimmed)) {
+      throw new BadRequestException('New name must not contain path separators')
+    }
+    const absSrc = path.resolve(process.cwd(), srcPath)
+    if (!existsSync(absSrc)) {
+      throw new NotFoundException(`Source not found: ${srcPath}`)
+    }
+    const destAbs = path.resolve(path.dirname(absSrc), trimmed)
+    try {
+      await fs.rename(absSrc, destAbs)
+      return { success: true, newPath: path.relative(process.cwd(), destAbs) }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      throw new BadRequestException(msg)
+    }
+  }
+
   @Delete('apps')
   @UseGuards(AuthGuard('jwt'))
   async deleteAppFile(@Body() body: { path?: string }) {
@@ -249,6 +320,59 @@ export class FilesController {
     }
     try {
       const result = await this.filesService.saveAppFile(file.buffer, file.originalname)
+      return { success: true, ...result }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new BadRequestException(message)
+    }
+  }
+
+  // -------- Videos workspace (workspace/videos) --------
+
+  @Get('videos')
+  @UseGuards(AuthGuard('jwt'))
+  async listVideos(@Query('depth') depth: number = 3) {
+    const videosRoot = path.normalize(path.join(process.cwd(), 'workspace/videos'))
+    const baseDir = path.resolve(process.cwd())
+    if (!videosRoot.startsWith(baseDir)) {
+      throw new Error(`Access to paths outside the working directory is forbidden ${videosRoot}`)
+    }
+    if (!existsSync(videosRoot)) {
+      await fs.mkdir(videosRoot, { recursive: true })
+    }
+    return await this.filesService.getTree(videosRoot, depth)
+  }
+
+  @Delete('videos')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteVideo(@Body() body: { path: string }) {
+    if (!body?.path) {
+      throw new BadRequestException('path is required')
+    }
+    try {
+      const result = await this.filesService.deleteVideoEntry(body.path)
+      return { success: true, ...result }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new BadRequestException(message)
+    }
+  }
+
+  @Post('videos/upload')
+  @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 500 * 1024 * 1024 },
+      fileFilter: allowAllFileFilter,
+    })
+  )
+  async uploadVideoFile(@UploadedFile() file: FastifyMulterFile) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded')
+    }
+    try {
+      const result = await this.filesService.saveVideoFile(file.buffer, file.originalname)
       return { success: true, ...result }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

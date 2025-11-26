@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import ResizableStickyTable, { type ColumnDef } from '@/components/data-table'
 import { normalizeResponseError } from '@/lib/error'
 
 type UserRow = { id: number; username: string; email: string; isAdmin: boolean }
@@ -155,78 +155,73 @@ export default function UsersPage() {
         <Button onClick={createUser} className="h-8">Create</Button>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead style={{ width: 60 }}>ID</TableHead>
-            <TableHead>Username</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead style={{ width: 120 }}>Admin</TableHead>
-            <TableHead style={{ width: 220 }}>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filtered.map((u) => (
-            <TableRow key={u.id}>
-              <TableCell>{u.id}</TableCell>
-              <TableCell className="truncate max-w-[220px]">
-                <InlineEditText
-                  value={u.username}
-                  onChange={(val) => setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, username: val } : x)))}
-                  onApply={async (val) => {
-                    if (!val.trim()) return toast.error('Username required')
-                    try {
-                      const res = await fetch(`/api/settings/users/${u.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: val.trim() }) })
-                      if (!res.ok) {
-                        const err = await normalizeResponseError(res)
-                        throw new Error(err.message || 'Update failed')
-                      }
-                      toast.success('Updated')
-                    } catch (e: any) { toast.error(e?.message || 'Update failed'); await load() }
-                  }}
-                />
-              </TableCell>
-              <TableCell className="truncate max-w-[320px]">
-                <InlineEditText
-                  value={u.email}
-                  onChange={(val) => setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, email: val } : x)))}
-                  onApply={async (val) => {
-                    const email = val.trim()
-                    if (!/^\S+@\S+\.\S+$/.test(email)) return toast.error('Invalid email')
-                    try {
-                      const res = await fetch(`/api/settings/users/${u.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }) })
-                      if (!res.ok) {
-                        const err = await normalizeResponseError(res)
-                        throw new Error(err.message || 'Update failed')
-                      }
-                      toast.success('Updated')
-                    } catch (e: any) { toast.error(e?.message || 'Update failed'); await load() }
-                  }}
-                />
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Switch id={`adm-${u.id}`} checked={!!u.isAdmin} disabled={u.isAdmin && adminCount <= 1} onCheckedChange={(v) => {
-                    if (u.isAdmin && adminCount <= 1 && !v) { toast.error('Cannot remove the last admin'); return }
-                    setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, isAdmin: !!v } : x)))
-                  }} />
-                  <label htmlFor={`adm-${u.id}`} className="text-xs">{u.isAdmin ? 'Yes' : 'No'}</label>
-                </div>
-              </TableCell>
-              <TableCell className="whitespace-nowrap">
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => { setResetUserId(u.id); setResetPassword('') }}>Reset PW</Button>
-                  <Button variant="destructive" size="sm" className="px-3" onClick={() => {
-                    if (u.isAdmin && adminCount <= 1) { toast.error('Cannot delete the last admin'); return }
-                    if (window.confirm(`Delete user ${u.username || u.email}?`)) deleteUser(u.id)
-                  }}>Delete</Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-        <TableCaption>Toggle Admin and click Save.</TableCaption>
-      </Table>
+      <ResizableStickyTable<UserRow>
+        rows={filtered}
+        columns={useMemo<ColumnDef<UserRow>[]>(() => [
+          { key: 'id', header: 'ID', width: 60, minWidth: 60, sortable: false, accessor: (u) => u.id },
+          { key: 'username', header: 'Username', width: 240, minWidth: 160, sortable: false, render: (u) => (
+            <div className="truncate max-w-[220px]">
+              <InlineEditText
+                value={u.username}
+                onChange={(val) => setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, username: val } : x)))}
+                onApply={async (val) => {
+                  if (!val.trim()) return toast.error('Username required')
+                  try {
+                    const res = await fetch(`/api/settings/users/${u.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: val.trim() }) })
+                    if (!res.ok) {
+                      const err = await normalizeResponseError(res)
+                      throw new Error(err.message || 'Update failed')
+                    }
+                    toast.success('Updated')
+                  } catch (e: any) { toast.error(e?.message || 'Update failed'); await load() }
+                }}
+              />
+            </div>
+          ) },
+          { key: 'email', header: 'Email', width: 320, minWidth: 200, sortable: false, render: (u) => (
+            <div className="truncate max-w-[320px]">
+              <InlineEditText
+                value={u.email}
+                onChange={(val) => setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, email: val } : x)))}
+                onApply={async (val) => {
+                  const email = val.trim()
+                  if (!/^\S+@\S+\.\S+$/.test(email)) return toast.error('Invalid email')
+                  try {
+                    const res = await fetch(`/api/settings/users/${u.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }) })
+                    if (!res.ok) {
+                      const err = await normalizeResponseError(res)
+                      throw new Error(err.message || 'Update failed')
+                    }
+                    toast.success('Updated')
+                  } catch (e: any) { toast.error(e?.message || 'Update failed'); await load() }
+                }}
+              />
+            </div>
+          ) },
+          { key: 'isAdmin', header: 'Admin', width: 120, minWidth: 100, sortable: false, render: (u) => (
+            <div className="flex items-center gap-2">
+              <Switch id={`adm-${u.id}`} checked={!!u.isAdmin} disabled={u.isAdmin && adminCount <= 1} onCheckedChange={(v) => {
+                if (u.isAdmin && adminCount <= 1 && !v) { toast.error('Cannot remove the last admin'); return }
+                setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, isAdmin: !!v } : x)))
+              }} />
+              <label htmlFor={`adm-${u.id}`} className="text-xs">{u.isAdmin ? 'Yes' : 'No'}</label>
+            </div>
+          ) },
+          { key: 'actions', header: 'Actions', width: 220, minWidth: 180, sortable: false, render: (u) => (
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <Button variant="outline" size="sm" onClick={() => { setResetUserId(u.id); setResetPassword('') }}>Reset PW</Button>
+              <Button variant="destructive" size="sm" className="px-3" onClick={() => {
+                if (u.isAdmin && adminCount <= 1) { toast.error('Cannot delete the last admin'); return }
+                if (window.confirm(`Delete user ${u.username || u.email}?`)) deleteUser(u.id)
+              }}>Delete</Button>
+            </div>
+          ) },
+        ], [users, adminCount])}
+        getRowKey={(u) => String(u.id)}
+        page={1}
+        pageSize={filtered.length || 1}
+        caption={<span>Toggle Admin and click Save.</span>}
+      />
 
       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
         <div>

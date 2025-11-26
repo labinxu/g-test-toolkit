@@ -13,7 +13,7 @@ import { HomePage,LaunchPage,LoginPage ,LiveStreamPage} from 'gettr-android-lib'
       android: {
        deviceName: 'smatisan',
         udid: '832dc799',
-        apk: '1.74.5-251104117.apk',
+        apk: '1.75.1__251128164_.apk',
         // installBehavior: 'install',      // or 'launch'
         // bringToFront: true,
         // appPackage: 'com.gettr.gettr',
@@ -24,13 +24,9 @@ import { HomePage,LaunchPage,LoginPage ,LiveStreamPage} from 'gettr-android-lib'
     })
 
     beforeAll(async () => {
-      //await tc.prepareSession?.({ reinstall: true })
-    })
-     
-    it('Verify login', async () => {
       const lp = new LaunchPage(tc);
       const lgp = await lp.loginPage();
-      homepage = await lgp.loginWithUsername('qa_lb','a111111');
+      homepage = await lgp.loginWithUsername('qa_lb', 'a111111');
     })
     it('Remove remind me later', async () => {
       await homepage.remindMeLater()

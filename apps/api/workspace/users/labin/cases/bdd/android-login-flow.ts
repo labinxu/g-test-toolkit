@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, afterAll, useTestCase } from 'core-lib'
+import { LaunchPage,HomePage,LoginPage } from 'gettr-android-lib';
 
 // BDD 模板：Android 登录流程
 // 使用 useTestCase 声明运行环境与标签；在 it() 中直接使用 tc（TestCase 代理）的方法
@@ -8,9 +9,9 @@ describe('APPLogin', () => {
   const tc = useTestCase({
     module: 'LOGIN',
     android: {
-      deviceName: 'pixel6',
-      udid: 'emulator-5554',
-      apk: '1.74.5-251104117.apk',
+      deviceName: 'smatisan',
+      udid: '832dc799',
+      apk: '1.74.7__251112028__ids.apk',
       preUninstallPackages: ['com.gettr.gettr', 'org.app.getter'],
       preUninstallOnInstall: true,
       // installBehavior: 'install',      // or 'launch'
@@ -48,13 +49,13 @@ describe('APPLogin', () => {
       'TR:SEC:Android/Login',
     ])
     tc.appendLog?.('检查登录按钮是否存在（示例）')
-    const driver: any = (tc as any).page // WebdriverIO driver
+    //const driver: any = (tc as any).page // WebdriverIO driver
     // const loginBtn = await driver.$('~loginButton')
     // tc.assertNotNull(loginBtn, '应存在登录按钮')
-    tc.assertEqual(1, 1, 'Sanity')
+    //tc.assertEqual(1, 1, 'Sanity')
   })
 
-  it('输入账号密码并登录', async () => {
+  it('LoginWithUsername', async () => {
     // Different overrides for this test
     tc.setCaseTestrail?.({
       template: 'Test Case',
@@ -68,7 +69,10 @@ describe('APPLogin', () => {
       'TR:PRIO:Critical',
       'TR:SEC:Android/Login',
     ])
-    const driver: any = (tc as any).page
+    const launchPage = new LaunchPage(tc);
+    const loginPage = await launchPage.loginPage()
+    const homePage = await loginPage.loginWithUsername('rel_qa','a111111')
+    //const driver: any = (tc as any).page
     // 示例：根据实际控件树调整选择器
     // const username = await driver.$('~username')
     // await username.setValue('user@example.com')

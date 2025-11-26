@@ -45,4 +45,6 @@ export class RunTestCaseFileDto {
   @IsOptional()
   @IsString()
   sessionKey?: string;
+  @IsOptional()
+  envConfig?: any;
 }

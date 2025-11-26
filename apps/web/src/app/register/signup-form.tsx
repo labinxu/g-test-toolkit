@@ -123,7 +123,7 @@ export function SignupForm() {
             </FormItem>
           )}
         />
-        <div className="flex w-full justify-end items-center gap-4">
+        <div className="flex w-full items-center justify-end gap-2">
           {error != '' ? (
             <div className="text-red-500 items-center">{error}</div>
           ) : null}

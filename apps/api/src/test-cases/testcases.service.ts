@@ -11,19 +11,27 @@ import * as vm from 'vm'
 import { Project } from 'ts-morph'
 import { getErrorMessage } from 'src/common/utils'
 import { BrowserHelper } from 'src/browser/browser-helper'
+import { SettingsService } from 'src/settings/settings.service'
+import { ChildProcess, fork } from 'child_process'
 @Injectable()
 export class TestCasesService {
   private logger: CustomLogger
   private coreModule = null
   private coreModuleLastUpdate = null
-  private gettrModule = null
-  private gettrModuleLastUpdate = null
+  private gettrWebModule: any = null
+  private gettrWebModuleLastUpdate: number | null = null
   private gettrAndroidModule: any = null
   private gettrAndroidModuleLastUpdate: number | null = null
+  private gettrMobileWebModule: any = null
+  private gettrMobileWebModuleLastUpdate: number | null = null
+  private runners: Map<string, ChildProcess> = new Map()
+  private stoppingRunners: Set<string> = new Set()
+  private manualStopNotified: Set<string> = new Set()
   constructor(
     private readonly loggerService: LoggerService,
     private readonly androidService: AndroidService,
-    private readonly reportService: ReportService
+    private readonly reportService: ReportService,
+    private readonly settingsService: SettingsService
   ) {
     this.logger = this.loggerService.createLogger('TestCaseService')
   }
@@ -79,6 +87,160 @@ export class TestCasesService {
       throw error
     }
   }
+  private resolveRunnerScript() {
+    const jsPath = path.join(__dirname, 'runner-worker.js')
+    if (fs.existsSync(jsPath)) return { path: jsPath, isTs: false }
+    const tsPath = path.join(__dirname, 'runner-worker.ts')
+    return { path: tsPath, isTs: true }
+  }
+
+  async runInChildProcess(
+    code: string,
+    clientId?: string,
+    options?: {
+      keepAppOpen?: boolean
+      shareSession?: boolean
+      sessionKey?: string
+      userDir?: string
+      envConfig?: any
+    }
+  ) {
+    if (!clientId) {
+      // fall back to in-process when clientId is missing
+      return this.runInSandbox(code, clientId, options)
+    }
+    if (this.runners.has(clientId)) {
+      this.logger.warn(
+        `Runner already active for clientId=${clientId}, attempting to stop existing runner before starting a new one`,
+      )
+      try {
+        await this.killRunnerForClient(clientId)
+      } catch {
+        // ignore stop errors and try to start a fresh runner
+      }
+    }
+    let apiTestsConfig: {
+      baseUrl: string
+      defaultHeaders: Record<string, string>
+    } | null = null
+    try {
+      apiTestsConfig = await this.settingsService.getApiTestsConfig()
+    } catch {
+      apiTestsConfig = null
+    }
+    const { path: workerPath, isTs } = this.resolveRunnerScript()
+    const forkOpts: any = {
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+      env: process.env,
+    }
+    if (isTs) {
+      forkOpts.execArgv = ['-r', 'ts-node/register', '-r', 'tsconfig-paths/register']
+    }
+    const child = fork(workerPath, [], forkOpts)
+    this.runners.set(clientId, child)
+
+    child.stdout?.on('data', (buf: Buffer) => {
+      const text = buf.toString('utf-8')
+      for (const line of text.split(/\r?\n/)) {
+        if (!line.trim()) continue
+        this.logger.sendTo(clientId, line, 'info')
+      }
+    })
+    child.stderr?.on('data', (buf: Buffer) => {
+      const text = buf.toString('utf-8')
+      for (const line of text.split(/\r?\n/)) {
+        if (!line.trim()) continue
+        // When runner is being stopped manually, send a single friendly error
+        // message to the client and suppress the underlying Puppeteer noise.
+        if (this.stoppingRunners.has(clientId)) {
+          if (!this.manualStopNotified.has(clientId)) {
+            this.logger.sendTo(clientId, 'Test case stopped by user', 'error')
+            this.manualStopNotified.add(clientId)
+          }
+          continue
+        }
+        this.logger.sendTo(clientId, line, 'error')
+      }
+    })
+
+    child.on('message', async (msg: any) => {
+      try {
+        if (msg?.type === 'complete') {
+          await this.generateReportsFromCoreResult(msg.coreResult, process.env.WORKSPACE)
+          this.logger.complete(clientId, 'exit')
+        } else if (msg?.type === 'error') {
+          this.logger.error(
+            `Runner error for ${clientId}: ${msg.error}${msg.stack ? `\n${String(msg.stack)}` : ''}`
+          )
+          // 确保前端能够感知本次任务已结束（即便是异常中止），否则下一次运行会因为
+          // runner 依然被认为“占用中”而无法正常输出日志。
+          this.logger.complete(clientId, 'exit')
+        }
+      } catch (e) {
+        this.logger.error(`Failed handling runner message for ${clientId}: ${e}`)
+      }
+    })
+
+    child.on('exit', (code, signal) => {
+      this.runners.delete(clientId)
+      this.logger.info(
+        `Runner exited for clientId=${clientId} code=${code ?? 'null'} signal=${signal ?? 'null'}`
+      )
+    })
+
+    child.send({
+      type: 'run',
+      code,
+      clientId,
+      options: {
+        keepAppOpen: options?.keepAppOpen,
+        shareSession: options?.shareSession,
+        sessionKey: options?.sessionKey,
+        userDir: options?.userDir,
+        apiTestsConfig: apiTestsConfig ?? undefined,
+        workspace: process.env.WORKSPACE,
+        envConfig: options?.envConfig,
+      },
+    })
+  }
+
+  async killRunnerForClient(clientId: string) {
+    const child = this.runners.get(clientId)
+    if (!child) return
+    this.logger.warn(`Killing runner for clientId=${clientId}`)
+    this.stoppingRunners.add(clientId)
+    if (!this.manualStopNotified.has(clientId)) {
+      this.logger.sendTo(clientId, 'Test case stopped by user', 'error')
+      this.manualStopNotified.add(clientId)
+    }
+    return await new Promise<void>((resolve) => {
+      let done = false
+      const finish = () => {
+        if (done) return
+        done = true
+        this.runners.delete(clientId)
+        this.stoppingRunners.delete(clientId)
+        this.manualStopNotified.delete(clientId)
+        resolve()
+      }
+      child.once('exit', finish)
+      try {
+        child.kill('SIGTERM')
+      } catch {
+        finish()
+      }
+      setTimeout(() => {
+        try {
+          if (!done && !child.killed) {
+            child.kill('SIGKILL')
+          }
+        } catch {
+        } finally {
+          finish()
+        }
+      }, 5000)
+    })
+  }
   async runInSandbox(
     code: string,
     clientId?: string,
@@ -87,18 +249,45 @@ export class TestCasesService {
       shareSession?: boolean
       sessionKey?: string
       userDir?: string
+      envConfig?: any
     }
   ): Promise<any> {
     let transformedCode = ''
     let coreLib: any
-    let gettrLib: any
+    let gettrWebLib: any
     let gettrAndroidLib: any
+    let gettrMobileWebLib: any
+    let apiTestsConfig: {
+      baseUrl: string
+      defaultHeaders: Record<string, string>
+    } | null = null
+    // simple cooperative stop flag, keyed by clientId
+    const stopRef: { requested: boolean } = { requested: false }
+    let stopKey: string | undefined
+    if (clientId) {
+      try {
+        const g = globalThis as any
+        if (!g.__gttStopFlags) {
+          g.__gttStopFlags = new Map<string, { requested: boolean }>()
+        }
+        const flags: Map<string, { requested: boolean }> = g.__gttStopFlags
+        flags.set(clientId, stopRef)
+        stopKey = clientId
+      } catch {}
+    }
+
     try {
       transformedCode = await this.transformCode(code)
       // 加载 core-lib
       coreLib = await this.loadCoreLib()
-      gettrLib = await this.loadGettrLib()
+      gettrWebLib = await this.loadGettrWebLib()
       gettrAndroidLib = await this.loadGettrAndroidLib()
+      gettrMobileWebLib = await this.loadGettrMobileWebLib()
+      try {
+        apiTestsConfig = await this.settingsService.getApiTestsConfig()
+      } catch {
+        apiTestsConfig = null
+      }
       if (typeof coreLib?.clearBddSuites === 'function') {
         coreLib.clearBddSuites()
       }
@@ -112,11 +301,14 @@ export class TestCasesService {
         if (moduleName === 'core-lib') {
           return coreLib
         }
-        if (moduleName === 'gettr-lib') {
-          return gettrLib
+        if (moduleName === 'gettr-web-lib') {
+          return gettrWebLib
         }
         if (moduleName === 'gettr-android-lib') {
           return gettrAndroidLib
+        }
+        if (moduleName === 'gettr-mobile-web-lib') {
+          return gettrMobileWebLib
         }
         return require(moduleName)
         //throw new Error(`Module ${moduleName} not found in sandbox`);
@@ -126,6 +318,7 @@ export class TestCasesService {
       params: {
         workspace: process.env.WORKSPACE,
         clientId,
+        apiTestConfig: apiTestsConfig ?? undefined,
         loggerService: this.loggerService,
         browserHelper: new BrowserHelper(),
         options: {
@@ -133,8 +326,10 @@ export class TestCasesService {
           shareSession: options?.shareSession,
           sessionKey: options?.sessionKey,
           userDir: options?.userDir,
+          shouldStop: () => stopRef.requested,
         },
         userDir: options?.userDir,
+        envConfig: options?.envConfig,
       }, // 注入传入的参数
       console, // 注入 console 以支持 console.log
       coreMain: coreLib.main,
@@ -162,47 +357,57 @@ export class TestCasesService {
       const coreResult =
         corePromise && typeof corePromise.then === 'function' ? await corePromise : undefined
 
-      if (coreResult && Array.isArray(coreResult.results)) {
-        const rawWorkspace = sandbox.params.workspace || process.env.WORKSPACE || 'workspace'
-        const workspaceRoot = path.isAbsolute(rawWorkspace)
-          ? rawWorkspace
-          : path.resolve(process.cwd(), rawWorkspace)
-
-        const normalizeUserDir = (value?: string | null): string | undefined => {
-          if (!value) return undefined
-          let cleaned = value.replace(/[\\]+/g, '/').replace(/^\/+/, '')
-          if (!cleaned) return undefined
-          if (cleaned.startsWith('workspace/')) {
-            cleaned = cleaned.replace(/^workspace\//, '')
-          }
-          return cleaned || undefined
-        }
-
-        for (const entry of coreResult.results) {
-          if (!entry?.report) continue
-          const testName = entry.report?.caseName || entry.className || 'TestCase'
-          try {
-            const normalizedUserDir = normalizeUserDir(entry.report?.metadata?.userDir)
-            const reportWorkspace = normalizedUserDir
-              ? path.join(workspaceRoot, normalizedUserDir, 'reports')
-              : path.join(workspaceRoot, 'reports')
-
-            entry.report.metadata = {
-              ...(entry.report.metadata ?? {}),
-              userDir: normalizedUserDir ?? undefined,
-            }
-
-            await this.reportService.generate(reportWorkspace, testName, entry.report)
-          } catch (generateErr) {
-            this.logger.error(`Failed to generate report for ${testName}: ${generateErr}`)
-          }
-        }
-      }
+      await this.generateReportsFromCoreResult(coreResult, sandbox.params.workspace)
 
       return coreResult
     } catch (error) {
       console.error('Sandbox execution failed:', error)
       throw error
+    } finally {
+      if (stopKey) {
+        try {
+          const g = globalThis as any
+          const flags: Map<string, { requested: boolean }> | undefined = g.__gttStopFlags
+          flags?.delete(stopKey)
+        } catch {}
+      }
+    }
+  }
+  private async generateReportsFromCoreResult(coreResult: any, workspaceValue?: string) {
+    if (!coreResult || !Array.isArray(coreResult.results)) return
+    const rawWorkspace = workspaceValue || process.env.WORKSPACE || 'workspace'
+    const workspaceRoot = path.isAbsolute(rawWorkspace)
+      ? rawWorkspace
+      : path.resolve(process.cwd(), rawWorkspace)
+
+    const normalizeUserDir = (value?: string | null): string | undefined => {
+      if (!value) return undefined
+      let cleaned = value.replace(/[\\]+/g, '/').replace(/^\/+/, '')
+      if (!cleaned) return undefined
+      if (cleaned.startsWith('workspace/')) {
+        cleaned = cleaned.replace(/^workspace\//, '')
+      }
+      return cleaned || undefined
+    }
+
+    for (const entry of coreResult.results) {
+      if (!entry?.report) continue
+      const testName = entry.report?.caseName || entry.className || 'TestCase'
+      try {
+        const normalizedUserDir = normalizeUserDir(entry.report?.metadata?.userDir)
+        const reportWorkspace = normalizedUserDir
+          ? path.join(workspaceRoot, normalizedUserDir, 'reports')
+          : path.join(workspaceRoot, 'reports')
+
+        entry.report.metadata = {
+          ...(entry.report.metadata ?? {}),
+          userDir: normalizedUserDir ?? undefined,
+        }
+
+        await this.reportService.generate(reportWorkspace, testName, entry.report)
+      } catch (generateErr) {
+        this.logger.error(`Failed to generate report for ${testName}: ${generateErr}`)
+      }
     }
   }
   async loadCoreLib() {
@@ -291,12 +496,12 @@ export class TestCasesService {
       throw error
     }
   }
-  async loadGettrLib() {
+  async loadGettrWebLib() {
     // Prefer ESM build; fallback to CJS
     const gettrDir = path.join(
       __dirname,
       '../..',
-      process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr'
+      process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr-web'
     )
     const gettrLibPath = path.join(gettrDir, 'dist/index.js')
     const gettrSrcDir = path.join(gettrDir, 'src')
@@ -310,15 +515,185 @@ export class TestCasesService {
         (await this.getFileMtimeSafe(gettrLibPath)) ||
         (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
       if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
-        this.logger.info('gettr lib dist outdated or missing. Rebuilding...')
-        await this.buildGettrLib()
+        this.logger.info('gettr web lib dist outdated or missing. Rebuilding...')
+        await this.buildGettrWebLib()
       }
     } catch {}
     try {
       const gettrLibPathMjs = gettrLibPath.replace(/index\.js$/, 'index.mjs')
       const filePathUsed = fs.existsSync(gettrLibPathMjs) ? gettrLibPathMjs : gettrLibPath
       if (!fs.existsSync(filePathUsed)) {
-        throw new Error(`gettr-lib not found at ${gettrLibPath}. Please generate gettr-lib first.`)
+        throw new Error(
+          `gettr-web-lib not found at ${gettrLibPath}. Please generate gettr-lib first.`
+        )
+      }
+      // 获取文件的修改时间
+      const stats = fs.statSync(filePathUsed)
+      const currentModifiedTime = stats.mtimeMs
+      // 如果模块已缓存且修改时间未变，返回缓存的模块
+      if (this.gettrWebModule && this.gettrWebModuleLastUpdate === currentModifiedTime) {
+        return this.gettrWebModule
+      }
+
+      // 文件已更改，重新加载模块
+      console.log(`Reloading gettr-web-lib from ${filePathUsed}`)
+      const distIndexMjs = gettrLibPathMjs
+      let module: any
+      const dynamicImport = (p: string) => new Function('p', 'return import(p)')(p) as Promise<any>
+      try {
+        if (fs.existsSync(distIndexMjs)) {
+          const dir = path.dirname(distIndexMjs)
+          const ts = Math.floor(currentModifiedTime)
+          const basename = `index-${ts}.mjs`
+          const uniquePath = path.join(dir, basename)
+          try {
+            for (const f of fs.readdirSync(dir)) {
+              if (/^index-\d+\.mjs$/.test(f)) {
+                try {
+                  fs.unlinkSync(path.join(dir, f))
+                } catch {}
+              }
+            }
+          } catch {}
+          fs.copyFileSync(distIndexMjs, uniquePath)
+          const { pathToFileURL } = require('url')
+          const href = pathToFileURL(uniquePath).href
+          module = await dynamicImport(href)
+        } else if (fs.existsSync(gettrLibPath)) {
+          this.deepClearCache(gettrLibPath)
+          module = require(gettrLibPath)
+        }
+      } catch (e) {
+        if (fs.existsSync(gettrLibPath)) {
+          this.deepClearCache(gettrLibPath)
+          module = require(gettrLibPath)
+        } else {
+          throw e
+        }
+      }
+      // 更新缓存和修改时间
+      this.gettrWebModule = module
+      this.gettrWebModuleLastUpdate = currentModifiedTime
+
+      return module
+    } catch (error) {
+      console.error('Failed to load gettr-web-lib:', error)
+      throw error
+    }
+  }
+
+  async loadGettrMobileWebLib() {
+    // Prefer ESM build; fallback to CJS
+    const mobileWebDir = path.join(
+      __dirname,
+      '../..',
+      process.env.GETTR_MOBILE_WEB_LIB_DIR || 'workspace/shared-libs/gettr-mobile-web'
+    )
+    const libPath = path.join(mobileWebDir, 'dist/index.js')
+    const srcDir = path.join(mobileWebDir, 'src')
+    // Auto rebuild if outdated
+    try {
+      const distExists =
+        fs.existsSync(libPath) || fs.existsSync(libPath.replace(/index\.js$/, 'index.mjs'))
+      const srcLatest = await this.getDirLatestMtimeSafe(srcDir)
+      const distLatest =
+        (await this.getFileMtimeSafe(libPath)) ||
+        (await this.getFileMtimeSafe(libPath.replace(/index\.js$/, 'index.mjs')))
+      if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
+        this.logger.info('gettr-mobile-web lib dist outdated or missing. Rebuilding...')
+        await this.buildGettrMobileWebLib()
+      }
+    } catch {}
+    try {
+      const libPathMjs = libPath.replace(/index\.js$/, 'index.mjs')
+      const filePathUsed = fs.existsSync(libPathMjs) ? libPathMjs : libPath
+      if (!fs.existsSync(filePathUsed)) {
+        throw new Error(
+          `gettr-mobile-web-lib not found at ${libPath}. Please generate gettr-mobile-web-lib first.`
+        )
+      }
+      const stats = fs.statSync(filePathUsed)
+      const currentModifiedTime = stats.mtimeMs
+      if (
+        this.gettrMobileWebModule &&
+        this.gettrMobileWebModuleLastUpdate === currentModifiedTime
+      ) {
+        return this.gettrMobileWebModule
+      }
+
+      console.log(`Reloading gettr-mobile-web-lib from ${filePathUsed}`)
+      const distIndexMjs = libPathMjs
+      let module: any
+      const dynamicImport = (p: string) => new Function('p', 'return import(p)')(p) as Promise<any>
+      try {
+        if (fs.existsSync(distIndexMjs)) {
+          const dir = path.dirname(distIndexMjs)
+          const ts = Math.floor(currentModifiedTime)
+          const basename = `index-${ts}.mjs`
+          const uniquePath = path.join(dir, basename)
+          try {
+            for (const f of fs.readdirSync(dir)) {
+              if (/^index-\d+\.mjs$/.test(f)) {
+                try {
+                  fs.unlinkSync(path.join(dir, f))
+                } catch {}
+              }
+            }
+          } catch {}
+          fs.copyFileSync(distIndexMjs, uniquePath)
+          const { pathToFileURL } = require('url')
+          const href = pathToFileURL(uniquePath).href
+          module = await dynamicImport(href)
+        } else if (fs.existsSync(libPath)) {
+          this.deepClearCache(libPath)
+          module = require(libPath)
+        }
+      } catch (e) {
+        if (fs.existsSync(libPath)) {
+          this.deepClearCache(libPath)
+          module = require(libPath)
+        } else {
+          throw e
+        }
+      }
+      this.gettrMobileWebModule = module
+      this.gettrMobileWebModuleLastUpdate = currentModifiedTime
+      return module
+    } catch (error) {
+      console.error('Failed to load gettr-mobile-web-lib:', error)
+      throw error
+    }
+  }
+  async loadGettrAndroidLib() {
+    // Prefer ESM build; fallback to CJS
+    const gettrAndroidDir = path.join(
+      __dirname,
+      '../..',
+      process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android'
+    )
+    const gettrLibPath = path.join(gettrAndroidDir, 'dist/index.js')
+    const gettrSrcDir = path.join(gettrAndroidDir, 'src')
+    // Auto rebuild if outdated
+    try {
+      const distExists =
+        fs.existsSync(gettrLibPath) ||
+        fs.existsSync(gettrLibPath.replace(/index\.js$/, 'index.mjs'))
+      const srcLatest = await this.getDirLatestMtimeSafe(gettrSrcDir)
+      const distLatest =
+        (await this.getFileMtimeSafe(gettrLibPath)) ||
+        (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
+      if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
+        this.logger.info('gettr-android lib dist outdated or missing. Rebuilding...')
+        await this.buildGettrAndroidLib()
+      }
+    } catch {}
+    try {
+      const gettrLibPathMjs = gettrLibPath.replace(/index\.js$/, 'index.mjs')
+      const filePathUsed = fs.existsSync(gettrLibPathMjs) ? gettrLibPathMjs : gettrLibPath
+      if (!fs.existsSync(filePathUsed)) {
+        throw new Error(
+          `gettr-android-lib not found at ${gettrLibPath}. Please generate gettr-android-lib first.`
+        )
       }
       // 获取文件的修改时间
       const stats = fs.statSync(filePathUsed)
@@ -329,7 +704,7 @@ export class TestCasesService {
       }
 
       // 文件已更改，重新加载模块
-      console.log(`Reloading gettr-lib from ${filePathUsed}`)
+      console.log(`Reloading gettr-android-lib from ${filePathUsed}`)
       const distIndexMjs = gettrLibPathMjs
       let module: any
       const dynamicImport = (p: string) => new Function('p', 'return import(p)')(p) as Promise<any>
@@ -370,103 +745,18 @@ export class TestCasesService {
 
       return module
     } catch (error) {
-      console.error('Failed to load gettr-lib:', error)
-      throw error
-    }
-  }
-  async loadGettrAndroidLib() {
-    // Prefer ESM build; fallback to CJS
-    const gettrAndroidDir = path.join(
-      __dirname,
-      '../..',
-      process.env.GETTR_ANDROID_LIB_DIR || 'workspace/shared-libs/gettr-android'
-    )
-    const gettrLibPath = path.join(gettrAndroidDir, 'dist/index.js')
-    const gettrSrcDir = path.join(gettrAndroidDir, 'src')
-    // Auto rebuild if outdated
-    try {
-      const distExists =
-        fs.existsSync(gettrLibPath) ||
-        fs.existsSync(gettrLibPath.replace(/index\.js$/, 'index.mjs'))
-      const srcLatest = await this.getDirLatestMtimeSafe(gettrSrcDir)
-      const distLatest =
-        (await this.getFileMtimeSafe(gettrLibPath)) ||
-        (await this.getFileMtimeSafe(gettrLibPath.replace(/index\.js$/, 'index.mjs')))
-      if (!distExists || (srcLatest && distLatest && srcLatest > distLatest)) {
-        this.logger.info('gettr-android lib dist outdated or missing. Rebuilding...')
-        await this.buildGettrAndroidLib()
-      }
-    } catch {}
-    try {
-      const gettrLibPathMjs = gettrLibPath.replace(/index\.js$/, 'index.mjs')
-      const filePathUsed = fs.existsSync(gettrLibPathMjs) ? gettrLibPathMjs : gettrLibPath
-      if (!fs.existsSync(filePathUsed)) {
-        throw new Error(
-          `gettr-android-lib not found at ${gettrLibPath}. Please generate gettr-android-lib first.`
-        )
-      }
-      // 获取文件的修改时间
-      const stats = fs.statSync(filePathUsed)
-      const currentModifiedTime = stats.mtimeMs
-      // 如果模块已缓存且修改时间未变，返回缓存的模块
-      if (this.gettrModule && this.gettrModuleLastUpdate === currentModifiedTime) {
-        return this.gettrModule
-      }
-
-      // 文件已更改，重新加载模块
-      console.log(`Reloading gettr-android-lib from ${filePathUsed}`)
-      const distIndexMjs = gettrLibPathMjs
-      let module: any
-      const dynamicImport = (p: string) => new Function('p', 'return import(p)')(p) as Promise<any>
-      try {
-        if (fs.existsSync(distIndexMjs)) {
-          const dir = path.dirname(distIndexMjs)
-          const ts = Math.floor(currentModifiedTime)
-          const basename = `index-${ts}.mjs`
-          const uniquePath = path.join(dir, basename)
-          try {
-            for (const f of fs.readdirSync(dir)) {
-              if (/^index-\d+\.mjs$/.test(f)) {
-                try {
-                  fs.unlinkSync(path.join(dir, f))
-                } catch {}
-              }
-            }
-          } catch {}
-          fs.copyFileSync(distIndexMjs, uniquePath)
-          const { pathToFileURL } = require('url')
-          const href = pathToFileURL(uniquePath).href
-          module = await dynamicImport(href)
-        } else if (fs.existsSync(gettrLibPath)) {
-          this.deepClearCache(gettrLibPath)
-          module = require(gettrLibPath)
-        }
-      } catch (e) {
-        if (fs.existsSync(gettrLibPath)) {
-          this.deepClearCache(gettrLibPath)
-          module = require(gettrLibPath)
-        } else {
-          throw e
-        }
-      }
-      // 更新缓存和修改时间
-      this.gettrModule = module
-      this.gettrModuleLastUpdate = currentModifiedTime
-
-      return module
-    } catch (error) {
       console.error('Failed to load gettr-android-lib:', error)
       throw error
     }
   }
 
-  async buildGettrLib(clientId?: string) {
+  async buildGettrWebLib(clientId?: string) {
     console.log('libdir:', process.env.GETTR_LIB_DIR)
 
     const coreDir = path.join(
       __dirname,
       '../..',
-      process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr'
+      process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr-web'
     )
 
     const outputDir = path.join(coreDir, 'dist')
@@ -492,6 +782,39 @@ export class TestCasesService {
 
     // 清理构建产物的缓存
     // 清理 ESM 产物的缓存无需 require.cache；这里保持向后兼容
+    const distIndexJs = path.join(outputDir, 'index.js')
+    const distIndexMjs = path.join(outputDir, 'index.mjs')
+    this.deepClearCache(distIndexJs)
+    this.deepClearCache(distIndexMjs)
+  }
+
+  async buildGettrMobileWebLib(clientId?: string) {
+    const mobileWebDir = path.join(
+      __dirname,
+      '../..',
+      process.env.GETTR_MOBILE_WEB_LIB_DIR || 'workspace/shared-libs/gettr-mobile-web'
+    )
+    const outputDir = path.join(mobileWebDir, 'dist')
+    const srcDir = path.join(mobileWebDir, 'src')
+    const indexPath = path.join(mobileWebDir, 'index.ts')
+    this.logger.debug(
+      `mobile web lib path: ${mobileWebDir}, outDir:${outputDir}, indexPath:${indexPath}`
+    )
+    if (fs.existsSync(outputDir)) {
+      fs.rmSync(outputDir, { recursive: true, force: true })
+    }
+    fs.mkdirSync(outputDir, { recursive: true })
+    await this.generateIndexWithTsMorph(mobileWebDir, srcDir, indexPath)
+    const result = await this.buildWithEsbuild(indexPath, outputDir)
+    try {
+      await this.emitDeclarationsWithTsMorph(mobileWebDir)
+    } catch (e) {
+      this.logger.warn(`emit d.ts failed for gettr-mobile-web lib: ${e}`)
+    }
+    clientId && this.logger.sendTo(clientId, `gettr-mobile-web lib ${result}`, 'info')
+
+    delete require.cache[require.resolve(indexPath)]
+
     const distIndexJs = path.join(outputDir, 'index.js')
     const distIndexMjs = path.join(outputDir, 'index.mjs')
     this.deepClearCache(distIndexJs)
@@ -713,11 +1036,11 @@ export class TestCasesService {
         ),
       },
       {
-        name: 'gettr-lib',
+        name: 'gettr-web-lib',
         dir: path.join(
           __dirname,
           '../..',
-          process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr'
+          process.env.GETTR_LIB_DIR || 'workspace/shared-libs/gettr-web'
         ),
       },
       {
@@ -769,34 +1092,73 @@ export class TestCasesService {
       byLib[lib] = byLib[lib] || []
       byLib[lib].push(e.path)
     }
-    const hasIndex = new Set(
-      entries
-        .filter((e) => /\/dist\/index\.d\.ts$/.test(e.path))
-        .map((e) => e.path.replace(/\/dist\/index\.d\.ts$/, ''))
-    )
     for (const lib of Object.keys(byLib)) {
       const base = `/types/${lib}`
       const indexPath = `${base}/dist/index.d.ts`
-      const exists = entries.some((e) => e.path === indexPath)
-      if (!exists) {
-        const files = byLib[lib]
-        const rels: string[] = []
-        for (const p of files) {
-          const m2 = p.match(/^\/types\/[^/]+\/dist\/(.+)$/)
-          if (!m2) continue
-          // Prefer src/*.d.ts first, then others
-          rels.push(m2[1])
-        }
-        // put likely entry first if present
-        const pri = rels.sort((a, b) => {
-          const score = (s: string) =>
-            s === 'index.d.ts' ? 0 : s === 'src/index.d.ts' ? 1 : s.startsWith('src/') ? 2 : 3
-          return score(a) - score(b)
-        })
-        const content =
-          pri.map((r) => `export * from './${r.replace(/'/g, "'")}'`).join('\n') + '\n'
-        entries.push({ path: indexPath, content })
+      const files = byLib[lib]
+      const rels: string[] = []
+      for (const p of files) {
+        const m2 = p.match(/^\/types\/[^/]+\/dist\/(.+)$/)
+        if (!m2) continue
+        // Prefer src/*.d.ts first, then others
+        rels.push(m2[1])
       }
+      // put likely entry first if present
+      const pri = rels.sort((a, b) => {
+        const score = (s: string) =>
+          s === 'index.d.ts' ? 0 : s === 'src/index.d.ts' ? 1 : s.startsWith('src/') ? 2 : 3
+        return score(a) - score(b)
+      })
+
+      let content = ''
+
+      // Special handling for gettr-android-lib: also expose per-branch and per-language
+      // namespaces, e.g.:
+      //   export * as release_1_73_0 from './src/release-1.73.0';
+      //   export * as release_1_73_0_en from './src/release-1.73.0/en';
+      if (lib === 'gettr-android-lib') {
+        const nsLines: string[] = []
+        const nsLangLines: string[] = []
+        for (const r of pri) {
+          // Branch-level index: src/<branch>/index.d.ts
+          const mBranch = r.match(/^src\/([^/]+)\/index\.d\.ts$/)
+          if (mBranch) {
+            const branch = mBranch[1] // e.g. release-1.73.0
+            let ns = branch.replace(/[^A-Za-z0-9]+/g, '_')
+            if (!/^[A-Za-z_]/.test(ns)) {
+              ns = `v_${ns}`
+            }
+            nsLines.push(`export * as ${ns} from './src/${branch}';`)
+            continue
+          }
+
+          // Branch + language index: src/<branch>/<lang>/index.d.ts
+          const mLang = r.match(/^src\/([^/]+)\/([^/]+)\/index\.d\.ts$/)
+          if (mLang) {
+            const branch = mLang[1]
+            const lang = mLang[2]
+            let baseNs = branch.replace(/[^A-Za-z0-9]+/g, '_')
+            if (!/^[A-Za-z_]/.test(baseNs)) {
+              baseNs = `v_${baseNs}`
+            }
+            let langNs = lang.replace(/[^A-Za-z0-9]+/g, '_')
+            if (!/^[A-Za-z_]/.test(langNs)) {
+              langNs = `v_${langNs}`
+            }
+            const ns = `${baseNs}_${langNs}`
+            nsLangLines.push(`export * as ${ns} from './src/${branch}/${lang}';`)
+          }
+        }
+        if (nsLines.length || nsLangLines.length) {
+          content += [...nsLines, ...nsLangLines].join('\n') + '\n'
+        }
+      }
+
+      const exportLines = pri.map((r) => `export * from './${r.replace(/'/g, "'")}'`)
+      content += exportLines.join('\n') + '\n'
+
+      // Always push/overwrite index.d.ts for each lib; later entries win in the editor.
+      entries.push({ path: indexPath, content })
     }
     return { files: entries }
   }

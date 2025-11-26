@@ -42,6 +42,65 @@ This `Turborepo` has some additional tools already set for you:
 
 This `Turborepo` already configured useful commands for all your apps and packages.
 
+## Project-specific helpers
+
+### Export `web-fe` routes to JSON
+
+为了从老版前端项目（`~/wks/web-fe`）中抽取所有可访问页面并用于生成页面对象库，本仓库提供了一个辅助脚本：
+
+- 脚本路径：`scripts/export-web-fe-routes.js`
+- 解析目标（默认）：`../web-fe/src/app/routes/index.js`
+- 输出内容：所有路由级页面的列表，每项包含：
+  - `source`: 路由来源（如 `jsx` 或 `array:regularRoutes` 等，方便回溯）
+  - `path`: React Router 中配置的 path（如 `/`, `/login`, `/user/:id` 等）
+  - `component`: 此路由渲染的组件名（如 `NewDashboard`, `NewLogin`）
+
+#### 使用方式
+
+在 `g-test-toolkit` 根目录执行：
+
+```bash
+cd /Users/laibin/wks/g-test-toolkit
+node scripts/export-web-fe-routes.js > web-fe-routes.json
+```
+
+如需指定其它路由文件（例如你调整了 `web-fe` 路由文件位置），可传入自定义路径：
+
+```bash
+node scripts/export-web-fe-routes.js ../web-fe/src/app/routes/index.js
+```
+
+生成的 `web-fe-routes.json` 可以作为后续步骤的输入，用于：
+
+- 枚举所有“可使用页面”（路由级别）；
+- 按 `path + 组件名` 批量生成 `gettr-web-lib` 风格的 Page Object 骨架（每个页面一个类、带基础导航方法）；
+- 与 `apps/api/workspace/shared-libs/gettr-web` 中已有的 `HomePage` / `LoginPage` 等实现结合，逐步扩展可复用的页面操作库。
+
+### 路由配置管理页面
+
+为方便查看和管理路由配置 JSON，Web 管理台提供了一个路由管理页面：
+
+- 页面路径：`/testcases/libs/routes`
+- 入口菜单：左侧侧边栏 TestCases → `Route Configs`
+- 当前数据来源：
+  - 仓库根目录的 `web-fe-routes.json`（旧版 Web 项目 web-fe 的路由清单，作为只读 legacy 项目显示）
+  - 以及 `routes-configs/*.json` 下的项目路由配置文件（可通过页面上传、覆盖和删除）
+
+页面能力：
+
+- 按项目维度加载并展示路由条目（`path + component + source`），支持按文本搜索与按来源过滤；
+- 列出所有已存在的路由配置项目（含 legacy web-fe），展示每个项目的路由数量、最近更新时间和文件路径；
+- 通过上传 JSON 新增路由项目（可选指定 projectId），或在选中项目的前提下用新的 JSON 覆盖该项目（非只读项目）；
+- 删除非 legacy 项目的路由配置文件（删除的是 `routes-configs/<projectId>.json`）；
+- 仅作为“页面索引/分析”使用，下一步可基于该 JSON 自动生成 `gettr-web-lib` 页面对象库，并与 `scenarios` / `testcases` 对应起来。
+
+如页面提示 “未检测到 web-fe-routes.json”，请先在仓库根目录执行：
+
+```bash
+cd /Users/laibin/wks/g-test-toolkit
+node scripts/export-web-fe-routes.js > web-fe-routes.json
+```
+
 #### Build
 
 ```bash

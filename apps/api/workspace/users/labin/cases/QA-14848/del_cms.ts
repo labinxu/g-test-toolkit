@@ -1,4 +1,4 @@
-import { TestCase, Test, withBrowser } from 'test-case';
+import { TestCase, Test, withBrowser } from 'core-lib';
 @Test()
 @withBrowser({ headless: false, debug: true })
 export class TestQA_14848_comments extends TestCase {

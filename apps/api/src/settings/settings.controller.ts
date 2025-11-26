@@ -93,6 +93,186 @@ export class SettingsController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Get('api-tests')
+  async getApiTests(@Req() req: any) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const cfg = await this.settings.getApiTestsConfig(Number(user.id));
+    return {
+      baseUrl: cfg.baseUrl || '',
+      defaultHeaders: cfg.defaultHeaders || {},
+      sampleLivePostId: cfg.sampleLivePostId || '',
+    };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Put('api-tests')
+  async setApiTests(
+    @Req() req: any,
+    @Body()
+    body: {
+      baseUrl?: string;
+      defaultHeaders?: Record<string, string> | null;
+      sampleLivePostId?: string;
+    },
+  ) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const baseUrl =
+      typeof body?.baseUrl === 'string' ? body.baseUrl.trim() : undefined;
+    const headersObj =
+      body?.defaultHeaders && typeof body.defaultHeaders === 'object'
+        ? body.defaultHeaders
+        : body?.defaultHeaders === null
+        ? null
+        : undefined;
+    const sampleLivePostId =
+      typeof body?.sampleLivePostId === 'string'
+        ? body.sampleLivePostId.trim()
+        : undefined;
+
+    await this.settings.setApiTestsConfig(
+      {
+        baseUrl,
+        defaultHeaders: headersObj,
+        sampleLivePostId,
+      },
+      Number(user.id),
+    );
+    const cfg = await this.settings.getApiTestsConfig(Number(user.id));
+    return {
+      ok: true,
+      baseUrl: cfg.baseUrl || '',
+      defaultHeaders: cfg.defaultHeaders || {},
+      sampleLivePostId: cfg.sampleLivePostId || '',
+    };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('api-tests/modules/:module')
+  async getApiTestsModule(@Req() req: any, @Param('module') module: string) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const cfg = await this.settings.getApiModuleEnvs(module, Number(user.id));
+    return cfg;
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Put('api-tests/modules/:module')
+  async setApiTestsModule(
+    @Req() req: any,
+    @Param('module') module: string,
+    @Body()
+    body: {
+      currentEnv?: string | null;
+      envs?: Array<{
+        name: string;
+        label?: string;
+        baseUrl: string;
+        headers?: Record<string, string>;
+      }>;
+      endpointHeaders?: Record<
+        string,
+        Record<string, Record<string, string>>
+      >;
+      endpointBaseUrls?: Record<string, Record<string, string>>;
+    },
+  ) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    await this.settings.setApiModuleEnvs(module, body || {}, Number(user.id));
+    const cfg = await this.settings.getApiModuleEnvs(module, Number(user.id));
+    return cfg;
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('api-tests/base-urls/:module')
+  async getApiTestBaseUrls(@Req() req: any, @Param('module') module: string) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const items = await this.settings.getApiTestBaseUrls(
+      module,
+      Number(user.id),
+      20,
+    );
+    return { items };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('api-tests/module-mapping/:module')
+  async getApiTestModuleMapping(@Req() req: any, @Param('module') module: string) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const result = await this.settings.getApiTestEndpointConfigs(
+      module,
+      Number(user.id),
+    );
+    return result;
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Put('api-tests/module-mapping/:module/:endpointId')
+  async setApiTestModuleMapping(
+    @Req() req: any,
+    @Param('module') module: string,
+    @Param('endpointId') endpointId: string,
+    @Body()
+    body: {
+      baseUrl?: string;
+      headers?: Record<string, string> | null;
+    },
+  ) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    await this.settings.setApiTestEndpointConfig(
+      module,
+      endpointId,
+      body || {},
+      Number(user.id),
+    );
+    return { ok: true };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('curl-payloads')
+  async getCurlPayloads(@Req() req: any) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const items = await this.settings.getCurlPayloads(Number(user.id));
+    return { items };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Put('curl-payloads')
+  async upsertCurlPayload(
+    @Req() req: any,
+    @Body()
+    body: {
+      method?: string;
+      category?: string;
+      url?: string;
+      headers?: string;
+      payload?: string;
+    },
+  ) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const method = typeof body?.method === 'string' ? body.method : '';
+    const category = typeof body?.category === 'string' ? body.category : '';
+    const url = typeof body?.url === 'string' ? body.url : '';
+    const headers = typeof body?.headers === 'string' ? body.headers : '';
+    const payload = typeof body?.payload === 'string' ? body.payload : '';
+    if (!method || !category) {
+      throw new BadRequestException('method and category are required');
+    }
+    const saved = await this.settings.upsertCurlPayload(
+      { method, category, url, headers, payload },
+      Number(user.id),
+    );
+    return saved;
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('admins')
   async listAdmins(@Req() req: any) {
     await ensureAdminOrBootstrap(this.users, req);
@@ -306,5 +486,88 @@ export class SettingsController {
     }
     await this.users.save(user);
     return { ok: true };
+  }
+
+  // ---- App store last-update tracking ----
+  private parseLastUpdateMap(text: string | null | undefined): Record<string, string> {
+    const map: Record<string, string> = {};
+    const raw = (text || '').trim();
+    if (!raw) return map;
+    const parts = raw.split(';');
+    for (const part of parts) {
+      const seg = part.trim();
+      if (!seg) continue;
+      const idx = seg.indexOf(',');
+      if (idx <= 0) continue;
+      const key = seg.slice(0, idx).trim();
+      const val = seg.slice(idx + 1).trim();
+      if (key) map[key] = val;
+    }
+    return map;
+  }
+
+  private serializeLastUpdateMap(map: Record<string, string>): string {
+    const entries = Object.entries(map)
+      .filter(([k, v]) => k && v)
+      .map(([k, v]) => `${k},${v}`);
+    return entries.join('; ');
+  }
+
+  private fmtYMDHMS(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    const ss = pad(d.getSeconds());
+    // Requested format: 2025/01/01:00:00:00
+    return `${yyyy}/${mm}/${dd}:${hh}:${mi}:${ss}`;
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('store-last-update')
+  async getStoreLastUpdate(@Req() req: any) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const raw = await this.settings.get('last-update');
+    const map = this.parseLastUpdateMap(raw);
+    return { raw: raw || '', map };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Put('store-last-update')
+  async setStoreLastUpdate(
+    @Req() req: any,
+    @Body()
+    body: {
+      store?: string; // expected: 'google' | 'apple' (aligned with UI)
+      lastUpdate?: string; // 'YYYY/MM/DD:HH:MM:SS' or ISO
+      lastUpdateISO?: string; // optional ISO alternative
+      alsoSetAppStore?: boolean; // default true: keep app-store in sync with UI
+    },
+  ) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const store = (body?.store || '').trim();
+    if (!store) throw new BadRequestException('store is required');
+    let ts = (body?.lastUpdate || '').trim();
+    if (!ts && body?.lastUpdateISO) {
+      const t = Date.parse(String(body.lastUpdateISO));
+      if (Number.isFinite(t)) ts = this.fmtYMDHMS(new Date(t));
+    }
+    if (!ts) throw new BadRequestException('lastUpdate or lastUpdateISO is required');
+
+    const raw = await this.settings.get('last-update');
+    const map = this.parseLastUpdateMap(raw);
+    map[store] = ts;
+    const nextRaw = this.serializeLastUpdateMap(map);
+    await this.settings.set('last-update', nextRaw);
+
+    const shouldSetAppStore = body?.alsoSetAppStore !== false;
+    if (shouldSetAppStore) {
+      await this.settings.set('app-store', store);
+    }
+    return { ok: true, raw: nextRaw, map };
   }
 }

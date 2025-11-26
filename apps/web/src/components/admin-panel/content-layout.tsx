@@ -1,22 +1,22 @@
-'use client';
-import { Navbar } from '@/components/admin-panel/navbar';
+'use client'
+import { Navbar } from '@/components/admin-panel/navbar'
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react'
 
 interface ContentLayoutProps {
-  children: React.ReactNode;
-  title?: string;
+  children: React.ReactNode
+  title?: string
 }
 
 export function ContentLayout({ children }: ContentLayoutProps) {
-  const navbarRef = useRef<HTMLDivElement>(null);
-  const [navbarHeight, setNavbarHeight] = useState(56);
+  const navbarRef = useRef<HTMLDivElement>(null)
+  const [navbarHeight, setNavbarHeight] = useState(56)
 
   useEffect(() => {
     if (navbarRef.current) {
-      setNavbarHeight(navbarRef.current.offsetHeight);
+      setNavbarHeight(navbarRef.current.offsetHeight)
     }
-  }, []);
+  }, [])
 
   return (
     <div className="flex flex-1 flex-col">
@@ -24,11 +24,11 @@ export function ContentLayout({ children }: ContentLayoutProps) {
         <Navbar />
       </div>
       <div
-        className="flex overflow-y-auto dark:bg-zinc-900 rounded-lg shadow-lg pt-1 ]"
+        className="flex overflow-x-hidden overflow-y-auto rounded-lg border-2 shadow-lg dark:bg-zinc-900"
         style={{ height: `calc(100vh - ${navbarHeight}px)` }}
       >
         {children}
       </div>
     </div>
-  );
+  )
 }

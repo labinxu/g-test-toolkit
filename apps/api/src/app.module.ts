@@ -20,12 +20,41 @@ import { AiModule } from './ai/ai.module';
 import { TraceabilityModule } from './traceability/traceability.module';
 import { Requirement } from './traceability/entities/requirement.entity';
 import { ReqTestMap } from './traceability/entities/req-test-map.entity';
+import { ApiTestBaseUrl } from './api-tests/api-test-base-url.entity';
+import { UserScenario } from './user-scenarios/entities/user-scenario.entity';
+import { UserScenarioStep } from './user-scenarios/entities/user-scenario-step.entity';
+import { ActionPage } from './user-scenarios/entities/action-page.entity';
+import { ActionPageAction } from './user-scenarios/entities/action-page-action.entity';
+import { ActionParam } from './user-scenarios/entities/action-param.entity';
+import { ActionPlatform } from './user-scenarios/entities/action-platform.entity';
+import { UserScenarioOption } from './user-scenarios/entities/user-scenario-option.entity';
+import { EnvTemplate } from './user-scenarios/entities/env-template.entity';
+import { UserScenariosModule } from './user-scenarios/user-scenarios.module';
+import { ApiTestsModule } from './api-tests/api-tests.module';
+import { CurlModule } from './curl/curl.module';
+import { FlutterModule } from './mobile/flutter/flutter.module';
+import { LiveModule } from './live/live.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: '../../database/auth_db.sqlite',
-      entities: [User, TestCase, Setting, Requirement, ReqTestMap],
+      entities: [
+        User,
+        TestCase,
+        Setting,
+        Requirement,
+        ReqTestMap,
+        ApiTestBaseUrl,
+        UserScenario,
+        UserScenarioStep,
+        ActionPage,
+        ActionPageAction,
+        ActionParam,
+        ActionPlatform,
+        UserScenarioOption,
+        EnvTemplate,
+      ],
       synchronize: true,
     }),
     AndroidModule,
@@ -39,6 +68,11 @@ import { ReqTestMap } from './traceability/entities/req-test-map.entity';
     AiModule,
     SettingsModule,
     TraceabilityModule,
+    ApiTestsModule,
+    CurlModule,
+    FlutterModule,
+    UserScenariosModule,
+    LiveModule,
   ],
   controllers: [AppController],
   providers: [AppService, LoggerService, LoggerGateway],

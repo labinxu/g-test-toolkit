@@ -6,31 +6,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Form, FormItem, FormControl, FormField, FormMessage } from '../ui/form';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { FileType } from './file-type';
+import { OptionsSelect, type OptionsSelectItem } from '@/components/select/options-select';
 import { toast } from 'sonner';
 import { normalizeResponseError } from '@/lib/error';
 
 export default function NewFileOrFolder({
   parentDir,
   onCreated,
+  filterText,
+  onFilterChange,
 }: {
   parentDir: string;
   onCreated?: () => void;
+  filterText?: string;
+  onFilterChange?: (value: string) => void;
 }) {
   const fileNameSchema = z
     .string()
@@ -82,12 +71,12 @@ export default function NewFileOrFolder({
     }
   }
   return (
-    <div className="flex flex-1 ">
+    <div className="flex flex-col gap-2 m-2">
       <Form {...form}>
         <form
           id="id-create-file"
           onSubmit={form.handleSubmit(handleSubmit)}
-          className="flex flex-row items-center gap-1 m-2 rounded-lg shadow-2xl justify-between"
+          className="flex flex-row items-center gap-2 rounded-lg shadow-2xl px-2 py-1"
         >
           <FormField
             control={form.control}
@@ -95,7 +84,19 @@ export default function NewFileOrFolder({
             render={({ field }) => (
               <FormItem>
                 <FormControl>
-                  <FileType value={field.value} setValue={field.onChange} />
+                  <OptionsSelect
+                    id="id-type-of-file"
+                    value={field.value}
+                    items={
+                      [
+                        { label: 'File', value: 'file' },
+                        { label: 'Folder', value: 'folder' },
+                      ] as OptionsSelectItem<'file' | 'folder'>[]
+                    }
+                    onSelect={(item) => field.onChange(item.value)}
+                    triggerClassName="h-8 w-[80px] text-xs px-2"
+                    contentClassName="w-[120px]"
+                  />
                 </FormControl>
               </FormItem>
             )}
@@ -106,17 +107,36 @@ export default function NewFileOrFolder({
             render={({ field }) => (
               <FormItem>
                 <FormControl>
-                  <Input placeholder="type name" {...field} />
+                  <Input
+                    placeholder="New file or folder name"
+                    className="h-8 text-xs w-[180px]"
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <Button type="submit" variant={'secondary'} size={'icon'}>
-            <PlusIcon />
+          <Button
+            type="submit"
+            variant={'secondary'}
+            size={'icon'}
+            className="h-8 w-8"
+          >
+            <PlusIcon className="h-4 w-4" />
           </Button>
         </form>
       </Form>
+      {typeof onFilterChange === 'function' && (
+        <div className="flex items-center gap-1">
+          <Input
+            placeholder="Filter files by name / keyword"
+            className="h-8 text-xs"
+            value={filterText ?? ''}
+            onChange={(e) => onFilterChange(e.target.value)}
+          />
+        </div>
+      )}
     </div>
   );
 }
