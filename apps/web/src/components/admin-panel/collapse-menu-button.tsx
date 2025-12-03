@@ -63,12 +63,12 @@ export function CollapseMenuButton({
       className="w-full"
     >
       <CollapsibleTrigger
-        className="[&[data-state=open]>div>div>svg]:rotate-180 mb-1"
+        className="[&[data-state=open]>div>div>svg]:rotate-180"
         asChild
       >
         <Button
           variant={isSubmenuActive ? 'secondary' : 'ghost'}
-          className="w-full justify-start h-10"
+          className="w-full justify-start h-10 mb-1"
         >
           <div className="w-full items-center flex justify-between">
             <div className="flex items-center">
@@ -77,7 +77,7 @@ export function CollapseMenuButton({
               </span>
               <p
                 className={cn(
-                  'max-w-[150px] truncate',
+                  'max-w-[200px] truncate',
                   isOpen
                     ? 'translate-x-0 opacity-100'
                     : '-translate-x-96 opacity-0',

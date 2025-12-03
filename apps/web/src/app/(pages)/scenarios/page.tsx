@@ -25,7 +25,7 @@ import TablePagination from '@/components/table-pagination'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { GTable } from '@/components/g-table'
 import { cn } from '@/lib/utils'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError, ensureResponseOk } from '@/lib/error'
 import { toast } from 'sonner'
 import {
   ChevronsUpDown,
@@ -431,6 +431,10 @@ export default function ScenariosPage() {
   const [stepDialogCheckExpectedUrl, setStepDialogCheckExpectedUrl] = useState('')
   const [stepDialogCheckTimeoutMs, setStepDialogCheckTimeoutMs] = useState('')
   const [editingStepIdForDialog, setEditingStepIdForDialog] = useState<string | null>(null)
+  const [stepDialogOrder, setStepDialogOrder] = useState<number>(1)
+  const [stepDialogApiMethod, setStepDialogApiMethod] = useState<string>('GET')
+  const [stepDialogApiPath, setStepDialogApiPath] = useState<string>('')
+  const [stepDialogApiBody, setStepDialogApiBody] = useState<string>('')
   const [envDialogOpen, setEnvDialogOpen] = useState(false)
   const [envDialogLoading, setEnvDialogLoading] = useState(false)
   const [envDialogTemplates, setEnvDialogTemplates] = useState<EnvTemplateSummary[]>([])
@@ -440,6 +444,15 @@ export default function ScenariosPage() {
   const [envDialogDriver, setEnvDialogDriver] = useState<'browser' | 'android' | 'ios' | 'other'>(
     'browser'
   )
+  const [docAiPromptOpen, setDocAiPromptOpen] = useState(false)
+  const [docAiPromptText, setDocAiPromptText] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    try {
+      return localStorage.getItem('gtt:scenarios:docAiHint') || ''
+    } catch {
+      return ''
+    }
+  })
   const [platform, setPlatform] = useState<string>(() => {
     if (typeof window === 'undefined') return 'gettr-web'
     try {
@@ -535,6 +548,31 @@ export default function ScenariosPage() {
       toast.error('请先在左侧选择一个用例')
       return
     }
+    const plat = (selectedCase.platform || platform || '').toString().toLowerCase()
+    const isApiPlatform = plat.includes('-api-')
+
+    if (isApiPlatform) {
+      const caseId = selectedCase.id
+      const list = stepsByCase[caseId] || []
+      const nextOrder = list.length ? Math.max(...list.map((s) => s.order)) + 1 : 1
+      setEditingStepIdForDialog(null)
+      setStepDialogOrder(nextOrder)
+      setStepDialogApiMethod('GET')
+      setStepDialogApiPath('')
+      setStepDialogApiBody('')
+      setStepDialogActionText('')
+      setStepDialogExpected('')
+      setStepDialogPageKey(undefined)
+      setStepDialogActionKey(undefined)
+      setStepDialogArgs({})
+      setStepDialogCheckType('')
+      setStepDialogCheckLocator('')
+      setStepDialogCheckExpectedUrl('')
+      setStepDialogCheckTimeoutMs('')
+      setStepDialogOpen(true)
+      return
+    }
+
     // 如果尚未加载动作目录，回退到手工模式
     if (!actionCatalog || !actionCatalog.pages?.length) {
       setStepsByCase((prev) => {
@@ -739,13 +777,61 @@ export default function ScenariosPage() {
       toast.error('请先在左侧选择一个用例')
       return
     }
+    const plat = (selectedCase.platform || platform || '').toString().toLowerCase()
+    const isApiPlatform = plat.includes('-api-')
+    const list = stepsByCase[selectedCase.id] || []
+    const step = list.find((s) => s.id === stepId)
+    if (!step) return
+
+    // 对于 API 平台（如 gettr-api-*），不依赖页面动作目录，直接编辑步骤文本
+    if (isApiPlatform) {
+      // 解析 data 字段中的简单 key=value 对，支持 method/path/body
+      let method = 'GET'
+      let pathVal = ''
+      let bodyVal = ''
+      const rawData = (step.data || '').toString()
+      if (rawData.trim()) {
+        for (const part of rawData.split(',')) {
+          const seg = part.trim()
+          if (!seg) continue
+          const eqIdx = seg.indexOf('=')
+          if (eqIdx <= 0) continue
+          const name = seg
+            .slice(0, eqIdx)
+            .trim()
+            .toLowerCase()
+          const value = seg.slice(eqIdx + 1).trim()
+          if (name === 'method') {
+            method = value || method
+          } else if (name === 'path') {
+            pathVal = value
+          } else if (name === 'body' || name === 'payload') {
+            bodyVal = value
+          }
+        }
+      }
+      setEditingStepIdForDialog(stepId)
+      setStepDialogPageKey(undefined)
+      setStepDialogActionKey(undefined)
+      setStepDialogArgs({})
+      setStepDialogExpected(step.expected || '')
+      setStepDialogActionText(step.action || '')
+      setStepDialogCheckType('')
+      setStepDialogCheckLocator('')
+      setStepDialogCheckExpectedUrl('')
+      setStepDialogCheckTimeoutMs('')
+      setStepDialogOrder(Number.isFinite(step.order) ? step.order : 1)
+      setStepDialogApiMethod(method || 'GET')
+      setStepDialogApiPath(pathVal)
+      setStepDialogApiBody(bodyVal)
+      setStepDialogOpen(true)
+      return
+    }
+
     if (!actionCatalog || !actionCatalog.pages?.length) {
       toast.error('页面动作目录尚未加载，无法使用绑定编辑')
       return
     }
-    const list = stepsByCase[selectedCase.id] || []
-    const step = list.find((s) => s.id === stepId)
-    if (!step) return
 
     let binding: StepBindingV1 | null = null
     try {
@@ -876,6 +962,12 @@ export default function ScenariosPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res as any)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '删除用例失败')
       }
       setStepsByCase((prev) => {
@@ -893,7 +985,9 @@ export default function ScenariosPage() {
       toast.success('已删除该用户场景')
       await refreshCases()
     } catch (e: any) {
-      toast.error(e?.message || '删除用例失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '删除用例失败')
+      }
     } finally {
       setDeletingId((curr) => (curr === id ? null : curr))
     }
@@ -953,11 +1047,19 @@ export default function ScenariosPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res as any)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '保存步骤失败')
       }
       toast.success('已保存步骤')
     } catch (e: any) {
-      toast.error(e?.message || '保存步骤失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '保存步骤失败')
+      }
     }
   }
 
@@ -967,7 +1069,8 @@ export default function ScenariosPage() {
   ) => {
     const rawPlatform = (casePlatform || platform || 'gettr-web').toString().trim()
     const p = rawPlatform || 'gettr-web'
-    const d: 'browser' | 'android' = p === 'gettr-android' ? 'android' : 'browser'
+    const d: 'browser' | 'android' | 'ios' | 'other' =
+      p === 'gettr-android' ? 'android' : p.includes('-api-') ? 'other' : 'browser'
     setEnvDialogCaseId(caseId)
     setEnvDialogPlatform(p)
     setEnvDialogDriver(d)
@@ -981,6 +1084,12 @@ export default function ScenariosPage() {
       const res = await fetch(`/api/env-templates?${qs.toString()}`, { cache: 'no-store' })
       if (!res.ok) {
         const err = await normalizeResponseError(res as any)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '加载环境模板失败')
       }
       const data = await res.json()
@@ -988,8 +1097,7 @@ export default function ScenariosPage() {
       const mapped: EnvTemplateSummary[] = list.map((it) => ({
         id: Number(it.id),
         platform: String(it.platform || p),
-        driver: (it.driver ||
-          d) as 'browser' | 'android' | 'ios' | 'other',
+        driver: (it.driver || d) as 'browser' | 'android' | 'ios' | 'other',
         key: String(it.key || ''),
         name: String(it.name || it.key || ''),
         description: (it.description as string | null | undefined) ?? null,
@@ -1012,7 +1120,9 @@ export default function ScenariosPage() {
         }
       }
     } catch (e: any) {
-      toast.error(e?.message || '加载环境模板失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '加载环境模板失败')
+      }
       setEnvDialogTemplates([])
     } finally {
       setEnvDialogLoading(false)
@@ -1028,6 +1138,12 @@ export default function ScenariosPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res as any)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '生成代码失败')
       }
       const data = await res.json()
@@ -1062,7 +1178,9 @@ export default function ScenariosPage() {
       } catch {}
       await refreshCases()
     } catch (e: any) {
-      toast.error(e?.message || '生成代码失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '生成代码失败')
+      }
     }
   }
 
@@ -1084,6 +1202,12 @@ export default function ScenariosPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res as any)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '获取用例列表失败')
       }
       const data = (await res.json()) as UserScenarioSummary[]
@@ -1093,7 +1217,9 @@ export default function ScenariosPage() {
         setSelectedCaseId(data[0].id)
       }
     } catch (e: any) {
-      toast.error(e?.message || '获取用例列表失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '获取用例列表失败')
+      }
     } finally {
       setLoadingCases(false)
     }
@@ -1108,10 +1234,16 @@ export default function ScenariosPage() {
           cache: 'no-store',
         }
       )
-      if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
-        throw new Error(err.message || '获取页面动作目录失败')
-      }
+      await ensureResponseOk(res, {
+        defaultMessage: '获取页面动作目录失败',
+        onUnauthorized: () => {
+          try {
+            router.push('/signin')
+          } catch {
+            // ignore navigation errors
+          }
+        },
+      })
       const data = await res.json()
       const catalog: ActionCatalog | null =
         (data && (data.catalog as ActionCatalog)) ||
@@ -1120,7 +1252,12 @@ export default function ScenariosPage() {
         setActionCatalog(catalog)
       }
     } catch (e: any) {
-      // 加载失败不影响主流程，仅在控制台提示
+      // 加载失败不影响主流程；鉴权错误已跳转登录页，不再打印
+      if (isUnauthorizedError(e)) {
+        return
+      }
+      // 其它错误仅在控制台提示，避免打断主流程
+      // eslint-disable-next-line no-console
       console.error(e?.message || e)
     } finally {
       setLoadingCatalog(false)
@@ -1146,12 +1283,20 @@ export default function ScenariosPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res as any)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '更新用例失败')
       }
       await refreshCases()
       toast.success('已更新用例信息')
     } catch (e: any) {
-      toast.error(e?.message || '更新用例失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '更新用例失败')
+      }
     }
   }
 
@@ -1162,6 +1307,12 @@ export default function ScenariosPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res as any)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '获取用例详情失败')
       }
       const data = await res.json()
@@ -1175,7 +1326,9 @@ export default function ScenariosPage() {
       }))
       setStepsByCase((prev) => ({ ...prev, [caseId]: steps }))
     } catch (e: any) {
-      toast.error(e?.message || '获取用例详情失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '获取用例详情失败')
+      }
     }
   }
 
@@ -1195,10 +1348,19 @@ export default function ScenariosPage() {
       }
       const data = await res.json()
       const items = Array.isArray(data?.items) ? data.items : []
-      const opts: OptionsSelectItem<string>[] = items.map((p: any) => ({
+      const optsBase: OptionsSelectItem<string>[] = items.map((p: any) => ({
         value: p.key as string,
         label: (p.label as string) || (p.key as string),
       }))
+      const hasApiLivestream = optsBase.some((p) => p.value === 'gettr-api-livestream')
+      const opts: OptionsSelectItem<string>[] = hasApiLivestream
+        ? optsBase
+        : optsBase.concat([
+            {
+              value: 'gettr-api-livestream',
+              label: 'GETTR API (Livestream)',
+            },
+          ])
       setPlatforms(opts)
       if (!platform && opts.length) {
         const def =
@@ -1314,7 +1476,7 @@ export default function ScenariosPage() {
       <div>
         <h1 className="text-2xl font-semibold">用户场景管理</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          从 CSV 或说明文档导入检查点，在此补充详细步骤与检查点，并生成 workspace 测试代码。
+          可从结构化 CSV（推荐使用 Livestream CSV 模板）或说明文档/设计文档导入用例草稿，在此补充详细步骤与检查点，并生成 workspace 测试代码。
         </p>
       </div>
 
@@ -1392,7 +1554,9 @@ export default function ScenariosPage() {
                           <FileUp className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>上传 CSV</TooltipContent>
+                      <TooltipContent sideOffset={6}>
+                        从结构化 CSV 导入（要求符合 Livestream CSV 模板）
+                      </TooltipContent>
                     </Tooltip>
                   </form>
                   <form className="flex items-center gap-1.5" onSubmit={(e) => e.preventDefault()}>
@@ -1426,6 +1590,9 @@ export default function ScenariosPage() {
                           formData.append('docType', 'livekit')
                           formData.append('sourceDoc', file.name || 'livekit')
                           formData.append('platform', platform || 'gettr-web')
+                          if (docAiPromptText && docAiPromptText.trim()) {
+                            formData.append('aiHint', docAiPromptText.trim())
+                          }
                           const res = await fetch(`${apiPrefix}/ingest-doc-upload`, {
                             method: 'POST',
                             body: formData,
@@ -1484,10 +1651,7 @@ export default function ScenariosPage() {
                           disabled={ingestingDoc}
                           onClick={() => {
                             if (ingestingDoc) return
-                            const input = document.getElementById(
-                              'ls-upload-doc'
-                            ) as HTMLInputElement | null
-                            input?.click()
+                            setDocAiPromptOpen(true)
                           }}
                         >
                           {ingestingDoc ? (
@@ -1497,7 +1661,9 @@ export default function ScenariosPage() {
                           )}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>从说明文档导入</TooltipContent>
+                      <TooltipContent sideOffset={6}>
+                        从说明文档/设计文档导入（支持 md/txt/csv，自动解析为用例草稿）
+                      </TooltipContent>
                     </Tooltip>
                   </form>
                 </div>
@@ -2335,6 +2501,17 @@ export default function ScenariosPage() {
                   当前平台尚未配置环境模板，将使用默认占位配置。
                 </p>
               )}
+              <button
+                type="button"
+                className="mt-1 text-[11px] text-blue-600 hover:underline"
+                onClick={() => {
+                  if (envDialogLoading) return
+                  setEnvDialogOpen(false)
+                  router.push('/settings/env-templates')
+                }}
+              >
+                在「环境模板管理」中配置更多模板…
+              </button>
             </div>
           </div>
           <DialogFooter>
@@ -2399,6 +2576,12 @@ export default function ScenariosPage() {
             <DialogHeader>
               <DialogTitle>
                 {(() => {
+                  const plat = (selectedCase?.platform || platform || '').toString().toLowerCase()
+                  const isApiPlatform = plat.includes('-api-')
+                  if (isApiPlatform) {
+                    const base = editingStepIdForDialog != null ? '编辑步骤（API）' : '添加步骤（API）'
+                    return base
+                  }
                   const page =
                     (actionCatalog?.pages || []).find((p) => p.key === stepDialogPageKey) || null
                   const action = page?.actions.find((a) => a.key === stepDialogActionKey) || null
@@ -2411,8 +2594,14 @@ export default function ScenariosPage() {
                 })()}
               </DialogTitle>
               <DialogDescription>
-                通过下拉选择页面和动作，自动与 gettr-web-lib 中的 Page
-                类和方法建立映射，再补充参数与期望检查点。
+                {(() => {
+                  const plat = (selectedCase?.platform || platform || '').toString().toLowerCase()
+                  const isApiPlatform = plat.includes('-api-')
+                  if (isApiPlatform) {
+                    return '直接编辑步骤说明与期望结果，适用于基于 API 的用户场景（不绑定页面动作）。'
+                  }
+                  return '通过下拉选择页面和动作，自动与 gettr-web-lib 中的 Page 类和方法建立映射，再补充参数与期望检查点。'
+                })()}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">
@@ -2423,6 +2612,13 @@ export default function ScenariosPage() {
                 value={stepDialogActionText}
                 onChange={(e) => setStepDialogActionText(e.target.value)}
                 placeholder={(() => {
+                  const plat = (selectedCase?.platform || platform || '')
+                    .toString()
+                    .toLowerCase()
+                  const isApiPlatform = plat.includes('-api-')
+                  if (isApiPlatform) {
+                    return '例如：调用 /u/live/stream 接口，校验返回流对象信息。'
+                  }
                   const page =
                     (actionCatalog?.pages || []).find((p) => p.key === stepDialogPageKey) || null
                   const action = page?.actions.find((a) => a.key === stepDialogActionKey) || null
@@ -2431,6 +2627,59 @@ export default function ScenariosPage() {
                 })()}
               />
             </div>
+            {(() => {
+              const plat = (selectedCase?.platform || platform || '')
+                .toString()
+                .toLowerCase()
+              const isApiPlatform = plat.includes('-api-')
+              if (!isApiPlatform) return null
+              return (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="api-step-method">HTTP 方法</Label>
+                      <OptionsSelect<string>
+                        id="api-step-method"
+                        value={stepDialogApiMethod}
+                        items={[
+                          { value: 'GET', label: 'GET' },
+                          { value: 'POST', label: 'POST' },
+                          { value: 'PUT', label: 'PUT' },
+                          { value: 'DELETE', label: 'DELETE' },
+                          { value: 'PATCH', label: 'PATCH' },
+                        ]}
+                        placeholder="选择方法"
+                        onSelect={(item) =>
+                          setStepDialogApiMethod(
+                            (item.value || 'GET').toString().toUpperCase() || 'GET'
+                          )
+                        }
+                        triggerClassName="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="api-step-path">请求路径</Label>
+                      <Input
+                        id="api-step-path"
+                        value={stepDialogApiPath}
+                        onChange={(e) => setStepDialogApiPath(e.target.value)}
+                        placeholder="/u/live/stream"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="api-step-body">请求 Body（JSON，可选）</Label>
+                    <Textarea
+                      id="api-step-body"
+                      rows={3}
+                      value={stepDialogApiBody}
+                      onChange={(e) => setStepDialogApiBody(e.target.value)}
+                      placeholder='例如：{"streamIds":["lv_p_cbx_live_1s"]}'
+                    />
+                  </div>
+                </>
+              )
+            })()}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="ls-step-page">页面</Label>
@@ -2685,123 +2934,199 @@ export default function ScenariosPage() {
                 </Button>
               </DialogClose>
               <Button
-              type="button"
-              onClick={() => {
-                if (!selectedCase) {
-                  toast.error('请先在左侧选择一个用例')
-                  return
-                }
-                const catalog = actionCatalog
-                if (!catalog) {
-                  toast.error('页面动作目录尚未加载')
-                  return
-                }
-                const page =
-                  catalog.pages.find((p) => p.key === stepDialogPageKey) || catalog.pages[0] || null
-                if (!page) {
-                  toast.error('请先选择页面')
-                  return
-                }
-                const action = page.actions.find((a) => a.key === stepDialogActionKey) || null
-                if (!action) {
-                  toast.error('请先选择动作')
-                  return
-                }
-                const params = action.params || []
-                for (const param of params) {
-                  if (param.required && !stepDialogArgs[param.name]) {
-                    toast.error(`请输入参数：${param.name}`)
+                type="button"
+                onClick={() => {
+                  if (!selectedCase) {
+                    toast.error('请先在左侧选择一个用例')
                     return
                   }
-                }
-                let checkRule: StepCheckRule | undefined
-                if (stepDialogCheckType) {
-                  if (stepDialogCheckType === 'element-visible' || stepDialogCheckType === 'element-hidden') {
-                    const rawLocator =
-                      stepDialogCheckLocator.trim() ||
-                      ((action as any).locator ? String((action as any).locator).trim() : '')
-                    if (!rawLocator) {
-                      toast.error('请选择“元素出现/消失”时需补充元素定位字符串')
+                  const plat = (selectedCase.platform || platform || '')
+                    .toString()
+                    .toLowerCase()
+                  const isApiPlatform = plat.includes('-api-')
+
+                  if (isApiPlatform) {
+                    const caseId = selectedCase.id
+                    const list = stepsByCase[caseId] || []
+                    const method =
+                      (stepDialogApiMethod || 'GET').toString().trim().toUpperCase() || 'GET'
+                    const pathVal = (stepDialogApiPath || '').toString().trim()
+                    const bodyVal = (stepDialogApiBody || '').toString().trim()
+                    const parts: string[] = []
+                    if (method) parts.push(`method=${method}`)
+                    if (pathVal) parts.push(`path=${pathVal}`)
+                    if (bodyVal) parts.push(`body=${bodyVal}`)
+                    const dataText = parts.join(', ')
+                    const actionText = (stepDialogActionText || '').trim() || 'API 调用'
+                    const expectedText = (stepDialogExpected || '').trim() || '（待补充）'
+
+                    setStepsByCase((prev) => {
+                      const currentList = prev[caseId] || []
+
+                      if (editingStepIdForDialog) {
+                        const targetId = editingStepIdForDialog
+                        const updated = currentList.map((s) =>
+                          s.id === targetId
+                            ? {
+                                ...s,
+                                action: actionText,
+                                data: dataText,
+                                expected: expectedText,
+                              }
+                            : s
+                        )
+                        return { ...prev, [caseId]: updated }
+                      }
+
+                      const baseOrder =
+                        stepDialogOrder && Number.isFinite(stepDialogOrder)
+                          ? stepDialogOrder
+                          : currentList.length > 0
+                          ? Math.max(...currentList.map((s) => s.order)) + 1
+                          : 1
+
+                      const newStep: UserScenarioStep = {
+                        id: `${caseId}-${Date.now()}`,
+                        order: baseOrder,
+                        action: actionText,
+                        data: dataText,
+                        expected: expectedText,
+                      }
+                      return { ...prev, [caseId]: [...currentList, newStep] }
+                    })
+                    setEditingStepIdForDialog(null)
+                    setStepDialogOpen(false)
+                    return
+                  }
+
+                  const catalog = actionCatalog
+                  if (!catalog) {
+                    toast.error('页面动作目录尚未加载')
+                    return
+                  }
+                  const page =
+                    catalog.pages.find((p) => p.key === stepDialogPageKey) ||
+                    catalog.pages[0] ||
+                    null
+                  if (!page) {
+                    toast.error('请先选择页面')
+                    return
+                  }
+                  const action =
+                    page.actions.find((a) => a.key === stepDialogActionKey) || null
+                  if (!action) {
+                    toast.error('请先选择动作')
+                    return
+                  }
+                  const params = action.params || []
+                  for (const param of params) {
+                    if (param.required && !stepDialogArgs[param.name]) {
+                      toast.error(`请输入参数：${param.name}`)
                       return
                     }
-                    const timeoutNum = Number(stepDialogCheckTimeoutMs || '')
-                    checkRule = {
-                      type: stepDialogCheckType,
-                      locator: rawLocator,
-                      timeoutMs:
-                        Number.isFinite(timeoutNum) && timeoutNum > 0 ? Math.floor(timeoutNum) : undefined,
-                    }
-                  } else if (
-                    stepDialogCheckType === 'url-contains' ||
-                    stepDialogCheckType === 'url-equals'
-                  ) {
-                    const rawUrl = stepDialogCheckExpectedUrl.trim()
-                    if (!rawUrl) {
-                      toast.error('请选择“URL 检查”时需补充期望 URL')
-                      return
-                    }
-                    const timeoutNum = Number(stepDialogCheckTimeoutMs || '')
-                    checkRule = {
-                      type: stepDialogCheckType,
-                      expectedUrl: rawUrl,
-                      timeoutMs:
-                        Number.isFinite(timeoutNum) && timeoutNum > 0 ? Math.floor(timeoutNum) : undefined,
+                  }
+                  let checkRule: StepCheckRule | undefined
+                  if (stepDialogCheckType) {
+                    if (
+                      stepDialogCheckType === 'element-visible' ||
+                      stepDialogCheckType === 'element-hidden'
+                    ) {
+                      const rawLocator =
+                        stepDialogCheckLocator.trim() ||
+                        ((action as any).locator
+                          ? String((action as any).locator).trim()
+                          : '')
+                      if (!rawLocator) {
+                        toast.error('请选择“元素出现/消失”时需补充元素定位字符串')
+                        return
+                      }
+                      const timeoutNum = Number(stepDialogCheckTimeoutMs || '')
+                      checkRule = {
+                        type: stepDialogCheckType,
+                        locator: rawLocator,
+                        timeoutMs:
+                          Number.isFinite(timeoutNum) && timeoutNum > 0
+                            ? Math.floor(timeoutNum)
+                            : undefined,
+                      }
+                    } else if (
+                      stepDialogCheckType === 'url-contains' ||
+                      stepDialogCheckType === 'url-equals'
+                    ) {
+                      const rawUrl = stepDialogCheckExpectedUrl.trim()
+                      if (!rawUrl) {
+                        toast.error('请选择“URL 检查”时需补充期望 URL')
+                        return
+                      }
+                      const timeoutNum = Number(stepDialogCheckTimeoutMs || '')
+                      checkRule = {
+                        type: stepDialogCheckType,
+                        expectedUrl: rawUrl,
+                        timeoutMs:
+                          Number.isFinite(timeoutNum) && timeoutNum > 0
+                            ? Math.floor(timeoutNum)
+                            : undefined,
+                      }
                     }
                   }
-                }
-                const binding: StepBindingV1 = {
-                  ver: 1,
-                  platform: catalog.platform,
-                  pageKey: page.key,
-                  actionKey: action.key,
-                  args: params.map((p) => ({
-                    name: p.name,
-                    value: stepDialogArgs[p.name] || '',
-                  })),
-                  ...(checkRule ? { checkRule } : {}),
-                }
-                const defaultActionText = `${page.label} · ${action.label}`
-                const actionText = (stepDialogActionText || '').trim() || defaultActionText
-                const dataText =
-                  params.length > 0
-                    ? params.map((p) => `${p.name}=${stepDialogArgs[p.name] || ''}`).join(', ')
-                    : ''
-                const expectedText = stepDialogExpected || action.defaultExpected || '（待补充）'
-
-                setStepsByCase((prev) => {
-                  const caseId = selectedCase.id
-                  const list = prev[caseId] || []
-
-                  if (editingStepIdForDialog) {
-                    const targetId = editingStepIdForDialog
-                    const updated = list.map((s) =>
-                      s.id === targetId
-                        ? {
-                            ...s,
-                            action: actionText,
-                            data: dataText,
-                            expected: expectedText,
-                            binding: JSON.stringify(binding),
-                          }
-                        : s
-                    )
-                    return { ...prev, [caseId]: updated }
+                  const binding: StepBindingV1 = {
+                    ver: 1,
+                    platform: catalog.platform,
+                    pageKey: page.key,
+                    actionKey: action.key,
+                    args: params.map((p) => ({
+                      name: p.name,
+                      value: stepDialogArgs[p.name] || '',
+                    })),
+                    ...(checkRule ? { checkRule } : {}),
                   }
+                  const defaultActionText = `${page.label} · ${action.label}`
+                  const actionText =
+                    (stepDialogActionText || '').trim() || defaultActionText
+                  const dataText =
+                    params.length > 0
+                      ? params
+                          .map((p) => `${p.name}=${stepDialogArgs[p.name] || ''}`)
+                          .join(', ')
+                      : ''
+                  const expectedText =
+                    stepDialogExpected || action.defaultExpected || '（待补充）'
 
-                  const baseOrder = list.length > 0 ? Math.max(...list.map((s) => s.order)) + 1 : 1
-                  const newStep: UserScenarioStep = {
-                    id: `${caseId}-${Date.now()}`,
-                    order: baseOrder,
-                    action: actionText,
-                    data: dataText,
-                    expected: expectedText,
-                    binding: JSON.stringify(binding),
-                  }
-                  return { ...prev, [caseId]: [...list, newStep] }
-                })
-                setEditingStepIdForDialog(null)
-                setStepDialogOpen(false)
-              }}
+                  setStepsByCase((prev) => {
+                    const caseId = selectedCase.id
+                    const list = prev[caseId] || []
+
+                    if (editingStepIdForDialog) {
+                      const targetId = editingStepIdForDialog
+                      const updated = list.map((s) =>
+                        s.id === targetId
+                          ? {
+                              ...s,
+                              action: actionText,
+                              data: dataText,
+                              expected: expectedText,
+                              binding: JSON.stringify(binding),
+                            }
+                          : s
+                      )
+                      return { ...prev, [caseId]: updated }
+                    }
+
+                    const baseOrder =
+                      list.length > 0 ? Math.max(...list.map((s) => s.order)) + 1 : 1
+                    const newStep: UserScenarioStep = {
+                      id: `${caseId}-${Date.now()}`,
+                      order: baseOrder,
+                      action: actionText,
+                      data: dataText,
+                      expected: expectedText,
+                      binding: JSON.stringify(binding),
+                    }
+                    return { ...prev, [caseId]: [...list, newStep] }
+                  })
+                  setEditingStepIdForDialog(null)
+                  setStepDialogOpen(false)
+                }}
               >
                 确定
               </Button>
@@ -2936,6 +3261,53 @@ export default function ScenariosPage() {
             <Button type="button" onClick={handleCreateCase} disabled={newCaseSubmitting}>
               {newCaseSubmitting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               确定
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 说明文档导入前的 AI 提示配置对话框 */}
+      <Dialog open={docAiPromptOpen} onOpenChange={setDocAiPromptOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>说明文档解析提示（可选）</DialogTitle>
+            <DialogDescription>
+              在上传说明文档/设计文档前，可在此补充给 AI 的解析说明，例如重点字段、命名规则或拆分粒度。不填写时将使用默认规则。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="doc-ai-hint">给 AI 的补充说明</Label>
+            <Textarea
+              id="doc-ai-hint"
+              rows={6}
+              value={docAiPromptText}
+              onChange={(e) => setDocAiPromptText(e.target.value)}
+              placeholder="例如：请优先复用文档中的用例编号作为 caseCode；没有编号时按模块 + 序号生成稳定 ID；测试步骤与预期结果使用 1./2. 的编号形式。"
+            />
+            <p className="text-muted-foreground mt-1 text-[11px]">
+              提示仅影响本次上传，后续可在此调整；系统仍会自动应用 Livestream CSV 模板相关的默认规则。
+            </p>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                取消
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              onClick={() => {
+                try {
+                  localStorage.setItem('gtt:scenarios:docAiHint', docAiPromptText || '')
+                } catch {
+                  // ignore
+                }
+                setDocAiPromptOpen(false)
+                const input = document.getElementById('ls-upload-doc') as HTMLInputElement | null
+                input?.click()
+              }}
+            >
+              确定并选择文档
             </Button>
           </DialogFooter>
         </DialogContent>

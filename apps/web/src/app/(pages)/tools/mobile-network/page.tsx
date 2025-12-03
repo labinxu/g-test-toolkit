@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronsUpDown } from 'lucide-react'
 import { toast } from 'sonner'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 
 type MitmStatus = {
   running: boolean
@@ -95,6 +95,9 @@ export default function MobileNetworkPage() {
       const res = await fetch('/api/android/mitm/status', { method: 'GET', cache: 'no-store' })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '获取 mitmproxy 状态失败')
       }
       const data = (await res.json()) as MitmStatus
@@ -102,7 +105,9 @@ export default function MobileNetworkPage() {
       if (data.port && !startPort) setStartPort(String(data.port))
       if (data.port && !proxyPort) setProxyPort(String(data.port))
     } catch (e: any) {
-      toast.error(e?.message || '获取 mitmproxy 状态失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '获取 mitmproxy 状态失败')
+      }
     } finally {
       setStatusLoading(false)
     }
@@ -114,12 +119,17 @@ export default function MobileNetworkPage() {
       const res = await fetch('/api/android/devices', { method: 'GET', cache: 'no-store' })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '获取设备列表失败')
       }
       const data = (await res.json()) as DevicesResponse
       setDevicesRaw(data.devices || '')
     } catch (e: any) {
-      toast.error(e?.message || '获取设备列表失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '获取设备列表失败')
+      }
     } finally {
       setDevicesLoading(false)
     }
@@ -134,6 +144,9 @@ export default function MobileNetworkPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '获取 Frida 状态失败')
       }
       const data = await res.json()
@@ -144,7 +157,9 @@ export default function MobileNetworkPage() {
         gettrProcessLine: data?.gettrProcessLine || undefined,
       })
     } catch (e: any) {
-      toast.error(e?.message || '获取 Frida 状态失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '获取 Frida 状态失败')
+      }
     } finally {
       setFridaStatusLoading(false)
     }
@@ -164,12 +179,17 @@ export default function MobileNetworkPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '获取 Frida 日志失败')
       }
       const data = await res.json()
       setFridaLogLines(Array.isArray(data?.lines) ? data.lines : [])
     } catch (e: any) {
-      toast.error(e?.message || '获取 Frida 日志失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '获取 Frida 日志失败')
+      }
     } finally {
       setFridaLogLoading(false)
     }
@@ -189,12 +209,17 @@ export default function MobileNetworkPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '获取抓包数据失败')
       }
       const data = (await res.json()) as { flows?: FlowSummary[] }
       setFlows(Array.isArray(data.flows) ? data.flows : [])
     } catch (e: any) {
-      toast.error(e?.message || '获取抓包数据失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '获取抓包数据失败')
+      }
     } finally {
       setFlowsLoading(false)
     }
@@ -214,6 +239,9 @@ export default function MobileNetworkPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '启动 mitmproxy 失败')
       }
       const data = (await res.json()) as any
@@ -228,7 +256,9 @@ export default function MobileNetworkPage() {
       const displayPort = data.port ?? (startPort || '未知')
       toast.success(`mitmproxy 已启动，端口 ${displayPort}`)
     } catch (e: any) {
-      toast.error(e?.message || '启动 mitmproxy 失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '启动 mitmproxy 失败')
+      }
     } finally {
       setBusy(false)
     }
@@ -240,6 +270,9 @@ export default function MobileNetworkPage() {
       const res = await fetch('/api/android/mitm/stop', { method: 'POST' })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '停止 mitmproxy 失败')
       }
       const data = (await res.json()) as any
@@ -250,7 +283,9 @@ export default function MobileNetworkPage() {
       })
       toast.success(data.stopped ? 'mitmproxy 已停止' : 'mitmproxy 未在运行')
     } catch (e: any) {
-      toast.error(e?.message || '停止 mitmproxy 失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '停止 mitmproxy 失败')
+      }
     } finally {
       setBusy(false)
     }
@@ -275,6 +310,9 @@ export default function MobileNetworkPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '设置设备代理失败')
       }
       const data = await res.json()
@@ -284,7 +322,9 @@ export default function MobileNetworkPage() {
           : `已清除 ${selectedDevice} 的代理`,
       )
     } catch (e: any) {
-      toast.error(e?.message || '设置设备代理失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '设置设备代理失败')
+      }
     } finally {
       setBusy(false)
     }
@@ -306,6 +346,9 @@ export default function MobileNetworkPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '清除设备代理失败')
       }
       const data = await res.json()
@@ -315,7 +358,9 @@ export default function MobileNetworkPage() {
           : `已更新 ${selectedDevice} 的代理`,
       )
     } catch (e: any) {
-      toast.error(e?.message || '清除设备代理失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '清除设备代理失败')
+      }
     } finally {
       setBusy(false)
     }

@@ -93,6 +93,23 @@ export class SettingsService {
     return userId == null ? this.get(base) : null;
   }
 
+  async getDocAiHint(userId?: number): Promise<string> {
+    const val =
+      (await this.getValue('scenarios.docAiHint', userId)) ||
+      (await this.get('gtt:scenarios:docAiHint')) ||
+      '';
+    return val || '';
+  }
+
+  async setDocAiHint(
+    value: string | null | undefined,
+    userId?: number,
+  ): Promise<void> {
+    const key = this.makeKey('scenarios.docAiHint', userId);
+    const trimmed = (value || '').toString();
+    await this.set(key, trimmed || null);
+  }
+
   async getAiConfig(userId?: number): Promise<{
     provider: string;
     model: string;

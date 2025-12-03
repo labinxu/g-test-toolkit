@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Table,
@@ -19,7 +20,7 @@ import {
   UploadCloud,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import {
   Dialog,
   DialogContent,
@@ -94,6 +95,7 @@ async function extractErrorMessage(res: Response, fallback: string) {
 }
 
 export default function AppTestCasesPage() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [installDialogOpen, setInstallDialogOpen] = useState(false)
@@ -137,6 +139,12 @@ export default function AppTestCasesPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Failed to fetch app files')
       }
       const data = (await res.json()) as FileNode[] | { data?: FileNode[] }
@@ -160,6 +168,12 @@ export default function AppTestCasesPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Failed to fetch Android devices')
       }
       return res.json() as Promise<{ devices: string }>
@@ -182,6 +196,12 @@ export default function AppTestCasesPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Failed to delete file')
       }
       return res.json()
@@ -208,6 +228,12 @@ export default function AppTestCasesPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Failed to upload file')
       }
       return res.json()
@@ -301,6 +327,12 @@ export default function AppTestCasesPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Failed to install app')
       }
       return res.json()

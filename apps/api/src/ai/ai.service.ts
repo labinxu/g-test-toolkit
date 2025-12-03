@@ -544,7 +544,11 @@ export class AiService {
 
   /**
    * Normalize a free-form use case description document into structured user scenarios.
-   * Returns JSON with shape: { cases: [{ caseCode, moduleId, moduleName, submenu, title, description, sourceDoc, userStory, acceptanceCriteria }] }
+   * Returns JSON with shape:
+   * { cases: [{ caseCode, moduleId, moduleName, submenu, title, description, sourceDoc, userStory, acceptanceCriteria, precondition, testSteps, expectedResult }] }
+   *
+   * 说明：
+   * - precondition / testSteps / expectedResult 设计上与当前项目的 Livestream CSV 模板兼容，便于后端直接生成 UserScenarioStep。
    */
   async normalizeUserScenarios(input: {
     rawText: string
@@ -554,6 +558,7 @@ export class AiService {
     moduleNameHint?: string
     sourceDoc?: string
     userId?: number
+    aiHint?: string
   }): Promise<
     | {
         cases: {
@@ -566,11 +571,23 @@ export class AiService {
           sourceDoc?: string | null
           userStory?: string | null
           acceptanceCriteria?: string | null
+          precondition?: string | null
+          testSteps?: string | null
+          expectedResult?: string | null
         }[]
       }
     | null
   > {
-    const { rawText, project, docType, moduleIdHint, moduleNameHint, sourceDoc, userId } = input
+    const {
+      rawText,
+      project,
+      docType,
+      moduleIdHint,
+      moduleNameHint,
+      sourceDoc,
+      userId,
+      aiHint,
+    } = input
     if (!rawText || !rawText.trim()) {
       return { cases: [] }
     }
@@ -579,7 +596,7 @@ export class AiService {
       '你是测试用例抽取器，负责把用例说明文档解析为结构化的“用户场景(user scenarios)”列表。',
       '只输出 JSON 字符串，不要解释，不要自然语言。',
       'JSON 结构严格为：',
-      '{ "cases": [ { "caseCode": string, "moduleId": string|null, "moduleName": string|null, "submenu": string|null, "title": string, "description": string|null, "sourceDoc": string|null, "userStory": string|null, "acceptanceCriteria": string|null } ] }',
+      '{ "cases": [ { "caseCode": string, "moduleId": string|null, "moduleName": string|null, "submenu": string|null, "title": string, "description": string|null, "sourceDoc": string|null, "userStory": string|null, "acceptanceCriteria": string|null, "precondition": string|null, "testSteps": string|null, "expectedResult": string|null } ] }',
       '字段含义：',
       '- caseCode: 用例或检查点的唯一编码，例如 UI-HOST-001、UI-GUEST-003、GLW-1-003-01 等；没有编码时可以根据文档结构生成一个稳定的 ID，例如 LIVEKIT-HOST-001。',
       '- moduleId: 模块/功能组 ID，例如 GLW-1-003、LIVEKIT-HOST，没有时可使用调用方提供的 moduleIdHint。',
@@ -590,6 +607,9 @@ export class AiService {
       '- sourceDoc: 源文档标识，例如 livekit。',
       '- userStory: 关联的 User Story 描述或编号。如果文档中存在类似 "As a host, I can ..." / "As a viewer, I can ..." 这样的 User Story 句子，请尽量为每个用例找到并完整拷贝对应的英文句子到 userStory 字段；若无明确对应，则可以使用 User Story 标题或编号，例如 “Host #1”、“Guest #3”。',
       '- acceptanceCriteria: 该用例的验收标准/关键条件列表，允许多行文本。如果文档中有短语如 "From Studio open"、"Given ... When ... Then ..." 等 Acceptance Criteria，请收集到这里，一条或多条都可以，使用换行分隔。',
+      '- precondition: 本用例的前置条件，可以包含环境依赖、账号状态、数据准备等，允许多行文本。',
+      '- testSteps: 测试步骤列表，建议按 “1. ...；2. ...；3. ...” 的形式书写，每一步包含“操作 + 关键检查点”，便于后端直接拆分为步骤。',
+      '- expectedResult: 预期结果列表，建议与 testSteps 一一对应，同样使用 “1. ...；2. ...” 的格式；如果文档中没有明显拆分，可使用多行文本汇总关键期望。',
       'project 字段：本次调用的 project 是 ' + project + '，请根据 project 选择合适的拆分粒度；对 live-stream 项目，按照 Host Flow / Guest Flow / Interaction 等区块拆分为多个场景。',
       'docType 字段：如果 docType 为 livekit，文档里会有 Host Flow / Guest Flow 区块，以及 UI-HOST-xxx / UI-GUEST-xxx 编号，请尽量使用这些编号作为 caseCode。',
       '约束：',
@@ -599,6 +619,7 @@ export class AiService {
       '- 如果无法解析出某个字段，可以用 null 或空字符串，但必须保留字段名称。',
       '- 特别注意：不要丢弃 User Story 英文句子，例如 "As a host, I can start a livestream"；即使已经在别的字段中用了简化标题，也要在 userStory 或 description 中保留原文。',
       '- 特别注意：不要丢弃 Acceptance Criteria 里的短语，例如 "From Studio open"；请放在 acceptanceCriteria 中，并保持原文。',
+      '- 特别注意：如果文档已经按步骤列出了测试过程（例如 “1. 调用接口 /admin/live/start；2. 查询 Mongo/Redis；3. 校验 errcode ...”），请尽量按照当前项目 Livestream CSV 模板的风格，将其整理到 testSteps 和 expectedResult 字段中，使用 “1. ...；2. ...” 的形式，便于后端直接导入为步骤。',
     ]
     const system = sysLines.join('\n')
     const userLines: string[] = [
@@ -607,6 +628,13 @@ export class AiService {
       moduleIdHint ? `moduleIdHint: ${moduleIdHint}` : '',
       moduleNameHint ? `moduleNameHint: ${moduleNameHint}` : '',
       sourceDoc ? `sourceDoc: ${sourceDoc}` : '',
+      aiHint && aiHint.trim()
+        ? [
+            '',
+            '【调用方补充说明（优先级高于默认规则，可适度覆盖上面的通用约束）】',
+            aiHint.trim(),
+          ].join('\n')
+        : '',
       '',
       '下面是完整的用例说明文档内容：',
       rawText,
@@ -636,6 +664,12 @@ export class AiService {
           const title = (c.title || caseCode || '').toString().trim()
           const acceptance =
             c.acceptanceCriteria != null ? String(c.acceptanceCriteria) : null
+          const precondition =
+            c.precondition != null ? String(c.precondition) : null
+          const testSteps =
+            c.testSteps != null ? String(c.testSteps) : null
+          const expectedResult =
+            c.expectedResult != null ? String(c.expectedResult) : null
           return {
             caseCode: caseCode || title,
             moduleId:
@@ -654,6 +688,9 @@ export class AiService {
                 : sourceDoc || (docType as string) || 'unknown',
             userStory: c.userStory != null ? String(c.userStory) : null,
             acceptanceCriteria: acceptance,
+            precondition,
+            testSteps,
+            expectedResult,
           }
         })
       return { cases: normCases }

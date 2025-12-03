@@ -58,7 +58,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useLibsPageCache } from '../../page-cache'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import { OptionsSelect } from '@/components/select/options-select'
 import { useRouter } from 'next/navigation'
 
@@ -459,6 +459,12 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '生成失败')
       }
       const data = await res.json()
@@ -471,7 +477,9 @@ export default function Page() {
         localStorage.setItem('gtt:libs:gen:className', genClassName || '')
       } catch {}
     } catch (e: any) {
-      toast.error(e?.message || '生成失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '生成失败')
+      }
     } finally {
       setGenLoading(false)
     }
@@ -501,6 +509,12 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Generation failed')
       }
       const data = await res.json()
@@ -513,7 +527,9 @@ export default function Page() {
       setAiPrompt('')
       toast.success('已插入生成脚本')
     } catch (e: any) {
-      toast.error(e?.message || 'AI 生成失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || 'AI 生成失败')
+      }
     } finally {
       setAiLoading(false)
     }

@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -155,6 +156,7 @@ export const ParametersForm = forwardRef<ParametersFormHandle, ParametersFormPro
 
     // Libs AI defaults
     const [aiRulesOnlyDefault, setAiRulesOnlyDefault] = useState(false)
+    const [docAiHint, setDocAiHint] = useState<string>('')
     const [aiMaxLinesDefault, setAiMaxLinesDefault] = useState(0)
     const [aiMaxColDefault, setAiMaxColDefault] = useState(0)
 
@@ -230,6 +232,12 @@ export const ParametersForm = forwardRef<ParametersFormHandle, ParametersFormPro
       setAiRulesOnlyDefault(readBool('gtt:ai:libs:useRulesOnly', false))
       setAiMaxLinesDefault(clamp(readInt('gtt:ai:libs:maxLines', 0), 0, 200))
       setAiMaxColDefault(clamp(readInt('gtt:ai:libs:maxCol', 0), 0, 400))
+      setDocAiHint(
+        readStr(
+          'gtt:scenarios:docAiHint',
+          '请将说明文档中的用例/检查点拆分成结构化的用户场景列表：每条用例尽量包含 caseCode、UserStory、AcceptanceCriteria、前置条件、测试步骤、预期结果；测试步骤和预期结果建议使用 “1. …；2. …” 的编号格式，并保持一一对应，方便后端直接生成步骤。'
+        )
+      )
 
       let cancelled = false
 
@@ -269,6 +277,9 @@ export const ParametersForm = forwardRef<ParametersFormHandle, ParametersFormPro
             setAiMaxTokens(clamp(Math.floor(maxTokens), 64, 512000))
           } else {
             setAiMaxTokens(512)
+          }
+          if (typeof j?.docAiHint === 'string') {
+            setDocAiHint(j.docAiHint)
           }
         } catch (e: any) {
           if (!cancelled) {
@@ -439,6 +450,7 @@ export const ParametersForm = forwardRef<ParametersFormHandle, ParametersFormPro
         String(clamp(Math.floor(aiMaxLinesDefault), 0, 200))
       )
       localStorage.setItem('gtt:ai:libs:maxCol', String(clamp(Math.floor(aiMaxColDefault), 0, 400)))
+      localStorage.setItem('gtt:scenarios:docAiHint', docAiHint || '')
       // Redis connections mapping (JSON object: { env: { host, port, tls?, cluster? }, ... })
       try {
         if (redisConnsInput.trim()) {
@@ -477,6 +489,7 @@ export const ParametersForm = forwardRef<ParametersFormHandle, ParametersFormPro
       if (Number.isFinite(aiMaxTokens)) {
         payload.maxTokens = clamp(Math.floor(aiMaxTokens), 64, 512000)
       }
+      payload.docAiHint = docAiHint
 
       const res = await fetch('/api/settings/ai', {
         method: 'PUT',
@@ -506,6 +519,9 @@ export const ParametersForm = forwardRef<ParametersFormHandle, ParametersFormPro
       const returnedMaxTokens = Number(j?.maxTokens ?? payload.maxTokens ?? aiMaxTokens)
       if (Number.isFinite(returnedMaxTokens) && returnedMaxTokens > 0) {
         setAiMaxTokens(clamp(Math.floor(returnedMaxTokens), 64, 512000))
+      }
+      if (typeof j?.docAiHint === 'string') {
+        setDocAiHint(j.docAiHint)
       }
       setAiApiKeyInput('')
       setAiClearKey(false)
@@ -1246,6 +1262,27 @@ export const ParametersForm = forwardRef<ParametersFormHandle, ParametersFormPro
                     <span className="text-muted-foreground text-xs">0 = unlimited</span>
                   </div>
                 </div>
+              </div>
+            </Section>
+
+            <Section
+              title="User Scenario Doc Parsing"
+              description="Default hint for converting specification/markdown docs into user scenarios."
+            >
+              <div className="space-y-2">
+                <Label htmlFor="ai-doc-hint" className="text-muted-foreground text-xs">
+                  Default AI hint for user-scenario ingest
+                </Label>
+                <Textarea
+                  id="ai-doc-hint"
+                  rows={5}
+                  value={docAiHint}
+                  onChange={(e) => setDocAiHint(e.target.value)}
+                  placeholder="例如：说明如何从设计文档中识别 caseCode、模块、前置条件、测试步骤和预期结果，以及拆分粒度与命名约定。"
+                />
+                <p className="text-muted-foreground text-[11px]">
+                  Scenarios 页面在从说明文档/设计文档导入用户场景时，会默认带上这里的提示，并允许在弹出的对话框中临时修改。
+                </p>
               </div>
             </Section>
 

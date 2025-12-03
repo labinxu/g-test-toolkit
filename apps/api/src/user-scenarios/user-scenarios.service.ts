@@ -747,6 +747,7 @@ export class UserScenariosService {
 
     const safeUser = this.sanitizeName(username || 'default');
     const platform = this.normalizePlatform(entity.platform);
+    const isApiPlatform = platform.includes('-api-');
     const moduleName = this.sanitizeName(entity.module || 'live-stream');
     // 目录结构：workspace/users/<user>/cases/<platform>/<module>/<submenu>/<code>.ts
     const root = path.resolve(
@@ -975,7 +976,9 @@ export class UserScenariosService {
     }
 
     // Imports
-    const importCore = hasBindings
+    const importCore = isApiPlatform
+      ? "import { describe, it, expect, useTestCase } from 'core-lib';"
+      : hasBindings
       ? "import { describe, it, useTestCase } from 'core-lib';"
       : "import { describe, it } from 'core-lib';";
     lines.push(importCore);
@@ -1004,7 +1007,167 @@ export class UserScenariosService {
         : `[${platform}]`;
     const describeTitle = `${describeTitlePrefix} ${entity.code} ${entity.title}`;
     lines.push(`describe(${JSON.stringify(describeTitle)}, () => {`);
-    if (hasBindings) {
+    if (isApiPlatform) {
+      // -------- API 平台（gettr-api-livestream）：使用 useTestCase 但不启动浏览器 / Android，会通过 fetch 调用后端 API --------
+      lines.push(
+        `  const tc = useTestCase({`,
+        `    module: '${moduleName}',`,
+        `    browser: false,`,
+        `    android: false,`,
+        `    tags: ['api', '${moduleName}'],`,
+        `  });`,
+        '',
+        '  type ApiTestConfig = {',
+        '    baseUrl: string;',
+        '    defaultHeaders?: Record<string, string>;',
+        '    sampleLivePostId?: string;',
+        '  };',
+        '',
+        '  function getApiTestConfig(): ApiTestConfig {',
+        '    const anyGlobal = globalThis as any;',
+        '    const baseCfg = (anyGlobal?.params?.apiTestConfig ?? {}) as Partial<ApiTestConfig>;',
+        '    const envCfgRaw = (anyGlobal?.params?.envConfig ?? null) as any;',
+        '    const envCfg =',
+        '      envCfgRaw && typeof envCfgRaw === "object"',
+        '        ? (envCfgRaw as Partial<ApiTestConfig>)',
+        '        : ({} as Partial<ApiTestConfig>);',
+        '    const merged: Partial<ApiTestConfig> = { ...baseCfg, ...envCfg };',
+        "    if (!merged.baseUrl) {",
+        "      throw new Error('apiTestConfig.baseUrl is not configured. 请在 Settings → Parameters → API Tests 中配置。');",
+        '    }',
+        '    return merged as ApiTestConfig;',
+        '  }',
+        '',
+        '  async function apiRequest(path: string, init: RequestInit = {}) {',
+        '    const { baseUrl, defaultHeaders } = getApiTestConfig();',
+        "    const url = `${baseUrl.replace(/\\/$/, '')}${path}`;",
+        '    const headers: Record<string, string> = {',
+        '      ...(defaultHeaders || {}),',
+        "      ...(init.headers as Record<string, string> | undefined || {}),",
+        '    };',
+        '    const res = await fetch(url, { ...init, headers });',
+        '    return res;',
+        '  }',
+        '',
+        '  async function apiPost(path: string, body?: any, init: RequestInit = {}) {',
+        "    const headers: Record<string, string> = { 'content-type': 'application/json', ...(init.headers as Record<string, string> | undefined || {}) };",
+        "    return apiRequest(path, { ...init, method: 'POST', headers, body: body == null ? undefined : JSON.stringify(body) });",
+        '  }',
+        '',
+        "  it('should satisfy all defined steps', async () => {",
+      );
+      const parseApiStepData = (raw: string | null | undefined) => {
+        const result: { method: string; path: string; body: string } = {
+          method: 'GET',
+          path: '',
+          body: '',
+        };
+        const text = (raw || '').toString();
+        if (!text.trim()) return result;
+        for (const part of text.split(',')) {
+          const seg = part.trim();
+          if (!seg) continue;
+          const eqIdx = seg.indexOf('=');
+          if (eqIdx <= 0) continue;
+          const key = seg
+            .slice(0, eqIdx)
+            .trim()
+            .toLowerCase();
+          const value = seg.slice(eqIdx + 1).trim();
+          if (key === 'method' && value) {
+            result.method = value.toUpperCase();
+          } else if (key === 'path') {
+            result.path = value;
+          } else if (key === 'body' || key === 'payload') {
+            result.body = value;
+          }
+        }
+        return result;
+      };
+
+      if (!entity.steps || entity.steps.length === 0) {
+        lines.push(
+          `    // TODO: 当前用例尚未从 CSV 或用例管理中定义具体步骤，请先在「用户场景」页面补充步骤。`,
+          `    // 示例：`,
+          `    // const res = await apiPost('/admin/live/start', { ... });`,
+          `    // tc.assertEqual(200, res.status, '开播接口返回 200');`,
+        );
+      } else {
+        lines.push(
+          `    // 以下步骤由用例管理模块自动生成，已根据“数据”列中的 method/path/body 生成 API 调用骨架，请按需补充断言与请求体：`,
+        );
+        let apiStepIndex = 0;
+        for (const s of entity.steps) {
+          const actionText = (s.action || '').replace(/\r?\n/g, ' ');
+          const expectedText = (s.expected || '').replace(/\r?\n/g, ' ');
+          const dataText = (s.data || '').replace(/\r?\n/g, ' ');
+          lines.push(`    // Step ${s.order}: ${actionText}`);
+          if (dataText) {
+            lines.push(`    //   Data / Precondition: ${dataText}`);
+          }
+          if (expectedText) {
+            lines.push(`    //   Expected: ${expectedText}`);
+          }
+
+          const parsed = parseApiStepData(s.data as any);
+          const method = (parsed.method || 'GET').toUpperCase();
+          const pathValue = parsed.path;
+          const bodyValue = parsed.body;
+
+          if (!pathValue) {
+            lines.push(
+              `    // TODO: 本步骤尚未配置 path=...，请在「步骤与检查点」中补充 API 路径后，在此处实现调用。`,
+              '',
+            );
+            continue;
+          }
+
+          apiStepIndex += 1;
+          const resVar = `res${apiStepIndex}`;
+          const methodLit = JSON.stringify(method);
+          const pathLit = JSON.stringify(pathValue);
+
+          if (method === 'GET' || method === 'DELETE') {
+            lines.push(
+              `    // AUTO-GEN: API 调用骨架（${method} ${pathValue}）`,
+              `    const ${resVar} = await apiRequest(${pathLit}, { method: ${methodLit} });`,
+              `    tc.assertEqual(200, ${resVar}.status, 'HTTP ${method} ${pathValue} 返回 200');`,
+              `    // TODO: 根据上面的“Expected”补充对 ${resVar} JSON 的断言（errcode / 字段值等）。`,
+              '',
+            );
+          } else if (method === 'POST') {
+            if (bodyValue) {
+              const bodyComment = bodyValue.replace(/\r?\n/g, ' ');
+              lines.push(
+                `    // AUTO-GEN: API 调用骨架（POST ${pathValue}）`,
+                `    //   Body: ${bodyComment}`,
+                `    const ${resVar} = await apiPost(${pathLit}); // TODO: 将上面的 Body 填入 apiPost 第二个参数`,
+                `    tc.assertEqual(200, ${resVar}.status, 'HTTP POST ${pathValue} 返回 200');`,
+                `    // TODO: 根据上面的“Expected”补充对 ${resVar} JSON 的断言（errcode / 字段值等）。`,
+                '',
+              );
+            } else {
+              lines.push(
+                `    // AUTO-GEN: API 调用骨架（POST ${pathValue}）`,
+                `    const ${resVar} = await apiPost(${pathLit}); // TODO: 传入请求 body（如有需要）`,
+                `    tc.assertEqual(200, ${resVar}.status, 'HTTP POST ${pathValue} 返回 200');`,
+                `    // TODO: 根据上面的“Expected”补充对 ${resVar} JSON 的断言（errcode / 字段值等）。`,
+                '',
+              );
+            }
+          } else {
+            lines.push(
+              `    // AUTO-GEN: API 调用骨架（${method} ${pathValue}）`,
+              `    const ${resVar} = await apiRequest(${pathLit}, { method: ${methodLit} }); // TODO: 如有 Body，请补充 body 字段`,
+              `    tc.assertEqual(200, ${resVar}.status, 'HTTP ${method} ${pathValue} 返回 200');`,
+              `    // TODO: 根据上面的“Expected”补充对 ${resVar} JSON 的断言（errcode / 字段值等）。`,
+              '',
+            );
+          }
+        }
+      }
+      lines.push('  });');
+    } else if (hasBindings) {
       let envConfigLines: string[] = [];
       if (envTemplateId && Number.isFinite(envTemplateId)) {
         const tpl = await this.envTemplateRepo.findOne({

@@ -33,6 +33,7 @@ export class SettingsController {
     const user = req?.user as any;
     if (!user?.id) throw new UnauthorizedException('No user');
     const cfg = await this.settings.getAiConfig(Number(user.id));
+    const docAiHint = await this.settings.getDocAiHint(Number(user.id));
     return {
       provider: cfg.provider || '',
       model: cfg.model || '',
@@ -40,6 +41,7 @@ export class SettingsController {
       hasApiKey: !!cfg.apiKey,
       timeoutMs: cfg.timeoutMs ?? null,
       maxTokens: cfg.maxTokens ?? null,
+      docAiHint: docAiHint || '',
     };
   }
 
@@ -83,12 +85,17 @@ export class SettingsController {
       },
       Number(user.id),
     );
+    if (typeof body?.docAiHint === 'string') {
+      await this.settings.setDocAiHint(body.docAiHint, Number(user.id));
+    }
     const cfg = await this.settings.getAiConfig(Number(user.id));
+    const docAiHint = await this.settings.getDocAiHint(Number(user.id));
     return {
       ok: true,
       hasApiKey: !!cfg.apiKey,
       timeoutMs: cfg.timeoutMs ?? null,
       maxTokens: cfg.maxTokens ?? null,
+      docAiHint: docAiHint || '',
     };
   }
 

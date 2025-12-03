@@ -14,7 +14,6 @@ import { javascript } from '@codemirror/lang-javascript'
 import { useTheme } from 'next-themes'
 import { RedisControl } from '@/components/redis-control'
 import { OptionsSelect } from '@/components/select/options-select'
-
 const defaultScript = `/**
  * FAST USER DB calculator.
  * You can edit this script; it runs inside a Function(userId, cdate, previousResult).
@@ -47,7 +46,6 @@ return {
   hash: hashValue.toString(),
   table: tableNumber.toString().padStart(3, '0'),
 };`
-
 const stringifyResult = (result: unknown) => {
   if (typeof result === 'string') return result
   try {
@@ -136,7 +134,6 @@ export default function FastUserDbToolPage() {
     const found = keys.find((k) => environments[k] === qaEnv)
     return found ?? 'qa1x'
   }, [environments, qaEnv])
-
   useEffect(() => {
     let cancelled = false
     const loadScript = async () => {
@@ -343,7 +340,7 @@ export default function FastUserDbToolPage() {
                 const key = value as EnvKey
                 setQaEnv(environments[key])
               }}
-              triggerClassName="w-full"
+              triggerClassName="w-full "
               contentClassName="w-[160px]"
             />
           </div>

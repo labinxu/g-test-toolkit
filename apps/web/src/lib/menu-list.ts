@@ -195,24 +195,27 @@ export function getMenuList(pathname: string): Group[] {
           icon: TabletSmartphone,
         },
         {
-          href: '/settings/parameters',
-          label: 'Parameters',
+          href: '',
+          label: 'Configure',
           icon: Settings,
-        },
-        {
-          href: '/settings/action-catalog',
-          label: 'Action Catalog',
-          icon: Settings,
-        },
-        {
-          href: '/settings/env-templates',
-          label: 'Env Templates',
-          icon: Settings,
-        },
-        {
-          href: '/settings/logger',
-          label: 'Logger',
-          icon: FileCog,
+          submenus: [
+            {
+              href: '/settings/parameters',
+              label: 'Parameters',
+            },
+            {
+              href: '/settings/action-catalog',
+              label: 'Action Catalog',
+            },
+            {
+              href: '/settings/env-templates',
+              label: 'Env Templates',
+            },
+            {
+              href: '/settings/logger',
+              label: 'Logger',
+            },
+          ],
         },
         {
           href: '/users',

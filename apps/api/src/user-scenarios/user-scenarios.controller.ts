@@ -183,6 +183,7 @@ export class UserScenariosController {
       moduleNameHint?: string
       sourceDoc?: string
       platform?: string
+      aiHint?: string
     },
     @Req() req: Request,
   ) {
@@ -195,6 +196,7 @@ export class UserScenariosController {
     const moduleIdHint = body?.moduleIdHint || undefined;
     const moduleNameHint = body?.moduleNameHint || undefined;
     const sourceDoc = body?.sourceDoc || 'livekit';
+    const aiHint = body?.aiHint || undefined;
     const user: any = (req as any)?.user || {};
     const rawUserId = user?.id;
     const userId = Number(rawUserId);
@@ -223,6 +225,7 @@ export class UserScenariosController {
         moduleNameHint,
         sourceDoc,
         userId: Number.isFinite(userId) ? userId : undefined,
+        aiHint,
       });
       const cases = (norm?.cases as any[]) || [];
       let created = 0;
@@ -240,6 +243,9 @@ export class UserScenariosController {
             ? `${rawUserStory}\n\n${rawDescription}`
             : rawUserStory || rawDescription;
         const acceptanceRaw = (c.acceptanceCriteria || '').toString().trim();
+        const rawPrecond = (c.precondition || '').toString().trim();
+        const rawSteps = (c.testSteps || '').toString().trim();
+        const rawExpected = (c.expectedResult || '').toString().trim();
         const existing = await this.service['caseRepo'].findOne({
           where: { code },
         } as any);
@@ -261,9 +267,27 @@ export class UserScenariosController {
           entity.submenu = submenu;
           entity.priority = 'P1';
           entity.status = 'draft';
-          entity.description = desc || null;
+          const descBlocks: string[] = [];
+          if (desc && String(desc).trim().length > 0) {
+            descBlocks.push(String(desc).trim());
+          }
+          if (rawPrecond) {
+            descBlocks.push(`【前置条件】\n${rawPrecond}`);
+          }
+          if (rawSteps) {
+            descBlocks.push(`【测试步骤】\n${rawSteps}`);
+          }
+          entity.description = descBlocks.length > 0 ? descBlocks.join('\n\n') : null;
           entity.hasCode = false;
           await (this.service as any).caseRepo.save(entity);
+          if (rawSteps) {
+            await (this.service as any).syncStepsFromCsv(
+              entity,
+              rawSteps,
+              rawExpected || acceptanceRaw || '',
+              rawPrecond || '',
+            );
+          }
           created += 1;
         } else {
           let changed = false;
@@ -287,8 +311,19 @@ export class UserScenariosController {
             existing.submenu = submenu;
             changed = true;
           }
-          if (existing.description !== (desc || null)) {
-            existing.description = desc || null;
+          const descBlocks: string[] = [];
+          if (desc && String(desc).trim().length > 0) {
+            descBlocks.push(String(desc).trim());
+          }
+          if (rawPrecond) {
+            descBlocks.push(`【前置条件】\n${rawPrecond}`);
+          }
+          if (rawSteps) {
+            descBlocks.push(`【测试步骤】\n${rawSteps}`);
+          }
+          const nextDesc = descBlocks.length > 0 ? descBlocks.join('\n\n') : null;
+          if (existing.description !== nextDesc) {
+            existing.description = nextDesc;
             changed = true;
           }
           if (existing.acceptanceCriteria !== nextAcceptance) {
@@ -302,6 +337,14 @@ export class UserScenariosController {
           if (changed) {
             await (this.service as any).caseRepo.save(existing);
             updated += 1;
+          }
+          if (rawSteps) {
+            await (this.service as any).syncStepsFromCsv(
+              existing,
+              rawSteps,
+              rawExpected || acceptanceRaw || '',
+              rawPrecond || '',
+            );
           }
         }
       }

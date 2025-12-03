@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { OptionsSelect } from '@/components/select/options-select'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 type EnvTemplate = {
@@ -27,6 +28,7 @@ const PLATFORM_OPTIONS = [
   { value: 'gettr-android', label: 'GETTR Android' },
   { value: 'gettr-mobile-web', label: 'GETTR Mobile Web' },
   { value: 'gettr-ios', label: 'GETTR iOS' },
+  { value: 'gettr-api-livestream', label: 'GETTR API (Livestream)' },
 ]
 
 const DRIVER_OPTIONS = [
@@ -62,6 +64,7 @@ function normalizeJsonLike(input: string): string | null {
 }
 
 export default function EnvTemplatesPage() {
+  const router = useRouter()
   const [platform, setPlatform] = useState<string>('gettr-web')
   const [driver, setDriver] = useState<'browser' | 'android' | 'ios' | 'other'>('browser')
   const [items, setItems] = useState<EnvTemplate[]>([])
@@ -95,6 +98,12 @@ export default function EnvTemplatesPage() {
       })
       setItems(parsed)
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '加载环境模板失败')
     } finally {
       setLoading(false)
@@ -158,6 +167,12 @@ export default function EnvTemplatesPage() {
       setEditing(null)
       await loadTemplates()
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '保存环境模板失败')
     }
   }
@@ -177,6 +192,12 @@ export default function EnvTemplatesPage() {
       }
       await loadTemplates()
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '删除环境模板失败')
     }
   }
@@ -188,8 +209,8 @@ export default function EnvTemplatesPage() {
           <div>
             <CardTitle className="text-base">环境模板管理</CardTitle>
             <p className="text-muted-foreground mt-1 text-xs">
-              针对不同平台与驱动类型（browser / android），预先定义 useTestCase 的环境配置，
-              供用户场景生成代码时复用。
+              针对不同平台与驱动类型（browser / android / other），预先定义 useTestCase
+              的环境配置，供用户场景与用例库生成/运行代码时复用。
             </p>
           </div>
           <div className="flex items-center gap-2">

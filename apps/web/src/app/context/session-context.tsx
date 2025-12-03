@@ -114,6 +114,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         await checkAuth(); // Refresh auth state after login
+        router.push('/scenarios');
       } else {
         const err = await normalizeResponseError(response);
         toast.error(err.message || 'Login failed');
@@ -152,7 +153,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         await checkAuth(); // Refresh auth state after registration
-        router.push('/dashboard'); // Redirect to dashboard
+        router.push('/scenarios'); // Redirect to scenarios page
       } else {
         const err = await normalizeResponseError(response);
         toast.error(err.message || 'Registration failed');

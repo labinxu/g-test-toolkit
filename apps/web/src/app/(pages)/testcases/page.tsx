@@ -60,6 +60,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 
 export default function Page() {
   const router = useRouter()
@@ -278,12 +279,17 @@ export default function Page() {
 
   const inferPlatformAndDriverFromPath = (filePath: string): {
     platform: string
-    driver: 'browser' | 'android'
+    driver: 'browser' | 'android' | 'ios' | 'other'
   } => {
     const parts = (filePath || '').split('/').filter(Boolean)
     const idx = parts.findIndex((p) => p === 'cases')
     const platform = idx >= 0 && parts[idx + 1] ? parts[idx + 1] : 'gettr-web'
-    const driver = platform === 'gettr-android' ? 'android' : 'browser'
+    const driver: 'browser' | 'android' | 'ios' | 'other' =
+      platform === 'gettr-android'
+        ? 'android'
+        : platform.includes('-api-')
+        ? 'other'
+        : 'browser'
     return { platform, driver }
   }
 
@@ -305,6 +311,12 @@ export default function Page() {
       const res = await fetch(`/api/env-templates?${qs.toString()}`, { cache: 'no-store' })
       if (!res.ok) {
         const err = await normalizeResponseError(res as any)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || '加载环境模板失败')
       }
       const data = await res.json()
@@ -344,7 +356,9 @@ export default function Page() {
         } catch {}
       }
     } catch (e: any) {
-      toast.error(e?.message || '加载环境模板失败')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '加载环境模板失败')
+      }
       setEnvRunTemplates([])
     } finally {
       setEnvRunDialogLoading(false)

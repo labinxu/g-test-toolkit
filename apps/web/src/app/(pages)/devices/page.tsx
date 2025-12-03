@@ -46,7 +46,7 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { GTable } from './components/g-table'
 import { cn } from '@/lib/utils'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import { toast } from 'sonner'
 
 const defaultHeaders = { Accept: 'application/json' }
@@ -301,6 +301,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to fetch appium status')
       }
       return res.json()
@@ -322,6 +327,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to start appium')
       }
       return res.json()
@@ -341,6 +351,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to stop appium')
       }
       return res.json()
@@ -358,14 +373,19 @@ export default function Page() {
       fetch(`/api/android/devices`, {
         method: 'GET',
         headers: defaultHeaders,
-      }).then((res) => {
-        if (!res.ok) {
-          return normalizeResponseError(res).then((err) => {
+      }).then((res) =>
+        normalizeResponseError(res).then((err) => {
+          if (!res.ok) {
+            if (isUnauthorizedError(err)) {
+              try {
+                router.push('/signin')
+              } catch {}
+            }
             throw new Error(err.message || 'Failed to fetch devices')
-          })
-        }
-        return res.json()
-      }),
+          }
+          return res.json()
+        })
+      ),
     staleTime: 5000,
     refetchOnWindowFocus: false,
     enabled: !androidDevicesCollapsed,
@@ -412,6 +432,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to fetch emulators')
       }
       return res.json()
@@ -433,6 +458,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to load templates')
       }
       return res.json()
@@ -464,6 +494,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to start emulator')
       }
 
@@ -500,6 +535,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to stop emulator')
       }
       return res.json()
@@ -523,6 +563,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to delete emulator')
       }
       return res.json()
@@ -552,6 +597,11 @@ export default function Page() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+        }
         throw new Error(err.message || 'Failed to create emulator')
       }
       return res.json()

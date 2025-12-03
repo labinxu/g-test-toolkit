@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Table,
@@ -13,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Loader2, Play, RefreshCcw, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -67,6 +68,7 @@ function flattenFileNodes(nodes: FileNode[] = []): FileNode[] {
 }
 
 export default function VideosResourcePage() {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [autoRefresh, setAutoRefresh] = useState<boolean>(false)
@@ -89,6 +91,12 @@ export default function VideosResourcePage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Failed to fetch videos')
       }
       const data = (await res.json()) as FileNode[] | { data?: FileNode[] }
@@ -118,6 +126,12 @@ export default function VideosResourcePage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Failed to delete video')
       }
       return res.json()
@@ -144,6 +158,12 @@ export default function VideosResourcePage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Failed to upload video')
       }
       return res.json()

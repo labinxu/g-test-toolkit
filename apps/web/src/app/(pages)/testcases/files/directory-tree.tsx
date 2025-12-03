@@ -20,7 +20,7 @@ import { FileNode } from './types';
 import { DeleteAlertDialog } from '../alert-dialog/delete-alert';
 import { RunAlertDialog } from '../alert-dialog/run-alert';
 import { useSocket } from '../socket-content';
-import { normalizeResponseError } from '@/lib/error';
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error';
 import { toast } from 'sonner';
 
 const EXPANDED_KEY = 'directoryTreeExpanded';
@@ -114,11 +114,15 @@ export default function DirectoryTree({
     })
       .then(async (res) => {
         if (!res.ok) {
-          const err = await normalizeResponseError(res)
-          toast.error(err.message || 'Failed to load files')
-          throw new Error(err.message || 'Failed to load files')
+          const err = await normalizeResponseError(res as any);
+          if (isUnauthorizedError(err)) {
+            // SessionProvider 会统一重定向到 /signin，这里只静默失败
+            throw new Error('Unauthorized');
+          }
+          toast.error(err.message || 'Failed to load files');
+          throw new Error(err.message || 'Failed to load files');
         }
-        return res.json()
+        return res.json();
       })
       .then((treeData: FileNode[]) => {
         setTree(treeData);
@@ -145,6 +149,9 @@ export default function DirectoryTree({
             setExpanded((prev) => ({ ...prev, ...open }));
           } catch {}
         }
+      })
+      .catch(() => {
+        // 已在 then 中处理错误，这里忽略
       });
   }, [refreshKey, isAuthenticated, cacheEnabled, cacheTtlMs]);
 

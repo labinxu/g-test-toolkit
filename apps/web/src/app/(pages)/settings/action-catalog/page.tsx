@@ -10,7 +10,7 @@ import { OptionsSelect, type OptionsSelectItem } from '@/components/select/optio
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import { toast } from 'sonner'
 import { Loader2, Plus, Trash2, ChevronsUpDown, Eye, FileCode } from 'lucide-react'
 import { GTable } from '@/components/g-table'
@@ -151,6 +151,12 @@ export default function ActionCatalogSettingsPage() {
         setSelectedPageId(items[0].id)
       }
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '获取页面列表失败')
       setPages([])
       setSelectedPageId(null)
@@ -177,6 +183,12 @@ export default function ActionCatalogSettingsPage() {
         setPlatform(items[0]!.key)
       }
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '获取平台列表失败')
     }
   }
@@ -258,6 +270,12 @@ export default function ActionCatalogSettingsPage() {
       }
       setDraft(normalized)
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '获取页面详情失败')
       setDraft(null)
     } finally {
@@ -399,6 +417,12 @@ export default function ActionCatalogSettingsPage() {
         toast.success('页面与动作已保存')
       }
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '保存页面失败')
     } finally {
       setSaving(false)
@@ -426,6 +450,12 @@ export default function ActionCatalogSettingsPage() {
       setDraft(null)
       toast.success('页面已删除')
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '删除页面失败')
     } finally {
       setDeleting(false)
@@ -506,6 +536,12 @@ export default function ActionCatalogSettingsPage() {
       }))
       return normalizedActions
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return []
+      }
       toast.error(e?.message || '获取来源页面详情失败')
       return []
     } finally {
@@ -528,6 +564,12 @@ export default function ActionCatalogSettingsPage() {
       const data = (await res.json()) as AdminPage
       setViewPageDetail(data)
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '获取页面详情失败')
       setViewPageDetail(null)
     } finally {
@@ -632,6 +674,12 @@ export default function ActionCatalogSettingsPage() {
       }
       toast.success(`页面 ${page.key} 已删除`)
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '删除页面失败')
     }
   }
@@ -664,6 +712,12 @@ export default function ActionCatalogSettingsPage() {
       await loadPlatforms()
       toast.success('平台已创建')
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '创建平台失败')
     }
   }
@@ -694,6 +748,12 @@ export default function ActionCatalogSettingsPage() {
       setDraft(null)
       toast.success('平台已删除')
     } catch (e: any) {
+      if (isUnauthorizedError(e)) {
+        try {
+          router.push('/signin')
+        } catch {}
+        return
+      }
       toast.error(e?.message || '删除平台失败')
     }
   }

@@ -123,6 +123,7 @@ export class AiController {
     const moduleIdHint: string | undefined = body?.moduleIdHint || undefined;
     const moduleNameHint: string | undefined = body?.moduleNameHint || undefined;
     const sourceDoc: string | undefined = body?.sourceDoc || undefined;
+    const aiHint: string | undefined = body?.aiHint || undefined;
     try {
       const result = await this.ai.normalizeUserScenarios({
         rawText,
@@ -132,6 +133,7 @@ export class AiController {
         moduleNameHint,
         sourceDoc,
         userId,
+        aiHint,
       });
       return result ?? { cases: [] };
     } catch (e: any) {

@@ -1,15 +1,17 @@
-"use client"
+ "use client"
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import ResizableStickyTable, { type ColumnDef } from '@/components/data-table'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 
 type UserRow = { id: number; username: string; email: string; isAdmin: boolean }
 
 export default function UsersPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +50,12 @@ export default function UsersPage() {
       const res = await fetch(`/api/settings/admins?${qs.toString()}`, { cache: 'no-store' })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         const msg = res.status === 403 ? 'Forbidden (admin required)' : err.message
         throw new Error(msg || 'Failed to load users')
       }
@@ -57,7 +65,9 @@ export default function UsersPage() {
       setPage(data?.page || page)
       setPageSize(data?.pageSize || pageSize)
     } catch (e: any) {
-      setError(e?.message || 'Failed to load users')
+      if (!isUnauthorizedError(e)) {
+        setError(e?.message || 'Failed to load users')
+      }
     } finally {
       setLoading(false)
     }
@@ -75,25 +85,66 @@ export default function UsersPage() {
     setSaving(true)
     try {
       const updates = users.map((u) => ({ id: u.id, isAdmin: !!u.isAdmin }))
-      const res = await fetch('/api/settings/admins', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ updates }) })
+      const res = await fetch('/api/settings/admins', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Save failed')
       }
-      toast.success('Saved'); await load()
-    } catch (e: any) { toast.error(e?.message || 'Save failed') } finally { setSaving(false) }
+      toast.success('Saved')
+      await load()
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || 'Save failed')
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function createUser() {
     try {
-      const payload = { username: newUsername.trim(), email: newEmail.trim(), password: newPassword, isAdmin: newIsAdmin }
-      const res = await fetch('/api/settings/users', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+      const payload = {
+        username: newUsername.trim(),
+        email: newEmail.trim(),
+        password: newPassword,
+        isAdmin: newIsAdmin,
+      }
+      const res = await fetch('/api/settings/users', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Create failed')
       }
-      toast.success('User created'); setNewUsername(''); setNewEmail(''); setNewPassword(''); setNewIsAdmin(false); await load()
-    } catch (e: any) { toast.error(e?.message || 'Create failed') }
+      toast.success('User created')
+      setNewUsername('')
+      setNewEmail('')
+      setNewPassword('')
+      setNewIsAdmin(false)
+      await load()
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || 'Create failed')
+      }
+    }
   }
 
   async function deleteUser(uid: number) {
@@ -101,22 +152,49 @@ export default function UsersPage() {
       const res = await fetch(`/api/settings/users/${uid}`, { method: 'DELETE' })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Delete failed')
       }
-      toast.success('Deleted'); await load()
-    } catch (e: any) { toast.error(e?.message || 'Delete failed') }
+      toast.success('Deleted')
+      await load()
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || 'Delete failed')
+      }
+    }
   }
 
   async function applyResetPassword() {
     if (!resetUserId) return
     try {
-      const res = await fetch(`/api/settings/users/${resetUserId}/password`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: resetPassword }) })
+      const res = await fetch(`/api/settings/users/${resetUserId}/password`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: resetPassword }),
+      })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin')
+          } catch {}
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || 'Update failed')
       }
-      toast.success('Password updated'); setResetUserId(null); setResetPassword('')
-    } catch (e: any) { toast.error(e?.message || 'Update failed') }
+      toast.success('Password updated')
+      setResetUserId(null)
+      setResetPassword('')
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || 'Update failed')
+      }
+    }
   }
 
   return (

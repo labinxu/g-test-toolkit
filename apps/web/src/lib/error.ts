@@ -90,6 +90,60 @@ export async function normalizeResponseError(res: Response): Promise<NormalizedA
   }
 }
 
+export function isUnauthorizedStatus(status: number | undefined | null): boolean {
+  return status === 401 || status === 403
+}
+
+export function isUnauthorizedError(err: unknown): boolean {
+  try {
+    if (!err || typeof err !== 'object') return false
+    const anyErr = err as any
+    if (typeof anyErr.status === 'number' && isUnauthorizedStatus(anyErr.status)) {
+      return true
+    }
+    if (typeof anyErr.code === 'string') {
+      const code = anyErr.code.toUpperCase()
+      if (code === 'UNAUTHORIZED' || code === 'AUTH' || code === 'AUTH_REQUIRED') return true
+    }
+    const msg = (anyErr.message || '').toString().toLowerCase()
+    if (msg.includes('unauthorized') || msg.includes('401')) return true
+  } catch {
+    // ignore
+  }
+  return false
+}
+
+// 统一的响应处理：401/403 触发回调，其它非 OK 则抛带 message/status/code 的 Error
+export async function ensureResponseOk(
+  res: Response,
+  options?: {
+    defaultMessage?: string
+    onUnauthorized?: () => void
+  }
+): Promise<void> {
+  if (isUnauthorizedStatus(res.status)) {
+    try {
+      options?.onUnauthorized?.()
+    } catch {
+      // ignore navigation errors
+    }
+    const err: any = new Error('Unauthorized')
+    err.status = res.status
+    err.code = 'UNAUTHORIZED'
+    throw err
+  }
+  if (res.ok) return
+  const nerr = await normalizeResponseError(res)
+  const e: any = new Error(
+    nerr.message || options?.defaultMessage || 'Request failed'
+  )
+  if (nerr.status) e.status = nerr.status
+  if (nerr.code) e.code = nerr.code
+  if (nerr.fieldErrors) e.fieldErrors = nerr.fieldErrors
+  e.details = nerr.details
+  throw e
+}
+
 export function normalizeThrownError(err: unknown): NormalizedApiError {
   if (err && typeof err === 'object' && 'message' in err) {
     const e = err as any

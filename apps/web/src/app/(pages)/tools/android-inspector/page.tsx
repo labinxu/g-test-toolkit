@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { normalizeResponseError } from '@/lib/error'
+import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import {
   RefreshCwIcon,
   ChevronRight,
@@ -804,6 +804,9 @@ export default function AndroidInspectorPage() {
       })
       if (!res.ok) {
         const err = await normalizeResponseError(res)
+        if (isUnauthorizedError(err)) {
+          throw new Error('Unauthorized')
+        }
         throw new Error(err.message || `HTTP ${res.status}`)
       }
       const data = await res.json().catch(() => ({}) as any)
@@ -812,7 +815,9 @@ export default function AndroidInspectorPage() {
       // 尝试刷新快照
       await refresh()
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to start Appium')
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || 'Failed to start Appium')
+      }
     } finally {
       setStartingAppium(false)
     }

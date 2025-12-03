@@ -15,7 +15,7 @@
 
 ## 2. CSV 表头约定
 
-基础表头（推荐）：
+基础表头（推荐，用于直播域 API / Web 用例）：
 
 - `用例ID`（必填）
 - `模块ID`
@@ -23,7 +23,7 @@
 - `平台`
 - `检查点描述`
 
-可选扩展列：
+可选扩展列（可按平台选择性使用）：
 
 - 需求&验收：
   - `UserStory` / `User Story` / `用户故事`
@@ -41,8 +41,13 @@
 
 - `用例ID` → `code`（必需；为空则跳过当前行）
 - `模块ID` → `csvId`
-- `模块名称` / `模块` → `feature`
-- `平台` → 参与生成 `submenu`，并影响后续代码生成使用的平台
+  - `模块名称` / `模块` → `feature`
+  - `平台` → 作为平台 key，参与生成 `submenu`，并影响后续代码生成与运行：
+    - Web 自动化：`gettr-web` / `gettr-mobile-web` / `gettr-android` / `gettr-ios` 等；
+    - API 用例：推荐使用形如 `<product>-api-<module>` 的命名约定，例如：
+      - `gettr-api-livestream`（直播域 API）
+      - `gettr-api-corebe`（CoreBe 域 API）
+      - 其它项目可按相同模式自定义（如 `foo-api-orders`）；凡平台字段包含 `-api-` 的用例，代码生成将按“API 平台”处理（使用 useTestCase + fetch，不启动浏览器/Android）。
 - 文本描述：
   - `UserStory` + `检查点描述` → 基础描述块
   - `前置条件` → 追加为 `【前置条件】\n...`
@@ -114,12 +119,16 @@
 ## 6. 使用建议
 
 - 作为导入规范：
-  - 推荐把现有直播用例表维护成本说明的 CSV 超集格式（包含上面提到的所有列），然后通过「导入直播用例」按钮/接口定期同步。
+  - 推荐把现有直播用例表维护为本说明的 CSV 超集格式（包含上面提到的所有列），然后通过「导入直播用例」按钮/接口定期同步。
 - 作为协作约定：
   - 测试同学主要编辑 CSV 中的：
     - `UserStory / 用户故事`
     - `前置条件`
     - `测试步骤`
     - `预期结果 / 验收标准`
-  - 自动化同学在系统中基于生成的 `UserScenarioStep` 和 `acceptanceCriteria` 继续补充 binding 与代码生成。
-
+  - 自动化同学：
+    - UI 场景：在系统中基于生成的 `UserScenarioStep` 和 `acceptanceCriteria` 继续补充 binding 与代码生成；
+    - API 场景（平台名中包含 `-api-`，例如 `gettr-api-livestream` / `gettr-api-corebe` 等）：
+      - 使用「生成代码」在 `workspace/users/<user>/cases/<platform>/...` 下生成基于 `useTestCase` + `fetch` 的 API 测试骨架（平台名中包含 `-api-` 即视为 API 平台）；
+      - 在「用例库 / Testcases」页面运行前，可为该平台 + 驱动 `other` 配置一套或多套环境模板（`/settings/env-templates`），其 `config` JSON 会与全局 `apiTestConfig`（Settings → Parameters → API Tests）合并，用于覆盖 `baseUrl` / `defaultHeaders` / `sampleLivePostId` 等字段；
+      - 将自动生成的步骤注释逐步替换为真实接口调用与断言。
