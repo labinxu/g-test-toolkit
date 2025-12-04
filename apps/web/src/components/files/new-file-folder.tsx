@@ -94,7 +94,8 @@ export default function NewFileOrFolder({
                       ] as OptionsSelectItem<'file' | 'folder'>[]
                     }
                     onSelect={(item) => field.onChange(item.value)}
-                    triggerClassName="h-8 w-[80px] text-xs px-2"
+                    size="sm"
+                    triggerClassName="w-[80px] px-2 text-xs"
                     contentClassName="w-[120px]"
                   />
                 </FormControl>

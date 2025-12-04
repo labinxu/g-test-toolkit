@@ -1,19 +1,19 @@
-'use client'
+'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
-import { ChevronDown, Save, XIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
-import CodeMirror from '@uiw/react-codemirror'
-import { javascript } from '@codemirror/lang-javascript'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { ChevronDown, Save, XIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import CodeMirror from '@uiw/react-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
 // Select replaced with OptionsSelect for Environment
-import { useTheme } from 'next-themes'
-import { RedisControl } from '@/components/redis-control'
-import { OptionsSelect } from '@/components/select/options-select'
+import { useTheme } from 'next-themes';
+import { RedisControl } from '@/components/redis-control';
+import { OptionsSelect } from '@/components/select/options-select';
 const defaultScript = `/**
  * FAST USER DB calculator.
  * You can edit this script; it runs inside a Function(userId, cdate, previousResult).
@@ -45,245 +45,259 @@ return {
   input: inputString,
   hash: hashValue.toString(),
   table: tableNumber.toString().padStart(3, '0'),
-};`
+};`;
 const stringifyResult = (result: unknown) => {
-  if (typeof result === 'string') return result
+  if (typeof result === 'string') return result;
   try {
     return JSON.stringify(
       result,
       (_key, value) => (typeof value === 'bigint' ? value.toString() : value),
-      2
-    )
+      2,
+    );
   } catch {
-    return String(result ?? '')
+    return String(result ?? '');
   }
-}
+};
 
 async function extractErrorMessage(res: Response, fallback: string) {
   try {
-    const contentType = res.headers.get('content-type') ?? ''
+    const contentType = res.headers.get('content-type') ?? '';
     if (contentType.includes('application/json')) {
-      const data = await res.json()
-      const message = data?.message ?? data?.error
+      const data = await res.json();
+      const message = data?.message ?? data?.error;
       if (Array.isArray(message)) {
-        return message.join(', ')
+        return message.join(', ');
       }
       if (typeof message === 'string' && message.length > 0) {
-        return message
+        return message;
       }
-      return fallback
+      return fallback;
     }
-    const text = await res.text()
-    return text || fallback
+    const text = await res.text();
+    return text || fallback;
   } catch {
-    return fallback
+    return fallback;
   }
 }
 
 async function getCsrfToken(): Promise<string | null> {
   try {
-    const res = await fetch('/api/csrf-token', { credentials: 'include' })
+    const res = await fetch('/api/csrf-token', { credentials: 'include' });
     if (!res.ok) {
-      return null
+      return null;
     }
-    const data = (await res.json()) as { token?: string }
-    return data?.token ?? null
+    const data = (await res.json()) as { token?: string };
+    return data?.token ?? null;
   } catch {
-    return null
+    return null;
   }
 }
 
 export default function FastUserDbToolPage() {
-  const [userId, setUserId] = useState('')
-  const [cdate, setCdate] = useState('')
-  const [script, setScript] = useState(defaultScript)
-  const [lastSavedScript, setLastSavedScript] = useState(defaultScript)
-  const [output, setOutput] = useState('')
-  const [error, setError] = useState('')
-  const [loadError, setLoadError] = useState('')
-  const [isRunning, setIsRunning] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [isDirty, setIsDirty] = useState(false)
-  const [scriptOpen, setScriptOpen] = useState(false)
-  const [isFetchingScript, setIsFetchingScript] = useState(false)
-  const userEditedRef = useRef(false)
-  const [fetchedUserRaw, setFetchedUserRaw] = useState('')
-  const { theme } = useTheme()
+  const [userId, setUserId] = useState('');
+  const [cdate, setCdate] = useState('');
+  const [script, setScript] = useState(defaultScript);
+  const [lastSavedScript, setLastSavedScript] = useState(defaultScript);
+  const [output, setOutput] = useState('');
+  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [scriptOpen, setScriptOpen] = useState(false);
+  const [isFetchingScript, setIsFetchingScript] = useState(false);
+  const userEditedRef = useRef(false);
+  const [fetchedUserRaw, setFetchedUserRaw] = useState('');
+  const { theme } = useTheme();
 
-  type EnvKey = 'qa1x' | 'qa4'
-  type Env = { label: string; uinf: string; fastUserApi: string }
+  type EnvKey = 'qa1x' | 'qa4';
+  type Env = { label: string; uinf: string; fastUserApi: string };
 
   const environments = useMemo<Record<EnvKey, Env>>(
     () => ({
       qa1x: {
         label: 'QA1X',
         uinf: 'https://qa1-prod.gettr-qa.com/api/s/uinf/',
-        fastUserApi: 'https://next-backend-notif.qa1.ue1.oke.gettr-qa.com/api/v1/fast-user',
+        fastUserApi:
+          'https://next-backend-notif.qa1.ue1.oke.gettr-qa.com/api/v1/fast-user',
       },
       qa4: {
         label: 'QA4',
         uinf: 'https://qa4.gettr-qa.com/api/s/uinf/',
-        fastUserApi: 'https://next-backend-notif.qa4.ue1.oke.gettr-qa.com/api/v1/fast-user',
+        fastUserApi:
+          'https://next-backend-notif.qa4.ue1.oke.gettr-qa.com/api/v1/fast-user',
       },
     }),
-    []
-  )
-  const [qaEnv, setQaEnv] = useState<Env>(environments.qa1x)
+    [],
+  );
+  const [qaEnv, setQaEnv] = useState<Env>(environments.qa1x);
   const qaEnvKey = useMemo<EnvKey>(() => {
-    const keys = Object.keys(environments) as EnvKey[]
-    const found = keys.find((k) => environments[k] === qaEnv)
-    return found ?? 'qa1x'
-  }, [environments, qaEnv])
+    const keys = Object.keys(environments) as EnvKey[];
+    const found = keys.find((k) => environments[k] === qaEnv);
+    return found ?? 'qa1x';
+  }, [environments, qaEnv]);
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     const loadScript = async () => {
-      setIsFetchingScript(true)
+      setIsFetchingScript(true);
       try {
         const res = await fetch('/api/files/fast-user-db/script', {
           credentials: 'include',
-        })
+        });
         if (!res.ok) {
-          throw new Error(await extractErrorMessage(res, 'Failed to load script'))
+          throw new Error(
+            await extractErrorMessage(res, 'Failed to load script'),
+          );
         }
-        const data = (await res.json()) as { content?: string }
-        if (cancelled) return
-        const remoteContent = typeof data?.content === 'string' ? data.content : ''
+        const data = (await res.json()) as { content?: string };
+        if (cancelled) return;
+        const remoteContent =
+          typeof data?.content === 'string' ? data.content : '';
         const displayContent =
-          remoteContent && remoteContent.trim().length > 0 ? remoteContent : defaultScript
+          remoteContent && remoteContent.trim().length > 0
+            ? remoteContent
+            : defaultScript;
         if (!userEditedRef.current) {
-          setScript(displayContent)
+          setScript(displayContent);
         }
-        setLastSavedScript(displayContent)
-        setLoadError('')
+        setLastSavedScript(displayContent);
+        setLoadError('');
       } catch (err: unknown) {
-        if (cancelled) return
-        const message = err instanceof Error ? err.message : String(err)
-        setLoadError(message)
-        toast.error(`Loading failed: ${message}`)
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setLoadError(message);
+        toast.error(`Loading failed: ${message}`);
       } finally {
         if (!cancelled) {
-          setIsFetchingScript(false)
+          setIsFetchingScript(false);
         }
       }
-    }
+    };
 
-    loadScript()
+    loadScript();
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    setIsDirty(script !== lastSavedScript)
-  }, [script, lastSavedScript])
+    setIsDirty(script !== lastSavedScript);
+  }, [script, lastSavedScript]);
 
-  const isUserReady = useMemo(() => (userId ?? '').trim().length > 0, [userId])
+  const isUserReady = useMemo(() => (userId ?? '').trim().length > 0, [userId]);
 
-  const codeMirrorExtensions = useMemo(() => [javascript({ jsx: true, typescript: true })], [])
+  const codeMirrorExtensions = useMemo(
+    () => [javascript({ jsx: true, typescript: true })],
+    [],
+  );
 
   const handleScriptChange = useCallback((value: string) => {
-    userEditedRef.current = true
-    setScript(value)
-  }, [])
+    userEditedRef.current = true;
+    setScript(value);
+  }, []);
 
   const fetchCdateForUser = useCallback(
     async (id: string) => {
-      const endpoint = `${qaEnv.uinf}/${encodeURIComponent(id)}`
-      const res = await fetch(endpoint, { method: 'GET' })
+      const endpoint = `${qaEnv.uinf}/${encodeURIComponent(id)}`;
+      const res = await fetch(endpoint, { method: 'GET' });
       if (!res.ok) {
-        const fallback = await res.text()
-        throw new Error(fallback || `Failed to fetch CDATE for ${id}`)
+        const fallback = await res.text();
+        throw new Error(fallback || `Failed to fetch CDATE for ${id}`);
       }
-      const data = await res.json()
-      const fetched = data?.result?.data?.cdate
+      const data = await res.json();
+      const fetched = data?.result?.data?.cdate;
       if (fetched === undefined || fetched === null || fetched === '') {
-        throw new Error('CDATE not found in response')
+        throw new Error('CDATE not found in response');
       }
       const fetchedId =
-        typeof data?.result?.data?._id === 'string' ? data.result.data._id : undefined
+        typeof data?.result?.data?._id === 'string'
+          ? data.result.data._id
+          : undefined;
       return {
         cdate: String(fetched),
         userId: fetchedId,
         raw: data,
-      }
+      };
     },
-    [qaEnv]
-  )
+    [qaEnv],
+  );
 
   const handleCalculate = useCallback(async () => {
-    const trimmedUserId = userId.trim()
-    setFetchedUserRaw('')
+    const trimmedUserId = userId.trim();
+    setFetchedUserRaw('');
     if (!trimmedUserId) {
-      setError('User ID is required')
-      setOutput('')
-      return
+      setError('User ID is required');
+      setOutput('');
+      return;
     }
-    setIsRunning(true)
-    let resolvedUserId = trimmedUserId
+    setIsRunning(true);
+    let resolvedUserId = trimmedUserId;
     try {
-      let effectiveCdate = cdate.trim()
+      let effectiveCdate = cdate.trim();
       if (!effectiveCdate) {
-        const response = await fetchCdateForUser(trimmedUserId)
-        effectiveCdate = response.cdate
+        const response = await fetchCdateForUser(trimmedUserId);
+        effectiveCdate = response.cdate;
         const fetchedUserId =
-          typeof response.userId === 'string' && response.userId.trim().length > 0
+          typeof response.userId === 'string' &&
+          response.userId.trim().length > 0
             ? response.userId.trim()
-            : trimmedUserId
-        resolvedUserId = fetchedUserId
-        setCdate(effectiveCdate)
-        setUserId(fetchedUserId)
-        setFetchedUserRaw(stringifyResult(response.raw))
+            : trimmedUserId;
+        resolvedUserId = fetchedUserId;
+        setCdate(effectiveCdate);
+        setUserId(fetchedUserId);
+        setFetchedUserRaw(stringifyResult(response.raw));
       } else {
-        resolvedUserId = trimmedUserId
+        resolvedUserId = trimmedUserId;
       }
-      const runner = new Function('userId', 'cdate', 'previousResult', script) as (
-        userId: string,
-        cdate: string,
-        previousResult: string
-      ) => unknown
-      const rawResult = runner(resolvedUserId, effectiveCdate, output)
-      setOutput(stringifyResult(rawResult))
-      setError('')
+      const runner = new Function(
+        'userId',
+        'cdate',
+        'previousResult',
+        script,
+      ) as (userId: string, cdate: string, previousResult: string) => unknown;
+      const rawResult = runner(resolvedUserId, effectiveCdate, output);
+      setOutput(stringifyResult(rawResult));
+      setError('');
     } catch (err: unknown) {
-      setOutput('')
-      setError(err instanceof Error ? err.message : String(err))
-      setFetchedUserRaw('')
+      setOutput('');
+      setError(err instanceof Error ? err.message : String(err));
+      setFetchedUserRaw('');
     } finally {
-      setIsRunning(false)
+      setIsRunning(false);
     }
-  }, [cdate, fetchCdateForUser, output, script, userId])
+  }, [cdate, fetchCdateForUser, output, script, userId]);
 
   const handleApplyAddUserId = useCallback(async () => {
-    const trimmed = userId.trim()
+    const trimmed = userId.trim();
 
     if (!trimmed) {
-      toast.error('Please enter a User ID to add')
-      return
+      toast.error('Please enter a User ID to add');
+      return;
     }
-    setIsRunning(true)
+    setIsRunning(true);
     try {
       const response = await fetch('/api/commands/fastuser/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: trimmed, url: qaEnv.fastUserApi }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
       if (response.ok && data.status === 'OK') {
-        toast.success(`Added Fast User ID ${trimmed} successful`)
+        toast.success(`Added Fast User ID ${trimmed} successful`);
       } else {
-        toast.error(`Added Fast User ID ${trimmed} failed`)
+        toast.error(`Added Fast User ID ${trimmed} failed`);
       }
     } finally {
-      setIsRunning(false)
+      setIsRunning(false);
     }
-    setUserId(trimmed)
-  }, [userId, qaEnv])
+    setUserId(trimmed);
+  }, [userId, qaEnv]);
 
   const handleSave = useCallback(async () => {
-    setIsSaving(true)
+    setIsSaving(true);
     try {
-      const csrfToken = await getCsrfToken()
+      const csrfToken = await getCsrfToken();
       const res = await fetch('/api/files/fast-user-db/script', {
         method: 'POST',
         credentials: 'include',
@@ -292,31 +306,36 @@ export default function FastUserDbToolPage() {
           ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         },
         body: JSON.stringify({ content: script }),
-      })
+      });
       if (!res.ok) {
-        throw new Error(await extractErrorMessage(res, 'Failed to save script'))
+        throw new Error(
+          await extractErrorMessage(res, 'Failed to save script'),
+        );
       }
-      await res.json()
-      setLastSavedScript(script)
-      userEditedRef.current = false
-      toast.success('Saved')
+      await res.json();
+      setLastSavedScript(script);
+      userEditedRef.current = false;
+      toast.success('Saved');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err)
-      toast.error(`Save Failed: ${message}`)
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(`Save Failed: ${message}`);
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }, [script])
+  }, [script]);
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-2 overflow-auto rounded-lg border-2 p-6 shadow-lg">
       <div className="space-y-2">
         <h1 className="text-xl font-semibold">FastUserInfo</h1>
         <p className="text-muted-foreground text-sm">
-          Enter UserID and CDATE, optionally tweak the script, then run Calculate to see the shard.
+          Enter UserID and CDATE, optionally tweak the script, then run
+          Calculate to see the shard.
         </p>
         {loadError && (
-          <p className="text-destructive text-sm">Failed to load script: {loadError}</p>
+          <p className="text-destructive text-sm">
+            Failed to load script: {loadError}
+          </p>
         )}
       </div>
       {/** redis control */}
@@ -337,8 +356,8 @@ export default function FastUserDbToolPage() {
               }))}
               value={qaEnvKey}
               onSelect={({ value }) => {
-                const key = value as EnvKey
-                setQaEnv(environments[key])
+                const key = value as EnvKey;
+                setQaEnv(environments[key]);
               }}
               triggerClassName="w-full "
               contentClassName="w-[160px]"
@@ -409,7 +428,9 @@ export default function FastUserDbToolPage() {
       <div className="flex w-full flex-col gap-3 rounded-lg border p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium">JavaScript (collapsible & saveable)</p>
+            <p className="text-sm font-medium">
+              JavaScript (collapsible & saveable)
+            </p>
             <p className="text-muted-foreground text-xs">
               Stored at workspace/scripts/fast-user-db.js
             </p>
@@ -438,9 +459,14 @@ export default function FastUserDbToolPage() {
               onClick={() => setScriptOpen((prev) => !prev)}
             >
               <ChevronDown
-                className={cn('h-4 w-4 transition-transform', scriptOpen ? 'rotate-180' : '')}
+                className={cn(
+                  'h-4 w-4 transition-transform',
+                  scriptOpen ? 'rotate-180' : '',
+                )}
               />
-              <span className="ml-1 text-xs">{scriptOpen ? 'Collapse' : 'Expand'}</span>
+              <span className="ml-1 text-xs">
+                {scriptOpen ? 'Collapse' : 'Expand'}
+              </span>
             </Button>
           </div>
         </div>
@@ -471,7 +497,10 @@ export default function FastUserDbToolPage() {
 
       <div className="grid h-full w-full gap-1 rounded-lg border sm:grid-cols-1 md:grid-cols-2">
         <div className="bg-muted/20 flex flex-col gap-2 rounded-md border p-3">
-          <Label htmlFor="fast-user-db-fetch-response" className="text-sm font-medium">
+          <Label
+            htmlFor="fast-user-db-fetch-response"
+            className="text-sm font-medium"
+          >
             User Fetch Response
           </Label>
           <Textarea
@@ -496,5 +525,5 @@ export default function FastUserDbToolPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

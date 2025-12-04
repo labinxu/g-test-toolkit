@@ -6,6 +6,7 @@ import { ActionPage } from './entities/action-page.entity';
 import { ActionPageAction } from './entities/action-page-action.entity';
 import { ActionParam } from './entities/action-param.entity';
 import { ActionPlatform } from './entities/action-platform.entity';
+import { ActionPageElement } from './entities/action-page-element.entity';
 import { UserScenarioOption } from './entities/user-scenario-option.entity';
 import { UserScenariosService } from './user-scenarios.service';
 import { UserScenariosController } from './user-scenarios.controller';
@@ -23,6 +24,7 @@ import { EnvTemplatesController } from './env-templates.controller';
       UserScenarioStep,
       ActionPage,
       ActionPageAction,
+       ActionPageElement,
       ActionParam,
       ActionPlatform,
       UserScenarioOption,

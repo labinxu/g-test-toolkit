@@ -22,6 +22,7 @@ import { OptionsSelectInput } from '@/components/select/options-select-input'
 import { OptionsSelectSearch } from '@/components/select/options-select-search'
 import ResizableStickyTable from '@/components/data-table'
 import TablePagination from '@/components/table-pagination'
+import TableToolbar from '@/components/table-toolbar'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { GTable } from '@/components/g-table'
 import { cn } from '@/lib/utils'
@@ -1683,7 +1684,8 @@ export default function ScenariosPage() {
                       setSelectedCaseId(null)
                       setStepsByCase({})
                     }}
-                    triggerClassName="h-8 min-w-[140px]"
+                    size="sm"
+                    triggerClassName="min-w-[140px]"
                   />
                 </div>
                 {ingestingDoc && (
@@ -1694,67 +1696,67 @@ export default function ScenariosPage() {
                 )}
               </div>
               <div className="flex min-h-0 flex-1 flex-col">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <TablePagination
-                    page={tablePage}
-                    totalPages={totalPages}
-                    totalRows={tableFilteredRows || filteredCases.length}
-                    pageSize={tablePageSize}
-                    pageSizeMin={10}
-                    pageSizeMax={200}
-                    onPageChange={(p) => setTablePage(p)}
-                    onPageSizeChange={(size) => {
-                      setTablePageSize(size)
-                      setTablePage(1)
-                    }}
-                  />
-                  <div className="flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 rounded-full"
-                          type="button"
-                          onClick={() => {
-                            setNewCaseCode('')
-                            setNewCaseTitle('')
-                            setNewCaseFeature('')
-                            setNewCaseSubmenu(undefined)
-                            setNewCasePriority('P1')
-                            setNewCaseStatus('draft')
-                            setNewCaseDesc('')
-                            setNewCaseAcceptance('')
-                            setNewCaseOpen(true)
-                          }}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>新增用例</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          className="h-8 w-8 rounded-full"
-                          disabled={!selectedIds.length || deletingBulk}
-                          onClick={handleDeleteSelected}
-                          type="button"
-                        >
-                          {deletingBulk ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>删除所选</TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
-                <div className="min-h-0 flex-1">
+                <TableToolbar
+                  page={tablePage}
+                  totalPages={totalPages}
+                  totalRows={tableFilteredRows || filteredCases.length}
+                  pageSize={tablePageSize}
+                  pageSizeMin={10}
+                  pageSizeMax={200}
+                  onPageChange={(p) => setTablePage(p)}
+                  onPageSizeChange={(size) => {
+                    setTablePageSize(size)
+                    setTablePage(1)
+                  }}
+                  rightActions={
+                    <>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            type="button"
+                            onClick={() => {
+                              setNewCaseCode('')
+                              setNewCaseTitle('')
+                              setNewCaseFeature('')
+                              setNewCaseSubmenu(undefined)
+                              setNewCasePriority('P1')
+                              setNewCaseStatus('draft')
+                              setNewCaseDesc('')
+                              setNewCaseAcceptance('')
+                              setNewCaseOpen(true)
+                            }}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>新增用例</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            disabled={!selectedIds.length || deletingBulk}
+                            onClick={handleDeleteSelected}
+                            type="button"
+                          >
+                            {deletingBulk ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>删除所选</TooltipContent>
+                      </Tooltip>
+                    </>
+                  }
+                />
+                <div className="relative min-h-0 flex-1">
                   <ResizableStickyTable<UserScenarioSummary>
                     rows={filteredCases}
                     columns={useMemo(
@@ -1964,6 +1966,8 @@ export default function ScenariosPage() {
                     getRowKey={(row) => `id:${row.id}`}
                     page={safePage}
                     pageSize={tablePageSize}
+                    headerLightClass="bg-muted/70 text-foreground border-b border-border/70"
+                    headerDarkClass="dark:bg-muted/20 dark:text-foreground dark:border-border/50"
                     density="compact"
                     selection={{
                       enabled: true,
@@ -1995,6 +1999,11 @@ export default function ScenariosPage() {
                       setDetailsOpen(true)
                     }}
                   />
+                  {!loadingCases && (tableFilteredRows || filteredCases.length) === 0 && (
+                    <p className="text-muted-foreground pointer-events-none absolute inset-x-0 top-12 text-center text-xs">
+                      暂无匹配的用户场景，请调整筛选条件或点击右上角 + 按钮新建。
+                    </p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -2064,7 +2073,6 @@ export default function ScenariosPage() {
                                   platform: item.value,
                                 })
                               }
-                              triggerClassName="h-9"
                             />
                           </div>
                           <div className="space-y-1">
@@ -2079,7 +2087,6 @@ export default function ScenariosPage() {
                               }
                               onChange={(val) => setEditingSubmenu(val)}
                               items={submenuItems}
-                              inputClassName="h-9"
                             />
                           </div>
                           <div className="space-y-1">
@@ -2094,7 +2101,6 @@ export default function ScenariosPage() {
                               }
                               onChange={(val) => setEditingPriority(val)}
                               items={priorityItems}
-                              inputClassName="h-9"
                             />
                           </div>
                           <div className="space-y-1">
@@ -2111,7 +2117,6 @@ export default function ScenariosPage() {
                                 setEditingModule(val.replace(/[^A-Za-z0-9]+/g, ''))
                               }
                               items={moduleItems}
-                              inputClassName="h-9"
                             />
                           </div>
                           <div className="space-y-1">
@@ -2126,7 +2131,6 @@ export default function ScenariosPage() {
                                   status: item.value as CaseStatus,
                                 })
                               }
-                              triggerClassName="h-9"
                             />
                           </div>
                         </div>
@@ -2357,7 +2361,6 @@ export default function ScenariosPage() {
                         platform: item.value,
                       })
                     }
-                    triggerClassName="h-9"
                   />
                 </div>
                 <div className="space-y-1">
@@ -2372,7 +2375,6 @@ export default function ScenariosPage() {
                     }
                     onChange={(val) => setEditingSubmenu(val)}
                     items={submenuItems}
-                    inputClassName="h-9"
                   />
                 </div>
                 <div className="space-y-1">
@@ -2383,7 +2385,6 @@ export default function ScenariosPage() {
                     value={editingPriority != null ? editingPriority : selectedCase.priority || ''}
                     onChange={(val) => setEditingPriority(val)}
                     items={priorityItems}
-                    inputClassName="h-9"
                   />
                 </div>
                 <div className="space-y-1">
@@ -2398,7 +2399,6 @@ export default function ScenariosPage() {
                     }
                     onChange={(val) => setEditingModule(val.replace(/[^A-Za-z0-9]+/g, ''))}
                     items={moduleItems}
-                    inputClassName="h-9"
                   />
                 </div>
                 <div className="space-y-1">
@@ -2413,7 +2413,6 @@ export default function ScenariosPage() {
                         status: item.value as CaseStatus,
                       })
                     }
-                    triggerClassName="h-9"
                   />
                 </div>
               </div>
@@ -2475,7 +2474,7 @@ export default function ScenariosPage() {
                     ? 'none'
                     : String(envDialogSelectedId)
                 }
-                items={[
+                    items={[
                   {
                     value: 'none',
                     label: '不使用模板（使用默认配置）',
@@ -2494,7 +2493,7 @@ export default function ScenariosPage() {
                   }
                 }}
                 disabled={envDialogLoading}
-                triggerClassName="h-9 text-xs"
+                triggerClassName="text-xs"
               />
               {envDialogTemplates.length === 0 && !envDialogLoading && (
                 <p className="text-[11px] text-muted-foreground">
@@ -2654,7 +2653,6 @@ export default function ScenariosPage() {
                             (item.value || 'GET').toString().toUpperCase() || 'GET'
                           )
                         }
-                        triggerClassName="h-9"
                       />
                     </div>
                     <div className="space-y-1">
@@ -2696,7 +2694,6 @@ export default function ScenariosPage() {
                     setStepDialogActionKey(undefined)
                     setStepDialogArgs({})
                   }}
-                  inputClassName="h-9"
                 />
               </div>
               <div className="space-y-1">
@@ -2730,7 +2727,6 @@ export default function ScenariosPage() {
                       }
                     }
                   }}
-                  inputClassName="h-9"
                 />
               </div>
             </div>
@@ -2867,7 +2863,8 @@ export default function ScenariosPage() {
                           setStepDialogCheckType('')
                         }
                       }}
-                      triggerClassName="h-8 text-xs"
+                      size="sm"
+                      triggerClassName="text-xs"
                     />
                   </div>
                   <div className="space-y-1">
@@ -3162,7 +3159,6 @@ export default function ScenariosPage() {
                       localStorage.setItem('gtt:scenarios:platform', item.value)
                     } catch {}
                   }}
-                  triggerClassName="h-9"
                 />
               </div>
               <div className="space-y-1">
@@ -3203,7 +3199,6 @@ export default function ScenariosPage() {
                   items={submenuItems}
                   placeholder="选择子菜单"
                   onSelect={(item) => setNewCaseSubmenu(item.value)}
-                  triggerClassName="h-9"
                 />
               </div>
               <div className="space-y-1">
@@ -3214,7 +3209,6 @@ export default function ScenariosPage() {
                   items={priorityItems}
                   placeholder="选择优先级"
                   onSelect={(item) => setNewCasePriority(item.value)}
-                  triggerClassName="h-9"
                 />
               </div>
               <div className="space-y-1">
@@ -3225,7 +3219,6 @@ export default function ScenariosPage() {
                   items={statusItems}
                   placeholder="选择状态"
                   onSelect={(item) => setNewCaseStatus(item.value as CaseStatus)}
-                  triggerClassName="h-9"
                 />
               </div>
             </div>

@@ -32,6 +32,7 @@ import { ParametersForm, type ParametersFormHandle } from '@/components/settings
 import DirectoryTreePanel from '@/components/files/directory-tree-panel'
 import MonacoScriptEditor, {
   type MonacoScriptEditorHandle,
+  preloadMonacoEditorAssets,
 } from '@/components/files/monaco-script-editor'
 import { PackagePlus } from 'lucide-react'
 import { OutputPanel } from '@/components/output-panel'
@@ -226,6 +227,9 @@ export default function Page() {
       return 80
     }
   })
+  useEffect(() => {
+    preloadMonacoEditorAssets().catch(() => {})
+  }, [])
 
   useEffect(() => {
     const handler = () => {
@@ -760,7 +764,7 @@ export default function Page() {
               className="ml-2 h-6 px-2 text-[11px]"
               onClick={() => {
                 // 跳转到 Action Catalog，并预先选择对应平台，页面可再在那边选中
-                router.push('/settings/action-catalog')
+                router.push('/scenarios/action-catalog')
               }}
             >
               在页面映射中查看
@@ -1368,7 +1372,6 @@ export default function Page() {
                                   value={genTemplate}
                                   items={[{ label: 'BDD', value: 'bdd' }] as any}
                                   onSelect={(it) => setGenTemplate(it.value as any)}
-                                  triggerClassName="h-9"
                                 />
                               </div>
                             </div>

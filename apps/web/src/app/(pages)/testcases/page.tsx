@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import DirectoryTreePanel from '@/components/files/directory-tree-panel'
 import MonacoScriptEditor, {
   type MonacoScriptEditorHandle,
+  preloadMonacoEditorAssets,
 } from '@/components/files/monaco-script-editor'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -98,6 +99,9 @@ export default function Page() {
   useEffect(() => {
     if (typesOpen) updateTypesStatus()
   }, [typesOpen, updateTypesStatus])
+  useEffect(() => {
+    preloadMonacoEditorAssets().catch(() => {})
+  }, [])
   const [openLog, setOpenLog] = useState(false)
   const { logs, connected, clientId, clearLogs, running, setRunning } = useSocket()
   const [fileCache, setFileCache] = useState<Record<string, { content: string; original: string }>>(
@@ -1156,7 +1160,7 @@ export default function Page() {
                   }
                 }}
                 disabled={envRunDialogLoading}
-                triggerClassName="h-9 text-xs"
+                triggerClassName="text-xs"
               />
               {envRunTemplates.length === 0 && !envRunDialogLoading && (
                 <p className="text-[11px] text-muted-foreground">

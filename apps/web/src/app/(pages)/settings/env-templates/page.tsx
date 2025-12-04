@@ -231,7 +231,8 @@ export default function EnvTemplatesPage() {
                 items={PLATFORM_OPTIONS}
                 onSelect={(item) => setPlatform(item.value)}
                 placeholder="选择平台"
-                triggerClassName="h-8 text-xs"
+                size="sm"
+                triggerClassName="text-xs"
               />
             </div>
             <div className="space-y-1">
@@ -241,7 +242,8 @@ export default function EnvTemplatesPage() {
                 items={DRIVER_OPTIONS as any}
                 onSelect={(item) => setDriver(item.value as any)}
                 placeholder="选择驱动"
-                triggerClassName="h-8 text-xs"
+                size="sm"
+                triggerClassName="text-xs"
               />
             </div>
           </div>
@@ -322,7 +324,8 @@ export default function EnvTemplatesPage() {
                     setEditing((prev) => (prev ? { ...prev, platform: item.value } : prev))
                   }
                   placeholder="选择平台"
-                  triggerClassName="h-8 text-xs"
+                  size="sm"
+                  triggerClassName="text-xs"
                 />
               </div>
               <div className="space-y-1">
@@ -336,7 +339,8 @@ export default function EnvTemplatesPage() {
                     )
                   }
                   placeholder="选择驱动"
-                  triggerClassName="h-8 text-xs"
+                  size="sm"
+                  triggerClassName="text-xs"
                 />
               </div>
               <div className="space-y-1">
@@ -391,7 +395,8 @@ export default function EnvTemplatesPage() {
                       prev ? { ...prev, enabled: item.value === 'true' } : prev
                     )
                   }
-                  triggerClassName="h-8 text-xs"
+                  size="sm"
+                  triggerClassName="text-xs"
                 />
               </div>
             </div>

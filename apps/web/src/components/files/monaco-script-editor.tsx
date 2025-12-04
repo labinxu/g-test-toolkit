@@ -18,10 +18,58 @@ import { FileText, Save, Loader2, RotateCcw } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { normalizeResponseError } from '@/lib/error'
 
+type TypingsFile = { path: string; content: string }
+
+const sharedTypingsStore = (() => {
+  const g = globalThis as any
+  if (!g.__gttTypingsStore) {
+    g.__gttTypingsStore = { files: null as TypingsFile[] | null }
+  }
+  return g.__gttTypingsStore as { files: TypingsFile[] | null }
+})()
+
+let sharedTypingsPromise: Promise<TypingsFile[]> | null = null
+let monacoPreloadPromise: Promise<any> | null = null
+
 // Lazy load Monaco React wrapper on client only
 const MonacoEditor = dynamic(async () => (await import('@monaco-editor/react')).default, {
   ssr: false,
 })
+
+export function preloadMonacoEditorBundle() {
+  if (typeof window === 'undefined') return Promise.resolve()
+  if (!monacoPreloadPromise) {
+    monacoPreloadPromise = import('@monaco-editor/react')
+  }
+  return monacoPreloadPromise
+}
+
+export function preloadTestcaseTypings() {
+  if (typeof window === 'undefined') return Promise.resolve(sharedTypingsStore.files || [])
+  if (sharedTypingsStore.files) return Promise.resolve(sharedTypingsStore.files)
+  if (!sharedTypingsPromise) {
+    sharedTypingsPromise = fetch('/api/testcase/typings', { cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) return []
+        try {
+          const json = await res.json()
+          return (json?.files as TypingsFile[]) || []
+        } catch {
+          return []
+        }
+      })
+      .catch(() => [])
+      .then((files) => {
+        sharedTypingsStore.files = files
+        return files
+      })
+  }
+  return sharedTypingsPromise
+}
+
+export function preloadMonacoEditorAssets() {
+  return Promise.all([preloadMonacoEditorBundle(), preloadTestcaseTypings()])
+}
 
 export type MonacoScriptEditorHandle = {
   insertAtCursor: (text: string, opts?: { ensureNewLine?: boolean }) => void
@@ -70,7 +118,9 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
   const monacoRef = useRef<any>(null)
   const extraLibDisposablesRef = useRef<any[]>([])
   const globalTypingUrisRef = useRef<string[]>([])
-  const typingsCacheRef = useRef<{ files: { path: string; content: string }[] } | null>(null)
+  const typingsCacheRef = useRef<{ files: TypingsFile[] } | null>(
+    sharedTypingsStore.files ? { files: sharedTypingsStore.files } : null
+  )
   const initialLoadLockRef = useRef<{ path: string | null; promise: Promise<unknown> | null }>({
     path: null,
     promise: null,
@@ -225,14 +275,16 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
     const walk = async (baseDir: string, src: string, d: number) => {
       if (d < 0) return
       const specs = parseSpecs(src)
-      for (const spec of specs) {
-        const r = await resolveOne(baseDir, spec)
-        if (!r) continue
-        if (visited.has(r.uri)) continue
-        visited.add(r.uri)
-        collected.set(r.uri, r.content)
-        await walk(dirname(r.uri), r.content, d - 1)
-      }
+      await Promise.all(
+        specs.map(async (spec) => {
+          const r = await resolveOne(baseDir, spec)
+          if (!r) return
+          if (visited.has(r.uri)) return
+          visited.add(r.uri)
+          collected.set(r.uri, r.content)
+          await walk(dirname(r.uri), r.content, d - 1)
+        })
+      )
     }
 
     await walk(dirname(rootUri), code, depth)
@@ -386,10 +438,12 @@ export const MonacoScriptEditor = forwardRef<MonacoScriptEditorHandle, Props>(fu
         if (fetched !== undefined) {
           files = fetched
           typingsCacheRef.current = { files: fetched }
+          sharedTypingsStore.files = fetched
         } else if (typingsCacheRef.current) {
           files = typingsCacheRef.current.files
         } else {
           typingsCacheRef.current = { files: [] }
+          sharedTypingsStore.files = []
         }
       }
       monaco.languages.typescript.typescriptDefaults.setCompilerOptions({

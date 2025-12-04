@@ -24,6 +24,7 @@ import { ApiTestBaseUrl } from './api-tests/api-test-base-url.entity';
 import { UserScenario } from './user-scenarios/entities/user-scenario.entity';
 import { UserScenarioStep } from './user-scenarios/entities/user-scenario-step.entity';
 import { ActionPage } from './user-scenarios/entities/action-page.entity';
+import { ActionPageElement } from './user-scenarios/entities/action-page-element.entity';
 import { ActionPageAction } from './user-scenarios/entities/action-page-action.entity';
 import { ActionParam } from './user-scenarios/entities/action-param.entity';
 import { ActionPlatform } from './user-scenarios/entities/action-platform.entity';
@@ -49,6 +50,7 @@ import { LiveModule } from './live/live.module';
         UserScenario,
         UserScenarioStep,
         ActionPage,
+        ActionPageElement,
         ActionPageAction,
         ActionParam,
         ActionPlatform,

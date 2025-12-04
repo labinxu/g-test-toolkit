@@ -11,7 +11,9 @@ import {
   Put,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -20,6 +22,7 @@ import { ActionPage } from './entities/action-page.entity';
 import { ActionPageAction } from './entities/action-page-action.entity';
 import { ActionParam } from './entities/action-param.entity';
 import { ActionPlatform } from './entities/action-platform.entity';
+import { ActionPageElement } from './entities/action-page-element.entity';
 import { ActionCatalogService } from './action-catalog.service';
 import { User } from '../auth/entities/user.entity';
 import { ensureAdminOrBootstrap } from '../settings/admin.util';
@@ -27,6 +30,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Project, ScriptTarget, ts } from 'ts-morph';
 import { ApiBody } from '@nestjs/swagger';
+import { FileInterceptor } from '@nest-lab/fastify-multer';
+import { File as FastifyMulterFile } from 'fastify-multer/lib/interfaces';
 
 type AnyRec = Record<string, any>;
 
@@ -37,6 +42,8 @@ export class ActionCatalogAdminController {
     private readonly pageRepo: Repository<ActionPage>,
     @InjectRepository(ActionPageAction)
     private readonly actionRepo: Repository<ActionPageAction>,
+    @InjectRepository(ActionPageElement)
+    private readonly elementRepo: Repository<ActionPageElement>,
     @InjectRepository(ActionPlatform)
     private readonly platformRepo: Repository<ActionPlatform>,
     @InjectRepository(User)
@@ -47,6 +54,110 @@ export class ActionCatalogAdminController {
   private normalizePlatform(input?: string): string {
     const raw = (input || '').trim().toLowerCase();
     return raw || 'gettr-web';
+  }
+
+  /**
+   * 简单 CSV 解析：支持带引号的字段及跨行（多行）单元格。
+   * - 仅按逗号分隔列；
+   * - 双引号内的逗号和换行不会被视为分隔符；
+   * - 单元格内容会做 trim，外层成对引号会被去掉；
+   * - 返回的每一行只要存在至少一个非空单元格就会被保留。
+   */
+  private parseCsvRows(raw: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    const pushCell = () => {
+      let v = current;
+      v = v.trim();
+      v = v.replace(/^"|"$/g, '');
+      row.push(v);
+      current = '';
+    };
+
+    const pushRowIfNotEmpty = () => {
+      if (!row.length) return;
+      const hasValue = row.some((c) => (c || '').trim().length > 0);
+      if (hasValue) {
+        rows.push(row.map((c) => c.trim()));
+      }
+      row = [];
+    };
+
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch === '"') {
+        if (inQuotes && raw[i + 1] === '"') {
+          // 转义双引号 ""
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === ',' && !inQuotes) {
+        pushCell();
+      } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+        // 行结束（处理 CRLF）
+        if (ch === '\r' && raw[i + 1] === '\n') {
+          i++;
+        }
+        pushCell();
+        pushRowIfNotEmpty();
+      } else {
+        current += ch;
+      }
+    }
+
+    // 文件结尾的最后一个单元格 / 行
+    if (current.length > 0 || row.length > 0) {
+      pushCell();
+      pushRowIfNotEmpty();
+    }
+
+    return rows;
+  }
+
+  private splitElementIds(raw: string): string[] {
+    const replaced = (raw || '')
+      .replace(/；/g, ';')
+      .replace(/，/g, ',')
+      .replace(/、/g, ',');
+    const tokens = replaced
+      .split(/[,;\n\r\t ]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const looksLikeId = /^[A-Za-z0-9_.:-]+$/;
+    return tokens.filter((s) => looksLikeId.test(s));
+  }
+
+  private derivePageKeyFromLabel(label: string): string {
+    const raw = (label || '').trim();
+    if (!raw) return 'page';
+    const withDashes = raw
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2');
+    const cleaned = withDashes
+      // 将逗号和其它常见分隔符视为连字符
+      .replace(/[,\uFF0C\u3001/\\]+/g, '-')
+      // 其余非单词字符统一替换为 -
+      .replace(/[^A-Za-z0-9_-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return cleaned.toLowerCase() || 'page';
+  }
+
+  private buildClassNameFromPageKey(key: string): string {
+    const norm = (key || '').trim();
+    if (!norm) return 'Page';
+    const parts = norm.split(/[-_]+/).filter(Boolean);
+    if (!parts.length) return 'Page';
+    return (
+      parts
+        .map((p) => (p[0] ? p[0].toUpperCase() + p.slice(1) : p))
+        .join('') + 'Page'
+    );
   }
 
   private async getLibSrcDirForPlatform(
@@ -751,6 +862,11 @@ export class ActionCatalogAdminController {
   }
 
   private mapPageSummary(p: ActionPage) {
+    const actionsCount = Array.isArray(p.actions) ? p.actions.length : 0;
+    const elementsCount = Array.isArray((p as any).elements)
+      ? (p as any).elements.length
+      : 0;
+    const hasElementsOnly = elementsCount > 0 && actionsCount === 0;
     return {
       id: p.id,
       platform: p.platform,
@@ -761,6 +877,9 @@ export class ActionCatalogAdminController {
       varName: p.varName,
       enabled: p.enabled,
       sortOrder: p.sortOrder,
+      actionsCount,
+      elementsCount,
+      hasElementsOnly,
     };
   }
 
@@ -835,6 +954,12 @@ export class ActionCatalogAdminController {
   private mapPageDetail(p: ActionPage) {
     return {
       ...this.mapPageSummary(p),
+      elements: ((p as any).elements || []).map((el: ActionPageElement) => ({
+        id: el.id,
+        elementId: el.elementId,
+        description: el.description ?? null,
+        defaultLocator: el.defaultLocator ?? null,
+      })),
       actions: (p.actions || []).map((a) => ({
         id: a.id,
         key: a.key,
@@ -915,6 +1040,7 @@ export class ActionCatalogAdminController {
     } catch {}
     const rows = await this.pageRepo.find({
       where: { platform: plat } as any,
+      relations: ['actions', 'elements'],
       order: { sortOrder: 'ASC', id: 'ASC' },
     });
     return {
@@ -1195,11 +1321,219 @@ export class ActionCatalogAdminController {
     return { created, skipped };
   }
 
+  @UseGuards(AuthGuard('jwt'))
+  @Post('web-ids/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadWebIds(
+    @Req() req: any,
+    @UploadedFile() file: FastifyMulterFile,
+    @Body() body: AnyRec,
+  ) {
+    await ensureAdminOrBootstrap(this.userRepo, req);
+    if (!file || !file.buffer) {
+      throw new BadRequestException('web-ids CSV file is required');
+    }
+    const filename = String((file as any).originalname || '').toLowerCase();
+    if (!filename.endsWith('.csv')) {
+      throw new BadRequestException(
+        '当前仅支持 CSV 格式的 web-ids 文件，请从 Excel 另存为 CSV 后再导入。',
+      );
+    }
+    const plat = this.normalizePlatform(body?.platform);
+    const raw = file.buffer.toString('utf8');
+    const rows = this.parseCsvRows(raw);
+    if (rows.length <= 1) {
+      return {
+        result: 'ok',
+        platform: plat,
+        pagesCreated: 0,
+        elementsCreated: 0,
+        elementsUpdated: 0,
+      };
+    }
+
+    const header = rows[0] || [];
+    const norm = header.map((h) =>
+      (h || '')
+        .toString()
+        .trim()
+        .replace(/[_\s]+/g, '')
+        .toLowerCase(),
+    );
+    const findIndex = (candidates: string[]): number => {
+      return norm.findIndex((h) => candidates.includes(h));
+    };
+
+    const idxPageName = findIndex([
+      'page',
+      'pagename',
+      '页面',
+      '页面名称',
+      '页面名',
+    ]);
+    const idxElementIds = findIndex([
+      'elementid',
+      'element',
+      '元素id',
+      '元素',
+      '元素id号',
+      'id',
+    ]);
+    const idxDescription = findIndex([
+      'description',
+      'desc',
+      '描述',
+      '说明',
+      '备注',
+    ]);
+
+    if (idxPageName < 0 || idxElementIds < 0) {
+      throw new BadRequestException(
+        'web-ids CSV 首行需要包含「页面名称」(page) 与「Element ID」(elementId/元素ID) 列。',
+      );
+    }
+
+    const pages = await this.pageRepo.find({
+      where: { platform: plat } as any,
+    });
+    const pageByKeyOrLabel = new Map<string, ActionPage>();
+    for (const p of pages) {
+      const k1 = (p.key || '').trim().toLowerCase();
+      const k2 = (p.label || '').trim().toLowerCase();
+      if (k1) pageByKeyOrLabel.set(k1, p);
+      if (k2) pageByKeyOrLabel.set(k2, p);
+    }
+
+    const elementsExisting = await this.elementRepo.find({
+      where: { platform: plat } as any,
+      relations: ['page'],
+    });
+    const elementByPageAndId = new Map<string, ActionPageElement>();
+    for (const el of elementsExisting) {
+      const pageId = (el.page as any)?.id as number | undefined;
+      if (!pageId) continue;
+      const key = `${pageId}::${el.elementId}`;
+      elementByPageAndId.set(key, el);
+    }
+
+    let pagesCreated = 0;
+    let elementsCreated = 0;
+    let elementsUpdated = 0;
+    const elementsToSave: ActionPageElement[] = [];
+
+    const getOrCreatePageForName = async (name: string): Promise<ActionPage> => {
+      const trimmed = (name || '').trim();
+      const normName = trimmed.toLowerCase();
+      const cached = pageByKeyOrLabel.get(normName);
+      if (cached) return cached;
+
+      const key = this.derivePageKeyFromLabel(trimmed);
+      const className = this.buildClassNameFromPageKey(key);
+      const module = this.getModuleNameForPlatform(plat);
+      const page = new ActionPage();
+      page.platform = plat;
+      page.key = key;
+      page.label = trimmed || key;
+      page.module = module;
+      page.className = className;
+      page.varName = this.deriveVarNameFromPageKey(key);
+      page.enabled = true;
+      page.sortOrder = pages.length + pagesCreated;
+      const saved = await this.pageRepo.save(page);
+      pagesCreated += 1;
+      pageByKeyOrLabel.set(normName, saved);
+      return saved;
+    };
+
+    let lastPageName: string | null = null;
+    for (let i = 1; i < rows.length; i++) {
+      const cols = rows[i] || [];
+      const pageNameRaw = cols[idxPageName] ?? '';
+      const elementIdsRaw = cols[idxElementIds] ?? '';
+      const descRaw = idxDescription >= 0 ? cols[idxDescription] ?? '' : '';
+      let pageName = (pageNameRaw || '').trim();
+      if (!pageName && lastPageName) {
+        pageName = lastPageName;
+      } else if (pageName) {
+        lastPageName = pageName;
+      }
+      if (!pageName) continue;
+      const elementIds = this.splitElementIds(elementIdsRaw);
+      if (!elementIds.length) continue;
+      const page = await getOrCreatePageForName(pageName);
+      for (const elementId of elementIds) {
+        const key = `${page.id}::${elementId}`;
+        const existing = elementByPageAndId.get(key);
+        const defaultLocator = `[data-testid="${elementId}"]`;
+        if (!existing) {
+          const el = new ActionPageElement();
+          el.page = page;
+          el.platform = plat;
+          el.pageName = pageName;
+          el.elementId = elementId;
+          el.description = descRaw || null;
+          el.defaultLocator = defaultLocator;
+          el.source = 'import';
+          elementsToSave.push(el);
+          elementByPageAndId.set(key, el);
+          elementsCreated += 1;
+        } else {
+          let changed = false;
+          if (descRaw && descRaw.trim() && descRaw !== existing.description) {
+            existing.description = descRaw;
+            changed = true;
+          }
+          if (!existing.defaultLocator) {
+            existing.defaultLocator = defaultLocator;
+            changed = true;
+          }
+          if (changed) {
+            elementsToSave.push(existing);
+            elementsUpdated += 1;
+          }
+        }
+      }
+    }
+
+    if (elementsToSave.length > 0) {
+      await this.elementRepo.save(elementsToSave);
+    }
+
+    return {
+      result: 'ok',
+      platform: plat,
+      pagesCreated,
+      elementsCreated,
+      elementsUpdated,
+    };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Delete('web-ids')
+  async clearWebIds(
+    @Req() req: any,
+    @Query('platform') platform?: string,
+  ) {
+    await ensureAdminOrBootstrap(this.userRepo, req);
+    const plat = this.normalizePlatform(platform);
+    const res = await this.elementRepo.delete({ platform: plat } as any);
+    const deleted = res.affected ?? 0;
+    return {
+      result: 'ok',
+      platform: plat,
+      deleted,
+    };
+  }
+
   /**
    * 从 shared-libs/<platform>/src 下的 Page 类（extends IPage）自动导入方法到 Action Catalog：
    * - 仅在数据库中尚未存在对应 method 的动作时创建；
    * - key/label/method 默认为方法名，kind 默认为 'action'；
-   * - 目前主要用于 gettr-android，将已有手写 Page 方法在 /settings/action-catalog 中展示出来。
+   * - 目前主要用于 gettr-android，将已有手写 Page 方法在 /scenarios/action-catalog 中展示出来。
    */
   private async syncActionsFromLib(platform: string): Promise<{
     created: number;
@@ -1403,7 +1737,7 @@ export class ActionCatalogAdminController {
     await ensureAdminOrBootstrap(this.userRepo, req);
     const page = await this.pageRepo.findOne({
       where: { id },
-      relations: ['actions', 'actions.params'],
+      relations: ['actions', 'actions.params', 'elements'],
       order: {
         actions: {
           sortOrder: 'ASC',

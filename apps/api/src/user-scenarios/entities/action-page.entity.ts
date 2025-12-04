@@ -1,11 +1,6 @@
-import {
-  Column,
-  Entity,
-  Index,
-  OneToMany,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, Index, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { ActionPageAction } from './action-page-action.entity';
+import { ActionPageElement } from './action-page-element.entity';
 
 @Entity({ name: 'action_pages' })
 @Index(['platform', 'key'], { unique: true })
@@ -41,5 +36,9 @@ export class ActionPage {
     cascade: ['insert', 'update'],
   })
   actions?: ActionPageAction[];
-}
 
+  @OneToMany(() => ActionPageElement, (el) => el.page, {
+    cascade: ['insert', 'update'],
+  })
+  elements?: ActionPageElement[];
+}

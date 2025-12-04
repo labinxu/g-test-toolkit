@@ -1,20 +1,48 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
 import { OptionsSelect, type OptionsSelectItem } from '@/components/select/options-select'
+import { OptionsSelectInput } from '@/components/select/options-select-input'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import { toast } from 'sonner'
-import { Loader2, Plus, Trash2, ChevronsUpDown, Eye, FileCode } from 'lucide-react'
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  ChevronsUpDown,
+  Eye,
+  FileCode,
+  Pencil,
+  SlidersHorizontal,
+  FilePlus2,
+  UploadCloud,
+  Eraser,
+  RefreshCw,
+  Save,
+} from 'lucide-react'
 import { GTable } from '@/components/g-table'
 import { useRouter } from 'next/navigation'
+import TablePagination from '@/components/table-pagination'
+import TableToolbar from '@/components/table-toolbar'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 type PageSummary = {
   id: number
@@ -55,6 +83,13 @@ type AdminPage = {
   enabled: boolean
   sortOrder: number
   actions: AdminAction[]
+}
+
+type AdminElement = {
+  id?: number
+  elementId: string
+  description?: string | null
+  defaultLocator?: string | null
 }
 
 type AdminParam = {
@@ -103,11 +138,14 @@ export default function ActionCatalogSettingsPage() {
   const [pages, setPages] = useState<PageSummary[]>([])
   const [loadingPages, setLoadingPages] = useState(false)
   const [selectedPageId, setSelectedPageId] = useState<number | null>(null)
+  const [selectedPageIds, setSelectedPageIds] = useState<number[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [draft, setDraft] = useState<AdminPage | null>(null)
-  const [pageFilter, setPageFilter] = useState('')
+  const [keyFilter, setKeyFilter] = useState('')
+  const [nameFilter, setNameFilter] = useState('')
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   const [callSourcePageId, setCallSourcePageId] = useState<number | null>(null)
   const [callSourceActionsByPageId, setCallSourceActionsByPageId] = useState<
     Record<number, AdminAction[]>
@@ -116,6 +154,11 @@ export default function ActionCatalogSettingsPage() {
   const [viewPageDialogOpen, setViewPageDialogOpen] = useState(false)
   const [viewPageLoading, setViewPageLoading] = useState(false)
   const [viewPageDetail, setViewPageDetail] = useState<AdminPage | null>(null)
+  const [uploadingWebIds, setUploadingWebIds] = useState(false)
+  const [clearingWebIds, setClearingWebIds] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [pageTablePage, setPageTablePage] = useState(1)
+  const [pageTablePageSize, setPageTablePageSize] = useState(20)
 
   const selectedSummary = useMemo(
     () => pages.find((p) => p.id === selectedPageId) || null,
@@ -147,6 +190,9 @@ export default function ActionCatalogSettingsPage() {
       const data = await res.json()
       const items = Array.isArray(data?.items) ? (data.items as PageSummary[]) : []
       setPages(items)
+      setSelectedPageIds((prev) =>
+        prev.filter((id) => items.some((p) => p.id === id))
+      )
       if (!selectedPageId && items.length) {
         setSelectedPageId(items[0].id)
       }
@@ -218,6 +264,18 @@ export default function ActionCatalogSettingsPage() {
           typeof data.sortOrder === 'number' && Number.isFinite(data.sortOrder)
             ? Math.floor(data.sortOrder)
             : 0,
+        // elements 仅用于前端辅助选择 locator，不随页面保存回写
+        ...(Array.isArray((data as any).elements)
+          ? {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              elements: (data as any).elements.map((el: any) => ({
+                id: el.id,
+                elementId: el.elementId || '',
+                description: el.description ?? null,
+                defaultLocator: el.defaultLocator ?? null,
+              })) as AdminElement[],
+            }
+          : {}),
         actions: Array.isArray(data.actions)
           ? data.actions.map((a, index) => ({
               id: a.id,
@@ -296,8 +354,6 @@ export default function ActionCatalogSettingsPage() {
   useEffect(() => {
     if (selectedPageId != null) {
       void loadPageDetail(selectedPageId)
-    } else {
-      setDraft(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPageId])
@@ -325,6 +381,7 @@ export default function ActionCatalogSettingsPage() {
     }
     setSelectedPageId(null)
     setDraft(page)
+    setDetailsOpen(true)
   }
 
   const handleSave = async () => {
@@ -593,14 +650,326 @@ export default function ActionCatalogSettingsPage() {
 
   const currentActions = draft?.actions || []
   const filteredPages = useMemo(() => {
-    if (!pageFilter.trim()) return pages
-    const ft = pageFilter.trim().toLowerCase()
-    return pages.filter(
-      (p) =>
-        p.key.toLowerCase().includes(ft) ||
-        (p.label || '').toLowerCase().includes(ft)
-    )
-  }, [pages, pageFilter])
+    const ft = keyFilter.trim().toLowerCase()
+    const nameFt = nameFilter.trim().toLowerCase()
+    return pages.filter((p) => {
+      if (ft) {
+        const keyHit = p.key.toLowerCase().includes(ft)
+        const labelHit = (p.label || '').toLowerCase().includes(ft)
+        if (!keyHit && !labelHit) return false
+      }
+      if (nameFt) {
+        if (!(p.label || '').toLowerCase().includes(nameFt)) return false
+      }
+      if (enabledFilter === 'enabled' && !p.enabled) return false
+      if (enabledFilter === 'disabled' && p.enabled) return false
+      return true
+    })
+  }, [pages, keyFilter, nameFilter, enabledFilter])
+
+  const totalElements = useMemo(
+    () =>
+      pages.reduce(
+        (sum, p) => sum + (((p as any).elementsCount as number | undefined) ?? 0),
+        0
+      ),
+    [pages]
+  )
+
+  const pageTableTotalPages = useMemo(
+    () =>
+      Math.max(
+        1,
+        Math.ceil(
+          Math.max(0, filteredPages.length) / Math.max(1, Math.floor(pageTablePageSize) || 1)
+        )
+      ),
+    [filteredPages.length, pageTablePageSize]
+  )
+
+  const safePageTablePage = useMemo(
+    () => Math.max(1, Math.min(pageTableTotalPages, pageTablePage)),
+    [pageTablePage, pageTableTotalPages]
+  )
+
+  const pagedPages = useMemo(() => {
+    const start = (safePageTablePage - 1) * Math.max(1, pageTablePageSize)
+    const end = start + Math.max(1, pageTablePageSize)
+    return filteredPages.slice(start, end)
+  }, [filteredPages, safePageTablePage, pageTablePageSize])
+
+  const pageTableHeaders = useMemo<ReactNode[]>(() => {
+    const visibleIds = pagedPages.map((p) => p.id)
+    const selectedVisible = visibleIds.filter((id) => selectedPageIds.includes(id))
+    const allChecked = visibleIds.length > 0 && selectedVisible.length === visibleIds.length
+    const indeterminate =
+      selectedVisible.length > 0 && selectedVisible.length < visibleIds.length
+    const filterButtonClass = (active: boolean) =>
+      cn(
+        'text-muted-foreground hover:border-border hover:bg-muted inline-flex h-6 w-6 items-center justify-center rounded border border-transparent text-[11px]',
+        active && 'border-primary/50 bg-primary/5 text-primary'
+      )
+
+    return [
+      <div key="sel-all" className="flex items-center justify-center">
+        <Checkbox
+          checked={allChecked ? true : indeterminate ? 'indeterminate' : false}
+          onCheckedChange={(value) => {
+            setSelectedPageIds((prev) => {
+              const base = new Set(prev)
+              if (value === true) {
+                for (const id of visibleIds) base.add(id)
+              } else {
+                for (const id of visibleIds) base.delete(id)
+              }
+              return Array.from(base)
+            })
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+          }}
+          aria-label="选择当前页所有页面"
+        />
+      </div>,
+      <div key="key-head" className="flex items-center justify-between gap-1">
+        <span>页面 key</span>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="按页面 key 筛选"
+              className={filterButtonClass(Boolean(keyFilter.trim()))}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SlidersHorizontal className="h-3 w-3" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-56 p-2"
+            align="end"
+            sideOffset={4}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-1">
+              <div className="text-muted-foreground text-[11px]">按页面 key 筛选</div>
+              <Input
+                value={keyFilter}
+                placeholder="输入页面 key"
+                className="h-8 w-full text-xs"
+                onChange={(e) => {
+                  setKeyFilter(e.target.value)
+                  setPageTablePage(1)
+                }}
+              />
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>,
+      <div key="label-head" className="flex items-center justify-between gap-1">
+        <span>名称</span>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="按名称筛选"
+              className={filterButtonClass(Boolean(nameFilter.trim()))}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SlidersHorizontal className="h-3 w-3" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-56 p-2"
+            align="end"
+            sideOffset={4}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-1">
+              <div className="text-muted-foreground text-[11px]">按名称筛选</div>
+              <Input
+                value={nameFilter}
+                placeholder="输入名称关键字"
+                className="h-8 w-full text-xs"
+                onChange={(e) => {
+                  setNameFilter(e.target.value)
+                  setPageTablePage(1)
+                }}
+              />
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>,
+      '模块',
+      '动作数',
+      '元素数',
+      <div key="enabled-head" className="flex items-center justify-between gap-1">
+        <span>启用</span>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="按启用状态筛选"
+              className={filterButtonClass(enabledFilter !== 'all')}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SlidersHorizontal className="h-3 w-3" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-48 p-2"
+            align="end"
+            sideOffset={4}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-1">
+              <div className="text-muted-foreground text-[11px]">选择启用状态</div>
+              <Select
+                value={enabledFilter}
+                onValueChange={(val) => {
+                  const next = val as typeof enabledFilter
+                  setEnabledFilter(next)
+                  setPageTablePage(1)
+                }}
+              >
+                <SelectTrigger className="h-8 w-full px-2 text-xs">
+                  <SelectValue placeholder="全部" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  <SelectItem value="enabled">仅启用</SelectItem>
+                  <SelectItem value="disabled">仅禁用</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>,
+      '', // 操作列不再显示表头文字
+    ]
+  }, [pagedPages, selectedPageIds, keyFilter, nameFilter, enabledFilter])
+
+  const pageTableRows = useMemo(
+    () =>
+      pagedPages.map((p) => {
+        const actionsCount = (p as any).actionsCount ?? 0
+        const elementsCount = (p as any).elementsCount ?? 0
+        const hasElementsOnly = (p as any).hasElementsOnly === true
+        const checked = selectedPageIds.includes(p.id)
+        return [
+          <div key={`sel-${p.id}`} className="flex items-center justify-center">
+            <Checkbox
+              checked={checked}
+              onCheckedChange={(value) => {
+                setSelectedPageIds((prev) => {
+                  const set = new Set(prev)
+                  if (value === true) set.add(p.id)
+                  else set.delete(p.id)
+                  return Array.from(set)
+                })
+                if (value === true) {
+                  setSelectedPageId(p.id)
+                }
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+              }}
+              aria-label={`选择页面 ${p.key}`}
+            />
+          </div>,
+          <div key={`key-${p.id}`} className="truncate font-medium text-xs">
+            {p.key}
+          </div>,
+          <div key={`label-${p.id}`} className="truncate text-[11px] text-muted-foreground">
+            {p.label}
+            {elementsCount > 0 && (
+              <span className="ml-1 inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-normal text-amber-700">
+                {hasElementsOnly ? '已导入元素 ID，尚未配置动作' : '已导入元素 ID'}
+              </span>
+            )}
+          </div>,
+          <span key={`module-${p.id}`} className="truncate text-[11px] text-muted-foreground">
+            {p.module}
+          </span>,
+          <span key={`actions-${p.id}`} className="text-[11px]">
+            {actionsCount}
+          </span>,
+          <span key={`elements-${p.id}`} className="text-[11px]">
+            {elementsCount}
+          </span>,
+          <span key={`enabled-${p.id}`} className="text-[11px]">
+            {p.enabled ? '是' : '否'}
+          </span>,
+          <div key={`ops-${p.id}`} className="flex items-center gap-1 pl-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedPageId(p.id)
+                setDetailsOpen(true)
+              }}
+              aria-label={`编辑页面 ${p.key}`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={(e) => {
+                e.stopPropagation()
+                const libPath = getLibFilePathForPage({
+                  platform: p.platform,
+                  key: p.key,
+                  className: p.className,
+                })
+                if (!libPath) {
+                  toast.error('当前平台未配置 libDir，无法定位对应 libs 文件')
+                  return
+                }
+                try {
+                  localStorage.setItem('gtt:libs:lastFile', libPath)
+                } catch {}
+                router.push('/testcases/libs')
+              }}
+              aria-label={`在 Libs 中打开页面 ${p.key}`}
+            >
+              <FileCode className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleViewPage(p.id)
+              }}
+              aria-label={`查看页面 ${p.key}`}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleDeletePage(p)
+              }}
+              aria-label={`删除页面 ${p.key}`}
+            >
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+          </div>,
+        ]
+      }),
+    [pagedPages, router, selectedPageIds]
+  )
 
   const handleAddParam = (actionIndex: number) => {
     if (!draft) return
@@ -759,202 +1128,377 @@ export default function ActionCatalogSettingsPage() {
   }
 
   return (
-    <div className="flex w-full gap-2">
-      <Card className="w-[260px] flex-shrink-0">
+    <div className="flex min-h-0 flex-1 flex-row gap-2 p-2">
+      <Card className="flex min-h-0 flex-1 flex-col min-w-[320px] overflow-hidden">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">页面列表（平台映射）</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="ac-platform">平台</Label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-6 px-2 text-[11px]"
-                onClick={handleCreatePlatform}
-              >
-                新增平台
-              </Button>
-            </div>
-            <OptionsSelect
-              id="ac-platform"
-              value={platform}
-              items={platforms.map((p) => ({
-                value: p.key,
-                label: p.label,
-              }))}
-              onSelect={(item) => {
-                setPlatform(item.value)
-                setSelectedPageId(null)
-                setDraft(null)
-              }}
-              triggerClassName="h-8"
-            />
-          </div>
-          <div className="space-y-1 text-xs">
-            <Label htmlFor="ac-page-filter">页面筛选</Label>
-            <Input
-              id="ac-page-filter"
-              value={pageFilter}
-              onChange={(e) => setPageFilter(e.target.value)}
-              placeholder="按 key / 名称筛选"
-              className="h-7 text-[11px]"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-xs">
-              {loadingPages
-                ? '加载中…'
-                : pageFilter.trim()
-                  ? `共 ${filteredPages.length} 个匹配页面`
-                  : `共 ${pages.length} 个页面`}
-            </span>
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="h-7 w-7"
-              onClick={handleCreatePage}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          <div className="max-h-[60vh] space-y-1 overflow-auto text-xs">
-            {filteredPages.map((p) => (
-              <div
-                key={p.id}
-                className={cn(
-                  'flex items-center justify-between rounded-md border px-2 py-1.5 text-xs transition-colors',
-                  selectedPageId === p.id
-                    ? 'border-primary bg-primary/5 text-primary'
-                    : 'border-border hover:bg-muted'
-                )}
-              >
-                <button
-                  type="button"
-                  className="flex-1 text-left"
-                  onClick={() => {
-                    setSelectedPageId(p.id)
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="ac-platform" className="whitespace-nowrap">
+                  平台
+                </Label>
+                <OptionsSelect
+                  id="ac-platform"
+                  value={platform}
+                  items={platforms.map((p) => ({
+                    value: p.key,
+                    label: p.label,
+                  }))}
+                  onSelect={(item) => {
+                    setPlatform(item.value)
+                    setSelectedPageId(null)
+                    setDraft(null)
+                    setPageTablePage(1)
                   }}
-                >
-                  <div className="truncate font-medium">{p.key}</div>
-                  <div className="text-muted-foreground truncate text-[11px]">
-                    {p.label}
-                  </div>
-                </button>
-                <div className="flex items-center gap-1 pl-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      const libPath = getLibFilePathForPage({
-                        platform: p.platform,
-                        key: p.key,
-                        className: p.className,
-                      })
-                      if (!libPath) {
-                        toast.error('当前平台未配置 libDir，无法定位对应 libs 文件')
-                        return
-                      }
-                      try {
-                        localStorage.setItem('gtt:libs:lastFile', libPath)
-                      } catch {}
-                      router.push('/testcases/libs')
-                    }}
-                    aria-label={`在 Libs 中打开页面 ${p.key}`}
-                  >
-                    <FileCode className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleViewPage(p.id)
-                    }}
-                    aria-label={`查看页面 ${p.key}`}
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleDeletePage(p)
-                    }}
-                    aria-label={`删除页面 ${p.key}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                  size="sm"
+                  triggerClassName="min-w-[140px]"
+                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      onClick={handleCreatePlatform}
+                      aria-label="新增平台"
+                    >
+                      <FilePlus2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>新增平台</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="destructive"
+                      className="h-8 w-8"
+                      onClick={handleDeletePlatform}
+                      disabled={!platforms.some((p) => p.key === platform)}
+                      aria-label="删除平台"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>删除平台</TooltipContent>
+                </Tooltip>
               </div>
-            ))}
-            {!pages.length && !loadingPages && (
-              <p className="text-muted-foreground py-2 text-center text-xs">
-                暂无页面，请点击右上角 + 按钮新建。
+              <div className="flex flex-wrap items-center gap-2">
+              <input
+                id="ac-web-ids-upload"
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0]
+                  if (!file) return
+                  setUploadingWebIds(true)
+                  try {
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    formData.append('platform', platform || 'gettr-web')
+                    const res = await fetch('/api/action-catalog/web-ids/upload', {
+                      method: 'POST',
+                      body: formData,
+                    })
+                    if (!res.ok) {
+                      const err = await normalizeResponseError(res as any)
+                      throw new Error(err.message || '导入页面元素 ID 失败')
+                    }
+                    const data = (await res.json()) as {
+                      pagesCreated?: number
+                      elementsCreated?: number
+                      elementsUpdated?: number
+                    }
+                    const created = data?.elementsCreated ?? 0
+                    const updated = data?.elementsUpdated ?? 0
+                    const pagesCreated = data?.pagesCreated ?? 0
+                    toast.success(
+                      `导入完成：新建页面 ${pagesCreated} 个，新增元素 ${created} 个，更新元素 ${updated} 个`
+                    )
+                    await loadPages(platform)
+                  } catch (e: any) {
+                    toast.error(e?.message || '导入页面元素 ID 失败')
+                  } finally {
+                    setUploadingWebIds(false)
+                    event.target.value = ''
+                  }
+                }}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      const input = document.getElementById(
+                        'ac-web-ids-upload'
+                      ) as HTMLInputElement | null
+                      input?.click()
+                    }}
+                    disabled={uploadingWebIds}
+                    aria-label="从 CSV 导入"
+                  >
+                    {uploadingWebIds ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <UploadCloud className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={6}>从 CSV 导入</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={async () => {
+                      const confirmed = window.confirm(
+                        `确认删除平台 ${platform} 下所有已导入的页面元素 ID？不会删除页面和动作。`
+                      )
+                      if (!confirmed) return
+                      setClearingWebIds(true)
+                      try {
+                        const qs = new URLSearchParams()
+                        if (platform) qs.set('platform', platform)
+                        const res = await fetch(
+                          `/api/action-catalog/web-ids?${qs.toString()}`,
+                          { method: 'DELETE' }
+                        )
+                        if (!res.ok) {
+                          const err = await normalizeResponseError(res as any)
+                          throw new Error(err.message || '清空页面元素 ID 失败')
+                        }
+                        const data = (await res.json()) as { deleted?: number }
+                        toast.success(
+                          `已删除当前平台下的元素 ID 共 ${data?.deleted ?? 0} 个；可重新导入 CSV。`
+                        )
+                        await loadPages(platform)
+                      } catch (e: any) {
+                        toast.error(e?.message || '清空页面元素 ID 失败')
+                      } finally {
+                        setClearingWebIds(false)
+                      }
+                    }}
+                    disabled={clearingWebIds}
+                    aria-label="清空当前平台元素 ID"
+                  >
+                    {clearingWebIds ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Eraser className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={6}>清空当前平台元素 ID</TooltipContent>
+              </Tooltip>
+              </div>
+            </div>
+            <p className="text-muted-foreground text-[11px]">
+              支持从 docs/test-plan/web/web-ids.csv 导入页面名称与 data-testid；同一平台下按页面名称归集。
+              {totalElements > 0 && (
+                <span className="ml-2">
+                  当前平台已导入元素 ID 共 {totalElements} 个
+                </span>
+              )}
+            </p>
+          </div>
+          <TableToolbar
+            page={safePageTablePage}
+            totalPages={pageTableTotalPages}
+            totalRows={filteredPages.length}
+            pageSize={pageTablePageSize}
+            pageSizeMin={10}
+            pageSizeMax={200}
+            onPageChange={setPageTablePage}
+            onPageSizeChange={(size) => {
+              setPageTablePageSize(size)
+              setPageTablePage(1)
+            }}
+            rightActions={
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      type="button"
+                      onClick={handleCreatePage}
+                      aria-label="新增页面"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>新增页面</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      type="button"
+                      disabled={!selectedPageIds.length || deleting}
+                      onClick={async () => {
+                        if (!selectedPageIds.length) return
+                        const targets = pages.filter((p) => selectedPageIds.includes(p.id))
+                        if (!targets.length) return
+                        const confirmed = window.confirm(
+                          `确认删除选中的 ${targets.length} 个页面？将同时删除其所有动作。`
+                        )
+                        if (!confirmed) return
+                        try {
+                          setDeleting(true)
+                          for (const page of targets) {
+                            const res = await fetch(`/api/action-catalog/pages/${page.id}`, {
+                              method: 'DELETE',
+                            })
+                            if (!res.ok) {
+                              const err = await normalizeResponseError(res as any)
+                              throw new Error(err.message || '删除页面失败')
+                            }
+                          }
+                          await loadPages(platform)
+                          setSelectedPageId(null)
+                          setSelectedPageIds([])
+                          setDraft(null)
+                          toast.success(`已删除选中的 ${targets.length} 个页面`)
+                        } catch (e: any) {
+                          if (isUnauthorizedError(e)) {
+                            try {
+                              router.push('/signin')
+                            } catch {}
+                          } else {
+                            toast.error(e?.message || '删除页面失败')
+                          }
+                        } finally {
+                          setDeleting(false)
+                        }
+                      }}
+                      aria-label="删除所选页面"
+                    >
+                      {deleting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>删除所选页面</TooltipContent>
+                </Tooltip>
+              </>
+            }
+          />
+          <div className="relative min-h-0 flex-1 text-xs">
+            <GTable
+              headers={pageTableHeaders}
+              rows={pageTableRows}
+              stickyFirstColumn
+              showFooter={false}
+              containerClassName="h-full overflow-x-auto overflow-y-auto"
+              onSelectedRow={(rowIndex) => {
+                const p = pagedPages[rowIndex]
+                if (!p) return
+                setSelectedPageId(p.id)
+              }}
+              onRowDoubleClick={(rowIndex) => {
+                const p = pagedPages[rowIndex]
+                if (!p) return
+                setSelectedPageId(p.id)
+                setDetailsOpen(true)
+              }}
+            />
+            {!pageTableRows.length && !loadingPages && (
+              <p className="text-muted-foreground pointer-events-none absolute inset-x-0 top-12 text-center text-xs">
+                暂无匹配的页面，请调整筛选条件或点击右上角 + 按钮新建。
               </p>
             )}
           </div>
         </CardContent>
       </Card>
 
-      <Card className="flex min-h-0 flex-1 flex-col">
+      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <SheetContent side="right" className="flex h-full w-full flex-col sm:max-w-4xl">
+          <SheetHeader>
+            <SheetTitle>页面与动作详情</SheetTitle>
+            {draft?.id != null && (
+              <SheetDescription>
+                页面 ID：{draft.id}。为对应 Page 类配置 key、类名与动作列表，供用户场景步骤复用。
+              </SheetDescription>
+            )}
+          </SheetHeader>
+          <Card className="mt-3 flex min-h-0 flex-1 flex-col">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base">页面与动作详情</CardTitle>
-              {draft?.id != null && (
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  页面 ID：{draft.id}
-                </p>
-              )}
               <p className="text-muted-foreground mt-1 text-xs">
-                为 gettr-web-lib 中的 Page 类配置页面
-                key、类名与动作列表，供「用户场景」页面在添加步骤时复用。
+                为 shared-libs 中的 Page 类配置页面 key、类名与动作列表，供「用户场景」页面在添加步骤时复用。
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => draft && loadPageDetail(draft.id!)}
-              >
-                刷新
-              </Button>
-              <Button type="button" size="sm" onClick={handleSave} disabled={saving || !draft}>
-                {saving && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                保存页面
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleDelete}
-                disabled={!draft?.id || deleting}
-              >
-                {deleting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-                删除页面
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleDeletePlatform}
-                disabled={!platforms.some((p) => p.key === platform)}
-              >
-                删除平台
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() => draft && loadPageDetail(draft.id!)}
+                    aria-label="刷新详情"
+                    disabled={!draft}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={6}>刷新详情</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    onClick={handleSave}
+                    disabled={saving || !draft}
+                    aria-label="保存页面"
+                    className="h-8 w-8"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={6}>保存页面</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="destructive"
+                    onClick={handleDelete}
+                    disabled={!draft?.id || deleting}
+                    aria-label="删除页面"
+                    className="h-8 w-8"
+                  >
+                    {deleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={6}>删除页面</TooltipContent>
+              </Tooltip>
             </div>
           </div>
         </CardHeader>
@@ -1084,7 +1628,7 @@ export default function ActionCatalogSettingsPage() {
                         <div className="space-y-1">
                           <Label className="text-[11px]">key</Label>
                           <Input
-                            className="h-7"
+                            className="h-8"
                             value={a.key}
                             onChange={(e) => handleUpdateAction(index, { key: e.target.value })}
                             placeholder="例如：hostOpenStudioFromHome"
@@ -1093,7 +1637,7 @@ export default function ActionCatalogSettingsPage() {
                         <div className="space-y-1">
                           <Label className="text-[11px]">名称（label）</Label>
                           <Input
-                            className="h-7"
+                            className="h-8"
                             value={a.label}
                             onChange={(e) =>
                               handleUpdateAction(index, {
@@ -1106,7 +1650,7 @@ export default function ActionCatalogSettingsPage() {
                         <div className="space-y-1">
                           <Label className="text-[11px]">方法名（method）</Label>
                           <Input
-                            className="h-7"
+                            className="h-8"
                             value={a.method}
                             onChange={(e) =>
                               handleUpdateAction(index, {
@@ -1122,20 +1666,20 @@ export default function ActionCatalogSettingsPage() {
                           <Label className="text-[11px]">类型（kind）</Label>
                           <OptionsSelect<'action' | 'assert' | 'call'>
                             value={a.kind}
+                            size="sm"
                             items={[
                               { value: 'action', label: '动作（action）' },
                               { value: 'assert', label: '断言（assert）' },
                               { value: 'call', label: '函数调用（call）' },
                             ]}
                             onSelect={(item) => handleUpdateAction(index, { kind: item.value })}
-                            triggerClassName="h-7"
                             contentClassName="w-[180px]"
                           />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-[11px]">排序（sortOrder）</Label>
                           <Input
-                            className="h-7"
+                            className="h-8"
                             type="number"
                             value={a.sortOrder}
                             onChange={(e) =>
@@ -1149,6 +1693,7 @@ export default function ActionCatalogSettingsPage() {
                           <Label className="text-[11px]">启用</Label>
                           <OptionsSelect<'true' | 'false'>
                             value={a.enabled ? 'true' : 'false'}
+                            size="sm"
                             items={[
                               { value: 'true', label: '是' },
                               { value: 'false', label: '否' },
@@ -1158,7 +1703,6 @@ export default function ActionCatalogSettingsPage() {
                                 enabled: item.value === 'true',
                               })
                             }
-                            triggerClassName="h-7"
                             contentClassName="w-[120px]"
                           />
                         </div>
@@ -1219,7 +1763,8 @@ export default function ActionCatalogSettingsPage() {
                                   }
                                 }}
                                 placeholder="选择一个来源页面"
-                                triggerClassName="h-7 text-[11px]"
+                                size="sm"
+                                triggerClassName="text-[11px]"
                                 contentClassName="w-[260px]"
                               />
                             </div>
@@ -1297,7 +1842,8 @@ export default function ActionCatalogSettingsPage() {
                                     ? '来源页面加载中…'
                                     : '选择一个已有动作以复制方法和参数'
                                 }
-                                triggerClassName="h-7 text-[11px]"
+                                size="sm"
+                                triggerClassName="text-[11px]"
                                 contentClassName="w-[260px]"
                               />
                             </div>
@@ -1352,30 +1898,31 @@ export default function ActionCatalogSettingsPage() {
                                         <span className="text-[11px] text-muted-foreground">
                                           步骤 {sIndex + 1}
                                         </span>
-                                        <OptionsSelect<string>
-                                          value={step.targetActionKey}
+                                          <OptionsSelect<string>
+                                            value={step.targetActionKey}
                                           items={currentActions.map((other) => ({
                                             value: other.key,
                                             label:
                                               (other.method || other.key || 'action') +
                                               (other.label ? ` · ${other.label}` : ''),
                                           }))}
-                                          onSelect={(item) => {
-                                            const nextSteps = [...(a.callSteps || [])]
-                                            nextSteps[sIndex] = {
-                                              ...step,
-                                              targetActionKey: item.value,
-                                            }
-                                            handleUpdateAction(index, { callSteps: nextSteps })
-                                          }}
-                                          placeholder="选择一个方法"
-                                          triggerClassName="h-7 text-[11px]"
-                                          contentClassName="w-[260px]"
-                                        />
+                                            onSelect={(item) => {
+                                              const nextSteps = [...(a.callSteps || [])]
+                                              nextSteps[sIndex] = {
+                                                ...step,
+                                                targetActionKey: item.value,
+                                              }
+                                              handleUpdateAction(index, { callSteps: nextSteps })
+                                            }}
+                                            placeholder="选择一个方法"
+                                            size="sm"
+                                            triggerClassName="text-[11px]"
+                                            contentClassName="w-[260px]"
+                                          />
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <Input
-                                          className="h-7 w-16 text-[11px]"
+                                          className="h-8 w-16 text-[11px]"
                                           type="number"
                                           value={step.sortOrder}
                                           onChange={(e) => {
@@ -1448,7 +1995,8 @@ export default function ActionCatalogSettingsPage() {
                                               handleUpdateAction(index, { callSteps: nextSteps })
                                             }}
                                             placeholder="选择要传入的参数名"
-                                            triggerClassName="h-7 text-[11px]"
+                                            size="sm"
+                                            triggerClassName="text-[11px]"
                                             contentClassName="w-[220px]"
                                           />
                                           {!(a.params || []).length && (
@@ -1503,15 +2051,28 @@ export default function ActionCatalogSettingsPage() {
                       <div className="mt-2 grid gap-2 md:grid-cols-2">
                         <div className="space-y-1">
                           <Label className="text-[11px]">元素定位字符串（locator，可选）</Label>
-                          <Input
-                            className="h-7 text-[11px]"
+                          <OptionsSelectInput<string>
+                            id={`ac-action-${index}-locator`}
                             value={a.locator || ''}
-                            onChange={(e) =>
+                            onChange={(value) =>
                               handleUpdateAction(index, {
-                                locator: e.target.value || null,
+                                locator: value || null,
                               })
                             }
-                            placeholder="CSS/XPath 定位字符串，例如：div.action-bar > button"
+                            items={
+                              Array.isArray((draft as any)?.elements)
+                                ? ((draft as any).elements as AdminElement[]).map((el) => ({
+                                    value: el.defaultLocator || `[data-testid="${el.elementId}"]`,
+                                    label: el.description
+                                      ? `${el.elementId} — ${el.description}`
+                                      : el.elementId,
+                                  }))
+                                : []
+                            }
+                            placeholder='可选择已导入的 data-testid，或直接输入 CSS/XPath，例如：[data-testid="login_button"]'
+                            className="w-full"
+                            size="sm"
+                            inputClassName="text-[11px]"
                           />
                         </div>
                         <div className="space-y-1">
@@ -1533,7 +2094,8 @@ export default function ActionCatalogSettingsPage() {
                                 returnTarget: item.value,
                               })
                             }
-                            triggerClassName="h-7 text-[11px]"
+                            size="sm"
+                            triggerClassName="text-[11px]"
                             contentClassName="w-[220px]"
                           />
                         </div>
@@ -1545,7 +2107,7 @@ export default function ActionCatalogSettingsPage() {
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="h-7 px-2 text-[11px]"
+                            className="px-2 text-[11px]"
                             onClick={() => handleAddParam(index)}
                           >
                             <Plus className="mr-1 h-3 w-3" />
@@ -1561,7 +2123,7 @@ export default function ActionCatalogSettingsPage() {
                               <div className="flex min-w-[120px] flex-1 flex-col gap-1">
                                 <Label className="text-[11px]">name</Label>
                                 <Input
-                                  className="h-7 text-[11px]"
+                                  className="h-8 text-[11px]"
                                   value={p.name}
                                   onChange={(e) =>
                                     handleUpdateParam(index, pIndex, {
@@ -1585,7 +2147,8 @@ export default function ActionCatalogSettingsPage() {
                                       type: item.value,
                                     })
                                   }
-                                  triggerClassName="h-7 text-[11px]"
+                                  size="sm"
+                                  triggerClassName="text-[11px]"
                                   contentClassName="w-[120px]"
                                 />
                               </div>
@@ -1602,14 +2165,15 @@ export default function ActionCatalogSettingsPage() {
                                       required: item.value === 'true',
                                     })
                                   }
-                                  triggerClassName="h-7 text-[11px]"
+                                  size="sm"
+                                  triggerClassName="text-[11px]"
                                   contentClassName="w-[120px]"
                                 />
                               </div>
                               <div className="flex min-w-[140px] flex-1 flex-col gap-1">
                                 <Label className="text-[11px]">placeholder</Label>
                                 <Input
-                                  className="h-7 text-[11px]"
+                                  className="h-8 text-[11px]"
                                   value={p.placeholder || ''}
                                   onChange={(e) =>
                                     handleUpdateParam(index, pIndex, {
@@ -1622,7 +2186,7 @@ export default function ActionCatalogSettingsPage() {
                               <div className="flex min-w-[140px] flex-1 flex-col gap-1">
                                 <Label className="text-[11px]">默认值</Label>
                                 <Input
-                                  className="h-7 text-[11px]"
+                                  className="h-8 text-[11px]"
                                   value={p.defaultValue || ''}
                                   onChange={(e) =>
                                     handleUpdateParam(index, pIndex, {
@@ -1635,7 +2199,7 @@ export default function ActionCatalogSettingsPage() {
                               <div className="flex w-[80px] flex-col gap-1">
                                 <Label className="text-[11px]">排序</Label>
                                 <Input
-                                  className="h-7 text-[11px]"
+                                  className="h-8 text-[11px]"
                                   type="number"
                                   value={p.sortOrder}
                                   onChange={(e) =>
@@ -1675,7 +2239,9 @@ export default function ActionCatalogSettingsPage() {
             </>
           )}
         </CardContent>
-      </Card>
+          </Card>
+        </SheetContent>
+      </Sheet>
 
       <Dialog
         open={viewPageDialogOpen}
@@ -1688,13 +2254,13 @@ export default function ActionCatalogSettingsPage() {
         }}
       >
         <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
+          <DialogHeader className="w-full max-w-full">
             <DialogTitle>页面配置预览</DialogTitle>
             <DialogDescription>
               从数据库中读取当前页面及其动作配置，只读展示，便于排查生成逻辑与数据库记录是否一致。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 max-w-full overflow-hidden">
             {viewPageLoading && (
               <p className="text-xs text-muted-foreground">加载中…</p>
             )}
@@ -1738,7 +2304,7 @@ export default function ActionCatalogSettingsPage() {
                     <span>{viewPageDetail.sortOrder}</span>
                   </div>
                 </div>
-                <div className="max-h-[50vh] overflow-auto rounded-md border p-2">
+                <div className="w-full rounded-md border p-2">
                   <GTable
                     caption="动作列表（来自数据库）"
                     headers={[
@@ -1752,6 +2318,8 @@ export default function ActionCatalogSettingsPage() {
                       '参数',
                       '内部步骤数',
                     ]}
+                    showFooter={false}
+                    containerClassName="max-h-[50vh] overflow-x-auto overflow-y-auto"
                     rows={(viewPageDetail.actions || []).map((a) => [
                       a.id ?? '',
                       a.key,

@@ -19,7 +19,8 @@
     "allure:clean": "node scripts/allure.js clean",
     "ios:doctor": "npx appium-doctor --ios",
     "ios:version": "npx appium --version",
-    "ios:drivers": "npx appium driver list --installed"
+    "ios:drivers": "npx appium driver list --installed",
+    "normalize:web-ids": "node scripts/normalize-web-ids.js"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",

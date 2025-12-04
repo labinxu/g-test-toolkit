@@ -23,6 +23,7 @@ type OptionsSelectProps<TValue extends string = string> = {
   onSelect: (item: OptionsSelectItem<TValue>) => void
   triggerClassName?: string
   contentClassName?: string
+  size?: 'default' | 'sm'
 }
 
 export function OptionsSelect<TValue extends string = string>({
@@ -34,6 +35,7 @@ export function OptionsSelect<TValue extends string = string>({
   onSelect,
   triggerClassName,
   contentClassName,
+  size = 'default',
 }: OptionsSelectProps<TValue>) {
   const selectProps: any = {}
   if (value !== undefined) selectProps.value = value
@@ -50,8 +52,9 @@ export function OptionsSelect<TValue extends string = string>({
     >
       <SelectTrigger
         id={id}
+        size={size}
         className={cn(
-          'h-10 w-full justify-between rounded-md border px-3 py-1.5 text-sm',
+          'w-full justify-between',
           triggerClassName
         )}
       >

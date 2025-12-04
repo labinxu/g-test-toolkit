@@ -85,6 +85,10 @@ export function getMenuList(pathname: string): Group[] {
               href: '/scenarios',
               label: 'Scenarios',
             },
+            {
+              href: '/scenarios/action-catalog',
+              label: 'Action Catalog',
+            },
           ],
         },
         {
@@ -202,10 +206,6 @@ export function getMenuList(pathname: string): Group[] {
             {
               href: '/settings/parameters',
               label: 'Parameters',
-            },
-            {
-              href: '/settings/action-catalog',
-              label: 'Action Catalog',
             },
             {
               href: '/settings/env-templates',

@@ -234,7 +234,7 @@ export function ResizableStickyTable<T>(props: DataTableProps<T>) {
     selection.onChange(next)
   }
 
-  // Header classes
+  // Header classes（让每个表头单元格自己 sticky）
   const stickyHeaderCls = stickyHeader ? `sticky top-0 ${headerLightClass} ${headerDarkClass}` : ''
   const isCompact = density === 'compact'
   const headerHeight = isCompact ? 32 : undefined
@@ -258,7 +258,7 @@ export function ResizableStickyTable<T>(props: DataTableProps<T>) {
         className="table-fixed"
         containerClassName={containerClassName || 'overflow-x-auto overflow-y-auto'}
       >
-        <TableHeader className={cn('sticky top-0 z-40', headerLightClass, headerDarkClass)}>
+        <TableHeader>
           <TableRow className="divide-x divide-gray-200 dark:divide-neutral-700">
             {selection?.enabled && (
               <TableHead

@@ -16,6 +16,7 @@ type OptionsSelectSearchProps<TValue extends string = string> = {
   className?: string;
   inputClassName?: string;
   triggerClassName?: string;
+  size?: 'default' | 'sm';
 };
 
 export function OptionsSelectSearch<TValue extends string = string>({
@@ -27,6 +28,7 @@ export function OptionsSelectSearch<TValue extends string = string>({
   className,
   inputClassName,
   triggerClassName,
+  size = 'default',
 }: OptionsSelectSearchProps<TValue>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -77,7 +79,11 @@ export function OptionsSelectSearch<TValue extends string = string>({
     <div ref={containerRef} className={cn('relative', className)}>
       <Input
         id={id}
-        className={cn('h-9 w-full pr-9 text-sm', inputClassName)}
+        className={cn(
+          size === 'sm' ? 'h-8 pr-8' : 'h-9 pr-9',
+          'w-full text-sm',
+          inputClassName,
+        )}
         placeholder={placeholder}
         value={inputValue}
         onChange={(e) => {
@@ -90,7 +96,8 @@ export function OptionsSelectSearch<TValue extends string = string>({
       <button
         type="button"
         className={cn(
-          'absolute inset-y-0 right-0 flex h-9 w-9 items-center justify-center text-muted-foreground hover:text-foreground',
+          'absolute inset-y-0 right-0 flex items-center justify-center text-muted-foreground hover:text-foreground',
+          size === 'sm' ? 'h-8 w-8' : 'h-9 w-9',
           triggerClassName,
         )}
         onClick={(e) => {
@@ -127,4 +134,3 @@ export function OptionsSelectSearch<TValue extends string = string>({
     </div>
   );
 }
-
