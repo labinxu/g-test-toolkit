@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDownIcon } from 'lucide-react';
+import { ChevronDownIcon, XIcon } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,8 @@ type OptionsSelectInputProps<TValue extends string = string> = {
   inputClassName?: string;
   triggerClassName?: string;
   size?: 'default' | 'sm';
+  onDeleteOption?: (item: OptionsSelectItem<TValue>) => void;
+  disabled?: boolean;
 };
 
 export function OptionsSelectInput<TValue extends string = string>({
@@ -29,6 +31,8 @@ export function OptionsSelectInput<TValue extends string = string>({
   inputClassName,
   triggerClassName,
   size = 'default',
+  onDeleteOption,
+  disabled = false,
 }: OptionsSelectInputProps<TValue>) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -49,6 +53,12 @@ export function OptionsSelectInput<TValue extends string = string>({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (disabled && open) {
+      setOpen(false);
+    }
+  }, [disabled, open]);
+
   return (
     <div ref={containerRef} className={cn('relative', className)}>
       <Input
@@ -57,6 +67,7 @@ export function OptionsSelectInput<TValue extends string = string>({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
       />
       <button
         type="button"
@@ -65,6 +76,7 @@ export function OptionsSelectInput<TValue extends string = string>({
           triggerSizeClass,
           triggerClassName,
         )}
+        disabled={disabled}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -74,20 +86,38 @@ export function OptionsSelectInput<TValue extends string = string>({
       >
         <ChevronDownIcon className="h-4 w-4" />
       </button>
-      {open && items.length > 0 && (
+      {open && !disabled && items.length > 0 && (
         <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
           {items.map((item) => (
-            <button
+            <div
               key={item.value}
-              type="button"
-              className="flex w-full items-center px-2 py-1.5 text-left hover:bg-accent"
-              onClick={() => {
-                onChange(item.value);
-                setOpen(false);
-              }}
+              className="group flex w-full items-center px-2 py-1.5 hover:bg-accent"
             >
-              {item.label}
-            </button>
+              <button
+                type="button"
+                className="flex-1 truncate text-left"
+                onClick={() => {
+                  onChange(item.value);
+                  setOpen(false);
+                }}
+              >
+                {item.label}
+              </button>
+              {onDeleteOption && (
+                <button
+                  type="button"
+                  className="ml-2 rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`删除 ${item.label}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDeleteOption(item);
+                  }}
+                >
+                  <XIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}

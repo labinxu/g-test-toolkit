@@ -17,6 +17,7 @@ type OptionsSelectSearchProps<TValue extends string = string> = {
   inputClassName?: string;
   triggerClassName?: string;
   size?: 'default' | 'sm';
+  disabled?: boolean;
 };
 
 export function OptionsSelectSearch<TValue extends string = string>({
@@ -29,6 +30,7 @@ export function OptionsSelectSearch<TValue extends string = string>({
   inputClassName,
   triggerClassName,
   size = 'default',
+  disabled = false,
 }: OptionsSelectSearchProps<TValue>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -59,6 +61,12 @@ export function OptionsSelectSearch<TValue extends string = string>({
     }
   }, [open]);
 
+  useEffect(() => {
+    if (disabled && open) {
+      setOpen(false);
+    }
+  }, [disabled, open]);
+
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
@@ -86,8 +94,10 @@ export function OptionsSelectSearch<TValue extends string = string>({
         )}
         placeholder={placeholder}
         value={inputValue}
+        disabled={disabled}
         onChange={(e) => {
           const next = e.target.value;
+          console.log(`select search ${next}`);
           setQuery(next);
           setOpen(true);
         }}
@@ -100,6 +110,7 @@ export function OptionsSelectSearch<TValue extends string = string>({
           size === 'sm' ? 'h-8 w-8' : 'h-9 w-9',
           triggerClassName,
         )}
+        disabled={disabled}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

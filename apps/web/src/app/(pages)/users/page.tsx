@@ -78,7 +78,6 @@ export default function UsersPage() {
   useEffect(() => {
     const t = setTimeout(() => { setPage(1); load() }, 300)
     return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
 
   async function save() {

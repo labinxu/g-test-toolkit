@@ -8,6 +8,7 @@ import {
   Post,
   Delete,
   Param,
+  Query,
   BadRequestException,
   UnauthorizedException,
   ForbiddenException,
@@ -277,6 +278,53 @@ export class SettingsController {
       Number(user.id),
     );
     return saved;
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Delete('curl-payloads')
+  async deleteCurlPayload(
+    @Req() req: any,
+    @Query()
+    query: {
+      method?: string;
+      category?: string;
+      url?: string;
+    },
+    @Body()
+    body: {
+      method?: string;
+      category?: string;
+      url?: string;
+    },
+  ) {
+    const user = req?.user as any;
+    if (!user?.id) throw new UnauthorizedException('No user');
+    const method =
+      typeof body?.method === 'string'
+        ? body.method
+        : typeof query?.method === 'string'
+        ? query.method
+        : '';
+    const category =
+      typeof body?.category === 'string'
+        ? body.category
+        : typeof query?.category === 'string'
+        ? query.category
+        : '';
+    const url =
+      typeof body?.url === 'string'
+        ? body.url
+        : typeof query?.url === 'string'
+        ? query.url
+        : '';
+    if (!category) {
+      throw new BadRequestException('category is required');
+    }
+    const result = await this.settings.deleteCurlPayload(
+      { method, category, url },
+      Number(user.id),
+    );
+    return { ok: true, ...result };
   }
 
   @UseGuards(AuthGuard('jwt'))

@@ -1,13 +1,13 @@
-'use client'
+'use client';
 
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Checkbox } from '@/components/ui/checkbox'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogClose,
@@ -16,18 +16,29 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { OptionsSelect, type OptionsSelectItem } from '@/components/select/options-select'
-import { OptionsSelectInput } from '@/components/select/options-select-input'
-import { OptionsSelectSearch } from '@/components/select/options-select-search'
-import ResizableStickyTable from '@/components/data-table'
-import TablePagination from '@/components/table-pagination'
-import TableToolbar from '@/components/table-toolbar'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { GTable } from '@/components/g-table'
-import { cn } from '@/lib/utils'
-import { normalizeResponseError, isUnauthorizedError, ensureResponseOk } from '@/lib/error'
-import { toast } from 'sonner'
+} from '@/components/ui/dialog';
+import {
+  OptionsSelect,
+  type OptionsSelectItem,
+} from '@/components/select/options-select';
+import { OptionsSelectInput } from '@/components/select/options-select-input';
+import { OptionsSelectSearch } from '@/components/select/options-select-search';
+import ResizableStickyTable from '@/components/data-table';
+import TablePagination from '@/components/table-pagination';
+import TableToolbar from '@/components/table-toolbar';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { GTable } from '@/components/g-table';
+import { cn } from '@/lib/utils';
+import {
+  normalizeResponseError,
+  isUnauthorizedError,
+  ensureResponseOk,
+} from '@/lib/error';
+import { toast } from 'sonner';
 import {
   ChevronsUpDown,
   Loader2,
@@ -37,150 +48,172 @@ import {
   FileText,
   FileCode,
   Plus,
+  Download,
   Save,
-  ListChecks,
   Pencil,
-  Flag,
   ExternalLink,
   ChevronDown,
   ChevronUp,
-} from 'lucide-react'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+} from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetDescription,
-} from '@/components/ui/sheet'
+} from '@/components/ui/sheet';
+import { SuitePanel } from './components/suite-panel';
+import { NewSuiteDialog } from './components/new-suite-dialog';
 
-type CaseStatus = 'draft' | 'in_progress' | 'ready' | 'code_generated'
+type CaseStatus = 'draft' | 'in_progress' | 'ready' | 'code_generated';
 
 export type UserScenarioSummary = {
-  id: number
-  code: string
-  csvId?: string | null
-  title: string
-  module?: string | null
-  platform?: string | null
-  feature?: string | null
-  submenu?: string | null
-  priority?: 'P0' | 'P1' | 'P2'
-  status: CaseStatus
-  hasSteps: boolean
-  hasCode: boolean
-  description?: string | null
-  acceptanceCriteria?: string | null
-  generatedFilePath?: string | null
-}
+  id: number;
+  code: string;
+  csvId?: string | null;
+  title: string;
+  module?: string | null;
+  platform?: string | null;
+  feature?: string | null;
+  submenu?: string | null;
+  priority?: 'P0' | 'P1' | 'P2';
+  status: CaseStatus;
+  hasSteps: boolean;
+  hasCode: boolean;
+  description?: string | null;
+  acceptanceCriteria?: string | null;
+  generatedFilePath?: string | null;
+  suiteId?: number | null;
+  suiteName?: string | null;
+};
 
 export type UserScenarioStep = {
-  id: string
-  order: number
-  action: string
-  data?: string
-  expected: string
-  binding?: string
-}
+  id: string;
+  order: number;
+  action: string;
+  data?: string;
+  expected: string;
+  binding?: string;
+};
 
 type ActionParamDef = {
-  name: string
-  type?: string
-  required?: boolean
-  placeholder?: string
-}
+  name: string;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+};
 
-type StepCheckRuleType = 'element-visible' | 'element-hidden' | 'url-contains' | 'url-equals'
+type StepCheckRuleType =
+  | 'element-visible'
+  | 'element-hidden'
+  | 'url-contains'
+  | 'url-equals';
 
 type StepCheckRule = {
-  type: StepCheckRuleType
-  locator?: string
-  expectedUrl?: string
-  timeoutMs?: number
-}
+  type: StepCheckRuleType;
+  locator?: string;
+  expectedUrl?: string;
+  timeoutMs?: number;
+};
 
 type PageActionDef = {
-  key: string
-  label: string
-  method: string
-  kind: 'action' | 'assert' | 'call'
-  params?: ActionParamDef[]
-  defaultExpected?: string
-  locator?: string | null
+  key: string;
+  label: string;
+  method: string;
+  kind: 'action' | 'assert' | 'call';
+  params?: ActionParamDef[];
+  defaultExpected?: string;
+  locator?: string | null;
   callSteps?: {
-    targetActionKey: string
-    args?: string[]
-    sortOrder?: number
-  }[]
-}
+    targetActionKey: string;
+    args?: string[];
+    sortOrder?: number;
+  }[];
+};
 
 type PageDef = {
-  key: string
-  label: string
-  module: string
-  className: string
-  varName: string
-  actions: PageActionDef[]
-}
+  key: string;
+  label: string;
+  module: string;
+  className: string;
+  varName: string;
+  actions: PageActionDef[];
+};
 
 type ActionCatalog = {
-  platform: string
-  pages: PageDef[]
-}
+  platform: string;
+  pages: PageDef[];
+};
 
 type StepBindingV1 = {
-  ver: 1
-  platform: string
-  pageKey: string
-  actionKey: string
-  args?: { name: string; value: string }[]
-  checkRule?: StepCheckRule
-}
+  ver: 1;
+  platform: string;
+  pageKey: string;
+  actionKey: string;
+  args?: { name: string; value: string }[];
+  checkRule?: StepCheckRule;
+};
 
 const STATUS_LABEL: Record<CaseStatus, string> = {
   draft: '草稿',
   in_progress: '完善中',
   ready: '已准备',
   code_generated: '已生成代码',
-}
+};
 
 const PRIORITY_LABEL: Record<'P0' | 'P1' | 'P2', string> = {
   P0: 'P0',
   P1: 'P1',
   P2: 'P2',
-}
+};
 
 const SUBMENU_LABEL: Record<string, string> = {
   host: '主播侧',
   viewer: '观众侧',
   interaction: '互动',
-}
+};
 
 type StepParamHint = {
-  summary: string
-  example: string
-}
+  summary: string;
+  example: string;
+};
 
 type EnvTemplateSummary = {
-  id: number
-  platform: string
-  driver: 'browser' | 'android' | 'ios' | 'other'
-  key: string
-  name: string
-  description?: string | null
-}
+  id: number;
+  platform: string;
+  driver: 'browser' | 'android' | 'ios' | 'other';
+  key: string;
+  name: string;
+  description?: string | null;
+};
+
+type UserScenarioSuiteSummary = {
+  id: number;
+  name: string;
+  description?: string | null;
+  platform: string;
+  module: string;
+  sharedPreSteps?: string[];
+  caseIds?: number[];
+  caseCount?: number;
+};
 
 const getEnvTemplateStorageKey = (platform: string, driver: string): string =>
-  `gtt:envTemplate:${platform || 'default'}:${driver || 'browser'}`
+  `gtt:envTemplate:${platform || 'default'}:${driver || 'browser'}`;
 
 type ScenarioStepsTableProps = {
-  steps: UserScenarioStep[]
-  mode: 'readonly' | 'editable'
-  getStepParamHint: (step: UserScenarioStep) => StepParamHint | null
-  onEditStep: (id: string) => void
-  onDeleteStep: (id: string) => void
-  onMoveStep?: (id: string, direction: 'up' | 'down') => void
-}
+  steps: UserScenarioStep[];
+  mode: 'readonly' | 'editable';
+  getStepParamHint: (step: UserScenarioStep) => StepParamHint | null;
+  onEditStep: (id: string) => void;
+  onDeleteStep: (id: string) => void;
+  onMoveStep?: (id: string, direction: 'up' | 'down') => void;
+};
 
 function ScenarioStepsTable({
   steps,
@@ -190,87 +223,31 @@ function ScenarioStepsTable({
   onDeleteStep,
   onMoveStep,
 }: ScenarioStepsTableProps) {
-  const [preFlagOn, setPreFlagOn] = useState<boolean>(() => {
-    const first = steps[0]
-    if (!first) return false
-    // 默认：如果是通过“添加前置步骤”生成的占位行，则视为已选中
-    return (
-      first.order === 1 &&
-      first.action === '前置条件' &&
-      (!first.binding || !String(first.binding).trim())
-    )
-  })
-
-  const [highlightStepId, setHighlightStepId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!highlightStepId) return
-    const timer = setTimeout(() => {
-      setHighlightStepId(null)
-    }, 800)
-    return () => clearTimeout(timer)
-  }, [highlightStepId])
-
-  useEffect(() => {
-    const first = steps[0]
-    if (!first) {
-      setPreFlagOn(false)
-      return
-    }
-    if (
-      first.order === 1 &&
-      first.action === '前置条件' &&
-      (!first.binding || !String(first.binding).trim())
-    ) {
-      setPreFlagOn(true)
-    }
-  }, [steps])
+  const [highlightStepId, setHighlightStepId] = useState<string | null>(null);
 
   const highlightRowIndex =
-    highlightStepId != null ? steps.findIndex((step) => step.id === highlightStepId) : -1
+    highlightStepId != null
+      ? steps.findIndex((step) => step.id === highlightStepId)
+      : -1;
 
   if (!steps.length) {
     return (
       <div className="text-muted-foreground py-2 text-center text-xs">
         暂无步骤，请点击右上角「添加步骤」为该用例补充执行路径。
       </div>
-    )
+    );
   }
 
-  const headers = ['', '顺序', '操作', '数据', '期望结果', ''] as const
+  const headers = ['', '顺序', '操作', '数据', '期望结果', ''] as const;
 
   const rows = steps.map((s, index) => {
-    const hint = getStepParamHint(s)
-    const hasData = !!(s.data && s.data.trim())
+    const hint = getStepParamHint(s);
+    const hasData = !!(s.data && s.data.trim());
 
-    const isPrecondition = s.order === 1
-
-    const isEditable = mode === 'editable' && !!onMoveStep
+    const isEditable = mode === 'editable' && !!onMoveStep;
 
     const orderLabel = (
       <div className="flex items-center justify-end gap-1 pr-1">
-        {isPrecondition && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setPreFlagOn((prev) => !prev)
-                }}
-              >
-                <Flag
-                  className={cn(
-                    'h-3 w-3',
-                    preFlagOn ? 'text-emerald-500' : 'text-muted-foreground'
-                  )}
-                />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent sideOffset={6}>前置条件步骤</TooltipContent>
-          </Tooltip>
-        )}
         <div className="flex items-center gap-1">
           {isEditable && (
             <div className="mr-1 flex flex-col items-center gap-0.5">
@@ -281,8 +258,8 @@ function ScenarioStepsTable({
                 className="h-4 w-4"
                 disabled={index === 0}
                 onClick={() => {
-                  onMoveStep?.(s.id, 'up')
-                  setHighlightStepId(s.id)
+                  onMoveStep?.(s.id, 'up');
+                  setHighlightStepId(s.id);
                 }}
                 aria-label="上移步骤"
               >
@@ -295,8 +272,8 @@ function ScenarioStepsTable({
                 className="h-4 w-4"
                 disabled={index === steps.length - 1}
                 onClick={() => {
-                  onMoveStep?.(s.id, 'down')
-                  setHighlightStepId(s.id)
+                  onMoveStep?.(s.id, 'down');
+                  setHighlightStepId(s.id);
                 }}
                 aria-label="下移步骤"
               >
@@ -304,12 +281,14 @@ function ScenarioStepsTable({
               </Button>
             </div>
           )}
-          <span className="inline-block w-[32px] text-right text-xs">{s.order}</span>
+          <span className="inline-block w-[32px] text-right text-xs">
+            {s.order}
+          </span>
         </div>
       </div>
-    )
+    );
 
-    const dataText = hasData ? s.data : hint ? `参数：${hint.summary}` : '—'
+    const dataText = hasData ? s.data : hint ? `参数：${hint.summary}` : '—';
 
     return [
       <Tooltip key="edit-tip">
@@ -324,15 +303,22 @@ function ScenarioStepsTable({
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent sideOffset={6}>编辑步骤（页面 + 动作 + 参数）</TooltipContent>
+        <TooltipContent sideOffset={6}>
+          编辑步骤（页面 + 动作 + 参数）
+        </TooltipContent>
       </Tooltip>,
       orderLabel,
       <Tooltip key="action">
         <TooltipTrigger asChild>
-          <div className="line-clamp-2 text-xs whitespace-pre-wrap">{s.action || '—'}</div>
+          <div className="line-clamp-2 text-xs whitespace-pre-wrap">
+            {s.action || '—'}
+          </div>
         </TooltipTrigger>
         {s.action && (
-          <TooltipContent sideOffset={6} className="max-w-sm whitespace-pre-wrap">
+          <TooltipContent
+            sideOffset={6}
+            className="max-w-sm whitespace-pre-wrap"
+          >
             {s.action}
           </TooltipContent>
         )}
@@ -344,20 +330,30 @@ function ScenarioStepsTable({
           </div>
         </TooltipTrigger>
         {(hasData || hint) && (
-          <TooltipContent sideOffset={6} className="max-w-sm whitespace-pre-wrap">
+          <TooltipContent
+            sideOffset={6}
+            className="max-w-sm whitespace-pre-wrap"
+          >
             {hasData ? s.data : hint?.summary}
             {hint && hasData && (
-              <div className="text-muted-foreground mt-1 text-[11px]">参数：{hint.summary}</div>
+              <div className="text-muted-foreground mt-1 text-[11px]">
+                参数：{hint.summary}
+              </div>
             )}
           </TooltipContent>
         )}
       </Tooltip>,
       <Tooltip key="expected">
         <TooltipTrigger asChild>
-          <div className="line-clamp-2 text-xs whitespace-pre-wrap">{s.expected || '—'}</div>
+          <div className="line-clamp-2 text-xs whitespace-pre-wrap">
+            {s.expected || '—'}
+          </div>
         </TooltipTrigger>
         {s.expected && (
-          <TooltipContent sideOffset={6} className="max-w-sm whitespace-pre-wrap">
+          <TooltipContent
+            sideOffset={6}
+            className="max-w-sm whitespace-pre-wrap"
+          >
             {s.expected}
           </TooltipContent>
         )}
@@ -373,8 +369,8 @@ function ScenarioStepsTable({
       >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>,
-    ]
-  })
+    ];
+  });
 
   return (
     <GTable
@@ -382,246 +378,390 @@ function ScenarioStepsTable({
       rows={rows}
       highlightRowIndex={highlightRowIndex >= 0 ? highlightRowIndex : null}
       onRowDoubleClick={(rowIndex) => {
-        const step = steps[rowIndex]
+        const step = steps[rowIndex];
         if (step) {
-          onEditStep(step.id)
+          onEditStep(step.id);
         }
       }}
       onSelectedRow={
         mode === 'readonly'
           ? (rowIndex) => {
-              const step = steps[rowIndex]
+              const step = steps[rowIndex];
               if (step) {
-                onEditStep(step.id)
+                onEditStep(step.id);
               }
             }
           : undefined
       }
     />
-  )
+  );
 }
 
 export default function ScenariosPage() {
-  const router = useRouter()
-  const [cases, setCases] = useState<UserScenarioSummary[]>([])
-  const [loadingCases, setLoadingCases] = useState(false)
-  const [stepsByCase, setStepsByCase] = useState<Record<number, UserScenarioStep[]>>({})
-  const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [deletingBulk, setDeletingBulk] = useState(false)
-  const [ingestingDoc, setIngestingDoc] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
-  const [metaOpen, setMetaOpen] = useState(true)
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const [metaDialogOpen, setMetaDialogOpen] = useState(false)
-  const [tablePage, setTablePage] = useState(1)
-  const [tablePageSize, setTablePageSize] = useState(50)
-  const [tableSelectedKeys, setTableSelectedKeys] = useState<Set<string>>(new Set())
-  const [tableTotalRows, setTableTotalRows] = useState(0)
-  const [tableFilteredRows, setTableFilteredRows] = useState(0)
-  const [actionCatalog, setActionCatalog] = useState<ActionCatalog | null>(null)
-  const [loadingCatalog, setLoadingCatalog] = useState(false)
-  const [stepDialogOpen, setStepDialogOpen] = useState(false)
-  const [stepDialogPageKey, setStepDialogPageKey] = useState<string | undefined>(undefined)
-  const [stepDialogActionKey, setStepDialogActionKey] = useState<string | undefined>(undefined)
-  const [stepDialogArgs, setStepDialogArgs] = useState<Record<string, string>>({})
-  const [stepDialogExpected, setStepDialogExpected] = useState('')
-  const [stepDialogActionText, setStepDialogActionText] = useState('')
-  const [stepDialogCheckType, setStepDialogCheckType] = useState<StepCheckRuleType | ''>('')
-  const [stepDialogCheckLocator, setStepDialogCheckLocator] = useState('')
-  const [stepDialogCheckExpectedUrl, setStepDialogCheckExpectedUrl] = useState('')
-  const [stepDialogCheckTimeoutMs, setStepDialogCheckTimeoutMs] = useState('')
-  const [editingStepIdForDialog, setEditingStepIdForDialog] = useState<string | null>(null)
-  const [stepDialogOrder, setStepDialogOrder] = useState<number>(1)
-  const [stepDialogApiMethod, setStepDialogApiMethod] = useState<string>('GET')
-  const [stepDialogApiPath, setStepDialogApiPath] = useState<string>('')
-  const [stepDialogApiBody, setStepDialogApiBody] = useState<string>('')
-  const [envDialogOpen, setEnvDialogOpen] = useState(false)
-  const [envDialogLoading, setEnvDialogLoading] = useState(false)
-  const [envDialogTemplates, setEnvDialogTemplates] = useState<EnvTemplateSummary[]>([])
-  const [envDialogCaseId, setEnvDialogCaseId] = useState<number | null>(null)
-  const [envDialogSelectedId, setEnvDialogSelectedId] = useState<number | 'none' | null>('none')
-  const [envDialogPlatform, setEnvDialogPlatform] = useState<string>('gettr-web')
-  const [envDialogDriver, setEnvDialogDriver] = useState<'browser' | 'android' | 'ios' | 'other'>(
-    'browser'
-  )
-  const [docAiPromptOpen, setDocAiPromptOpen] = useState(false)
+  const router = useRouter();
+  const [cases, setCases] = useState<UserScenarioSummary[]>([]);
+  const [loadingCases, setLoadingCases] = useState(false);
+  const [stepsByCase, setStepsByCase] = useState<
+    Record<number, UserScenarioStep[]>
+  >({});
+  const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingBulk, setDeletingBulk] = useState(false);
+  const [ingestingDoc, setIngestingDoc] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [metaOpen, setMetaOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [metaDialogOpen, setMetaDialogOpen] = useState(false);
+  const [tablePage, setTablePage] = useState(1);
+  const [tablePageSize, setTablePageSize] = useState(50);
+  const [tableSelectedKeys, setTableSelectedKeys] = useState<Set<string>>(
+    new Set(),
+  );
+  const [tableTotalRows, setTableTotalRows] = useState(0);
+  const [tableFilteredRows, setTableFilteredRows] = useState(0);
+  const [actionCatalog, setActionCatalog] = useState<ActionCatalog | null>(
+    null,
+  );
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [stepDialogOpen, setStepDialogOpen] = useState(false);
+  const [stepDialogPageKey, setStepDialogPageKey] = useState<
+    string | undefined
+  >(undefined);
+  const [stepDialogActionKey, setStepDialogActionKey] = useState<
+    string | undefined
+  >(undefined);
+  const [stepDialogArgs, setStepDialogArgs] = useState<Record<string, string>>(
+    {},
+  );
+  const [stepDialogExpected, setStepDialogExpected] = useState('');
+  const [stepDialogActionText, setStepDialogActionText] = useState('');
+  const [stepDialogCheckType, setStepDialogCheckType] = useState<
+    StepCheckRuleType | ''
+  >('');
+  const [stepDialogCheckLocator, setStepDialogCheckLocator] = useState('');
+  const [stepDialogCheckExpectedUrl, setStepDialogCheckExpectedUrl] =
+    useState('');
+  const [stepDialogCheckTimeoutMs, setStepDialogCheckTimeoutMs] = useState('');
+  const [editingStepIdForDialog, setEditingStepIdForDialog] = useState<
+    string | null
+  >(null);
+  const [stepDialogOrder, setStepDialogOrder] = useState<number>(1);
+  const [stepDialogApiMethod, setStepDialogApiMethod] = useState<string>('GET');
+  const [stepDialogApiPath, setStepDialogApiPath] = useState<string>('');
+  const [stepDialogApiBody, setStepDialogApiBody] = useState<string>('');
+  const [stepDialogTarget, setStepDialogTarget] = useState<'case' | 'suite'>('case');
+  const [envDialogOpen, setEnvDialogOpen] = useState(false);
+  const [envDialogLoading, setEnvDialogLoading] = useState(false);
+  const [envDialogTemplates, setEnvDialogTemplates] = useState<
+    EnvTemplateSummary[]
+  >([]);
+  const [envDialogCaseId, setEnvDialogCaseId] = useState<number | null>(null);
+  const [envDialogSelectedId, setEnvDialogSelectedId] = useState<
+    number | 'none' | null
+  >('none');
+  const [envDialogPlatform, setEnvDialogPlatform] =
+    useState<string>('gettr-web');
+  const [envDialogDriver, setEnvDialogDriver] = useState<
+    'browser' | 'android' | 'ios' | 'other'
+  >('browser');
+  const [docAiPromptOpen, setDocAiPromptOpen] = useState(false);
   const [docAiPromptText, setDocAiPromptText] = useState<string>(() => {
-    if (typeof window === 'undefined') return ''
+    if (typeof window === 'undefined') return '';
     try {
-      return localStorage.getItem('gtt:scenarios:docAiHint') || ''
+      return localStorage.getItem('gtt:scenarios:docAiHint') || '';
     } catch {
-      return ''
+      return '';
     }
-  })
+  });
   const [platform, setPlatform] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'gettr-web'
+    if (typeof window === 'undefined') return 'gettr-web';
     try {
-      return localStorage.getItem('gtt:scenarios:platform') || 'gettr-web'
+      return localStorage.getItem('gtt:scenarios:platform') || 'gettr-web';
     } catch {
-      return 'gettr-web'
+      return 'gettr-web';
     }
-  })
-  const [platforms, setPlatforms] = useState<OptionsSelectItem<string>[]>([])
-  const [newCaseOpen, setNewCaseOpen] = useState(false)
-  const [newCaseSubmitting, setNewCaseSubmitting] = useState(false)
-  const [newCaseCode, setNewCaseCode] = useState('')
-  const [newCaseTitle, setNewCaseTitle] = useState('')
-  const [newCaseFeature, setNewCaseFeature] = useState('')
-  const [newCaseSubmenu, setNewCaseSubmenu] = useState<string | undefined>()
-  const [newCasePriority, setNewCasePriority] = useState<'P0' | 'P1' | 'P2'>('P1')
-  const [newCaseStatus, setNewCaseStatus] = useState<CaseStatus>('draft')
-  const [newCaseDesc, setNewCaseDesc] = useState('')
-  const [newCaseAcceptance, setNewCaseAcceptance] = useState('')
-  const [editingTitle, setEditingTitle] = useState<string | null>(null)
-  const [editingSubmenu, setEditingSubmenu] = useState<string | null>(null)
-  const [editingPriority, setEditingPriority] = useState<string | null>(null)
-  const [editingModule, setEditingModule] = useState<string | null>(null)
-  const [moduleItems, setModuleItems] = useState<OptionsSelectItem<string>[]>([])
-  const [submenuItems, setSubmenuItems] = useState<OptionsSelectItem<string>[]>([])
-  const [priorityItems, setPriorityItems] = useState<OptionsSelectItem<'P0' | 'P1' | 'P2'>[]>([])
+  });
+  const [platforms, setPlatforms] = useState<OptionsSelectItem<string>[]>([]);
+  const [newCaseOpen, setNewCaseOpen] = useState(false);
+  const [newCaseSubmitting, setNewCaseSubmitting] = useState(false);
+  const [newCaseCode, setNewCaseCode] = useState('');
+  const [newCaseTitle, setNewCaseTitle] = useState('');
+  const [newCaseFeature, setNewCaseFeature] = useState('');
+  const [newCaseSubmenu, setNewCaseSubmenu] = useState<string | undefined>();
+  const [newCasePriority, setNewCasePriority] = useState<'P0' | 'P1' | 'P2'>(
+    'P1',
+  );
+  const [newCaseStatus, setNewCaseStatus] = useState<CaseStatus>('draft');
+  const [newCaseDesc, setNewCaseDesc] = useState('');
+  const [newCaseAcceptance, setNewCaseAcceptance] = useState('');
+  const [editingTitle, setEditingTitle] = useState<string | null>(null);
+  const [editingSubmenu, setEditingSubmenu] = useState<string | null>(null);
+  const [editingPriority, setEditingPriority] = useState<string | null>(null);
+  const [editingModule, setEditingModule] = useState<string | null>(null);
+  const [moduleItems, setModuleItems] = useState<OptionsSelectItem<string>[]>(
+    [],
+  );
+  const [submenuItems, setSubmenuItems] = useState<OptionsSelectItem<string>[]>(
+    [],
+  );
+  const [priorityItems, setPriorityItems] = useState<
+    OptionsSelectItem<'P0' | 'P1' | 'P2'>[]
+  >([]);
+  const [suites, setSuites] = useState<UserScenarioSuiteSummary[]>([]);
+  const [suiteLoading, setSuiteLoading] = useState(false);
+  const [suiteSaving, setSuiteSaving] = useState(false);
+  const [suiteDialogOpen, setSuiteDialogOpen] = useState(false);
+  const [suitePreSteps, setSuitePreSteps] = useState<string[]>([]);
+  const [suitePreStepDraft, setSuitePreStepDraft] = useState('');
+  const [suiteDescDraft, setSuiteDescDraft] = useState('');
+  const [selectedSuiteId, setSelectedSuiteId] = useState<number | null>(null);
+  const [newSuiteName, setNewSuiteName] = useState('');
+  const [newSuiteDesc, setNewSuiteDesc] = useState('');
+  const [suiteGenerating, setSuiteGenerating] = useState(false);
 
   const selectedCase = useMemo(
     () => cases.find((c) => c.id === selectedCaseId) || null,
-    [cases, selectedCaseId]
-  )
+    [cases, selectedCaseId],
+  );
 
-  useEffect(() => {
-    // 切换选中用例时，重置标题编辑缓存
-    setEditingTitle(null)
-    setEditingSubmenu(null)
-    setEditingPriority(null)
-    setEditingModule(null)
-  }, [selectedCaseId])
+useEffect(() => {
+  // 切换选中用例时，重置标题编辑缓存
+  setEditingTitle(null);
+  setEditingSubmenu(null);
+  setEditingPriority(null);
+  setEditingModule(null);
+}, [selectedCaseId]);
+
+useEffect(() => {
+  if (!selectedCase) {
+    setSelectedSuiteId(null);
+    setSuitePreSteps([]);
+    setSuitePreStepDraft('');
+    setSuiteDescDraft('');
+    return;
+  }
+  const suiteIdFromCase = selectedCase.suiteId ?? null;
+  setSelectedSuiteId(suiteIdFromCase);
+}, [selectedCase]);
+
+useEffect(() => {
+  if (!selectedSuiteId) {
+    setSuitePreSteps([]);
+    setSuitePreStepDraft('');
+    setSuiteDescDraft('');
+    return;
+  }
+  const suite = suites.find((s) => s.id === selectedSuiteId);
+  setSuitePreSteps(suite?.sharedPreSteps || []);
+  setSuitePreStepDraft('');
+  setSuiteDescDraft(suite?.description || '');
+}, [selectedSuiteId, suites]);
 
   // Restore last selected case when coming back from Testcases (via gtt:scenarios:lastCaseId)
   useEffect(() => {
-    if (!cases.length) return
-    if (selectedCaseId != null) return
+    if (!cases.length) return;
+    if (selectedCaseId != null) return;
     try {
-      const raw = localStorage.getItem('gtt:scenarios:lastCaseId')
-      if (!raw) return
-      const n = Number(raw)
-      if (!Number.isFinite(n)) return
-      const exists = cases.some((c) => c.id === n)
+      const raw = localStorage.getItem('gtt:scenarios:lastCaseId');
+      if (!raw) return;
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return;
+      const exists = cases.some((c) => c.id === n);
       if (exists) {
-        setSelectedCaseId(n)
+        setSelectedCaseId(n);
       }
     } catch {}
-  }, [cases, selectedCaseId])
+  }, [cases, selectedCaseId]);
 
   useEffect(() => {
-    if (selectedCaseId == null) return
-    void loadCaseSteps(selectedCaseId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCaseId])
+    if (selectedCaseId == null) return;
+    void loadCaseSteps(selectedCaseId);
+  }, [selectedCaseId]);
 
-  const filteredCases = useMemo(() => cases, [cases])
+  const filteredCases = useMemo(() => cases, [cases]);
 
   const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(filteredCases.length / Math.max(1, tablePageSize))),
-    [filteredCases.length, tablePageSize]
-  )
-  const safePage = Math.max(1, Math.min(totalPages, tablePage))
+    () =>
+      Math.max(1, Math.ceil(filteredCases.length / Math.max(1, tablePageSize))),
+    [filteredCases.length, tablePageSize],
+  );
+  const safePage = Math.max(1, Math.min(totalPages, tablePage));
 
   const currentSteps: UserScenarioStep[] = useMemo(() => {
-    if (!selectedCase) return []
-    return (stepsByCase[selectedCase.id] || []).slice().sort((a, b) => a.order - b.order)
-  }, [selectedCase, stepsByCase])
+    if (!selectedCase) return [];
+    return (stepsByCase[selectedCase.id] || [])
+      .slice()
+      .sort((a, b) => a.order - b.order);
+  }, [selectedCase, stepsByCase]);
 
-  const apiPrefix = '/api/user-scenarios'
+  const apiPrefix = '/api/user-scenarios';
   const moduleLabelMap = useMemo(() => {
-    const m: Record<string, string> = {}
+    const m: Record<string, string> = {};
     for (const it of moduleItems) {
-      m[it.value] = it.label
+      m[it.value] = it.label;
     }
-    return m
-  }, [moduleItems])
+    return m;
+  }, [moduleItems]);
+  const dialogPlatform = (
+    (stepDialogTarget === 'case' ? selectedCase?.platform : platform) ||
+    platform ||
+    ''
+  )
+    .toString()
+    .toLowerCase();
+  const isDialogApiPlatform = dialogPlatform.includes('-api-');
   const statusItems: OptionsSelectItem<CaseStatus>[] = [
     { label: '草稿', value: 'draft' },
     { label: '完善中', value: 'in_progress' },
     { label: '已准备', value: 'ready' },
     { label: '已生成代码', value: 'code_generated' },
-  ]
+  ];
 
   const handleAddStep = () => {
+    setStepDialogTarget('case');
     if (!selectedCase) {
-      toast.error('请先在左侧选择一个用例')
-      return
+      toast.error('请先在左侧选择一个用例');
+      return;
     }
-    const plat = (selectedCase.platform || platform || '').toString().toLowerCase()
-    const isApiPlatform = plat.includes('-api-')
+    const plat = (selectedCase.platform || platform || '')
+      .toString()
+      .toLowerCase();
+    const isApiPlatform = plat.includes('-api-');
 
     if (isApiPlatform) {
-      const caseId = selectedCase.id
-      const list = stepsByCase[caseId] || []
-      const nextOrder = list.length ? Math.max(...list.map((s) => s.order)) + 1 : 1
-      setEditingStepIdForDialog(null)
-      setStepDialogOrder(nextOrder)
-      setStepDialogApiMethod('GET')
-      setStepDialogApiPath('')
-      setStepDialogApiBody('')
-      setStepDialogActionText('')
-      setStepDialogExpected('')
-      setStepDialogPageKey(undefined)
-      setStepDialogActionKey(undefined)
-      setStepDialogArgs({})
-      setStepDialogCheckType('')
-      setStepDialogCheckLocator('')
-      setStepDialogCheckExpectedUrl('')
-      setStepDialogCheckTimeoutMs('')
-      setStepDialogOpen(true)
-      return
+      const caseId = selectedCase.id;
+      const list = stepsByCase[caseId] || [];
+      const nextOrder = list.length
+        ? Math.max(...list.map((s) => s.order)) + 1
+        : 1;
+      setEditingStepIdForDialog(null);
+      setStepDialogOrder(nextOrder);
+      setStepDialogApiMethod('GET');
+      setStepDialogApiPath('');
+      setStepDialogApiBody('');
+      setStepDialogActionText('');
+      setStepDialogExpected('');
+      setStepDialogPageKey(undefined);
+      setStepDialogActionKey(undefined);
+      setStepDialogArgs({});
+      setStepDialogCheckType('');
+      setStepDialogCheckLocator('');
+      setStepDialogCheckExpectedUrl('');
+      setStepDialogCheckTimeoutMs('');
+      setStepDialogOpen(true);
+      return;
     }
 
     // 如果尚未加载动作目录，回退到手工模式
     if (!actionCatalog || !actionCatalog.pages?.length) {
       setStepsByCase((prev) => {
-        const list = prev[selectedCase.id] || []
-        const nextOrder = list.length ? Math.max(...list.map((s) => s.order)) + 1 : 1
+        const list = prev[selectedCase.id] || [];
+        const nextOrder = list.length
+          ? Math.max(...list.map((s) => s.order)) + 1
+          : 1;
         const next: UserScenarioStep = {
           id: `${selectedCase.id}-${Date.now()}`,
           order: nextOrder,
           action: '',
           expected: '',
-        }
-        return { ...prev, [selectedCase.id]: [...list, next] }
-      })
-      return
+        };
+        return { ...prev, [selectedCase.id]: [...list, next] };
+      });
+      return;
     }
     // 使用“页面 + 动作”对话框（新增模式）
-    const firstPage = actionCatalog.pages[0]
-    setEditingStepIdForDialog(null)
-    setStepDialogPageKey(firstPage?.key)
-    setStepDialogActionKey(undefined)
-    setStepDialogArgs({})
-    setStepDialogExpected('')
-    setStepDialogActionText('')
-    setStepDialogCheckType('')
-    setStepDialogCheckLocator('')
-    setStepDialogCheckExpectedUrl('')
-    setStepDialogCheckTimeoutMs('')
-    setStepDialogOpen(true)
-  }
+    const firstPage = actionCatalog.pages[0];
+    setEditingStepIdForDialog(null);
+    setStepDialogPageKey(firstPage?.key);
+    setStepDialogActionKey(undefined);
+    setStepDialogArgs({});
+    setStepDialogExpected('');
+    setStepDialogActionText('');
+    setStepDialogCheckType('');
+    setStepDialogCheckLocator('');
+    setStepDialogCheckExpectedUrl('');
+    setStepDialogCheckTimeoutMs('');
+    setStepDialogOpen(true);
+  };
+
+  const handleAddSuitePreStep = () => {
+    if (!selectedSuiteId) {
+      toast.error('请先选择一个套件');
+      return;
+    }
+    setStepDialogTarget('suite');
+    const plat = (selectedCase?.platform || platform || '')
+      .toString()
+      .toLowerCase();
+    const isApiPlatform = plat.includes('-api-');
+
+    if (isApiPlatform) {
+      setEditingStepIdForDialog(null);
+      setStepDialogOrder(suitePreSteps.length + 1);
+      setStepDialogApiMethod('GET');
+      setStepDialogApiPath('');
+      setStepDialogApiBody('');
+      setStepDialogActionText('');
+      setStepDialogExpected('');
+      setStepDialogPageKey(undefined);
+      setStepDialogActionKey(undefined);
+      setStepDialogArgs({});
+      setStepDialogCheckType('');
+      setStepDialogCheckLocator('');
+      setStepDialogCheckExpectedUrl('');
+      setStepDialogCheckTimeoutMs('');
+      setStepDialogOpen(true);
+      return;
+    }
+
+    if (!actionCatalog || !actionCatalog.pages?.length) {
+      onSuitePreStepsChange([...suitePreSteps, '']);
+      return;
+    }
+    const firstPage = actionCatalog.pages[0];
+    setEditingStepIdForDialog(null);
+    setStepDialogPageKey(firstPage?.key);
+    setStepDialogActionKey(undefined);
+    setStepDialogArgs({});
+    setStepDialogExpected('');
+    setStepDialogActionText('');
+    setStepDialogCheckType('');
+    setStepDialogCheckLocator('');
+    setStepDialogCheckExpectedUrl('');
+    setStepDialogCheckTimeoutMs('');
+    setStepDialogOpen(true);
+  };
 
   const handleMockSaveCase = async () => {
     if (!selectedCase) {
-      toast.error('请先在左侧选择一个用例')
-      return
+      toast.error('请先在左侧选择一个用例');
+      return;
     }
-    const nextTitle = (editingTitle ?? selectedCase.title ?? '').trim()
+    const nextTitle = (editingTitle ?? selectedCase.title ?? '').trim();
     if (!nextTitle) {
-      toast.error('标题不能为空')
-      return
+      toast.error('标题不能为空');
+      return;
     }
-    const rawModule = (editingModule ?? (selectedCase.module as string) ?? 'live-stream').trim()
-    const nextModule = rawModule || 'live-stream'
-    const rawSubmenu = (editingSubmenu ?? (selectedCase.submenu as string) ?? '').trim()
-    const nextSubmenu = rawSubmenu || undefined
-    const rawPriority = (editingPriority ?? (selectedCase.priority as string) ?? '').trim()
-    let nextPriority: 'P0' | 'P1' | 'P2' = selectedCase.priority || 'P1'
+    const rawModule = (
+      editingModule ??
+      (selectedCase.module as string) ??
+      'live-stream'
+    ).trim();
+    const nextModule = rawModule || 'live-stream';
+    const rawSubmenu = (
+      editingSubmenu ??
+      (selectedCase.submenu as string) ??
+      ''
+    ).trim();
+    const nextSubmenu = rawSubmenu || undefined;
+    const rawPriority = (
+      editingPriority ??
+      (selectedCase.priority as string) ??
+      ''
+    ).trim();
+    let nextPriority: 'P0' | 'P1' | 'P2' = selectedCase.priority || 'P1';
     if (rawPriority === 'P0' || rawPriority === 'P1' || rawPriority === 'P2') {
-      nextPriority = rawPriority
+      nextPriority = rawPriority;
     }
     try {
       await updateCaseMeta({
@@ -629,394 +769,681 @@ export default function ScenariosPage() {
         module: nextModule,
         submenu: nextSubmenu,
         priority: nextPriority,
-      })
-      setEditingTitle(null)
-      setEditingSubmenu(null)
-      setEditingPriority(null)
-      setEditingModule(null)
+      });
+      setEditingTitle(null);
+      setEditingSubmenu(null);
+      setEditingPriority(null);
+      setEditingModule(null);
     } catch {
       // updateCaseMeta 内部已经处理了 toast
     }
-  }
+  };
 
   const handleDeleteStep = (stepId: string) => {
-    if (!selectedCase) return
+    if (!selectedCase) return;
     setStepsByCase((prev) => {
-      const list = prev[selectedCase.id] || []
-      const next = list.filter((s) => s.id !== stepId)
+      const list = prev[selectedCase.id] || [];
+      const next = list.filter((s) => s.id !== stepId);
       const normalized = next.map((s, index) => ({
         ...s,
         order: index + 1,
-      }))
-      return { ...prev, [selectedCase.id]: normalized }
-    })
-  }
+      }));
+      return { ...prev, [selectedCase.id]: normalized };
+    });
+  };
 
   const handleDeleteSelected = async () => {
     if (!selectedIds.length) {
-      toast.error('请先选择要删除的用户场景')
-      return
+      toast.error('请先选择要删除的用户场景');
+      return;
     }
     const confirmed = window.confirm(
-      `确认删除选中的 ${selectedIds.length} 个用户场景？将同时删除其所有步骤。`
-    )
-    if (!confirmed) return
-    const idsToDelete = selectedIds.slice()
+      `确认删除选中的 ${selectedIds.length} 个用户场景？将同时删除其所有步骤。`,
+    );
+    if (!confirmed) return;
+    const idsToDelete = selectedIds.slice();
     try {
-      setDeletingBulk(true)
+      setDeletingBulk(true);
       for (const id of idsToDelete) {
         const res = await fetch(`${apiPrefix}/${id}`, {
           method: 'DELETE',
-        })
+        });
         if (!res.ok) {
-          const err = await normalizeResponseError(res as any)
-          throw new Error(err.message || '删除用例失败')
+          const err = await normalizeResponseError(res as any);
+          throw new Error(err.message || '删除用例失败');
         }
         setStepsByCase((prev) => {
-          const { [id]: _removed, ...rest } = prev
-          return rest
-        })
+          const { [id]: _removed, ...rest } = prev;
+          return rest;
+        });
       }
       if (selectedCaseId && idsToDelete.includes(selectedCaseId)) {
-        setSelectedCaseId(null)
+        setSelectedCaseId(null);
       }
-      setSelectedIds([])
-      setTableSelectedKeys(new Set())
-      toast.success(`已删除选中的 ${idsToDelete.length} 个用户场景`)
-      await refreshCases()
+      setSelectedIds([]);
+      setTableSelectedKeys(new Set());
+      toast.success(`已删除选中的 ${idsToDelete.length} 个用户场景`);
+      await refreshCases();
     } catch (e: any) {
-      toast.error(e?.message || '批量删除用例失败')
+      toast.error(e?.message || '批量删除用例失败');
     } finally {
-      setDeletingBulk(false)
+      setDeletingBulk(false);
     }
-  }
+  };
 
-  const handleAddPreconditionStep = () => {
-    if (!selectedCase) {
-      toast.error('请先在左侧选择一个用例')
-      return
+  const handleExportCases = () => {
+    const rowsToExport = selectedIds.length
+      ? filteredCases.filter((c) => selectedIds.includes(c.id))
+      : filteredCases;
+    if (!rowsToExport.length) {
+      toast.message('暂无可导出的用户场景');
+      return;
     }
-    setStepsByCase((prev) => {
-      const caseId = selectedCase.id
-      const list = (prev[caseId] || []).slice().sort((a, b) => a.order - b.order)
-      // 如果已经存在一个无 binding 的步骤，则不重复添加，只保留现有数据
-      const existingPre = list.find((s) => !s.binding || !String(s.binding).trim())
-      if (existingPre) {
-        return prev
+    const headers = [
+      'id',
+      'code',
+      'title',
+      'module',
+      'platform',
+      'feature',
+      'submenu',
+      'priority',
+      'status',
+      'hasSteps',
+      'hasCode',
+      'description',
+      'acceptanceCriteria',
+      'generatedFilePath',
+      'csvId',
+    ];
+    const esc = (v: any) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const safeModule = (m?: string | null) => (m ? moduleLabelMap[m] || m : '');
+    const safeSubmenu = (s?: string | null) => (s ? SUBMENU_LABEL[s] || s : '');
+    const lines = [headers.join(',')];
+    for (const row of rowsToExport) {
+      lines.push(
+        [
+          row.id,
+          row.code,
+          row.title,
+          safeModule(row.module),
+          row.platform || '',
+          row.feature || '',
+          safeSubmenu(row.submenu),
+          row.priority ? PRIORITY_LABEL[row.priority] : '',
+          STATUS_LABEL[row.status],
+          row.hasSteps ? 'yes' : 'no',
+          row.hasCode ? 'yes' : 'no',
+          row.description || '',
+          row.acceptanceCriteria || '',
+          row.generatedFilePath || '',
+          row.csvId || '',
+        ]
+          .map(esc)
+          .join(','),
+      );
+    }
+    const blob = new Blob([lines.join('\n')], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const now = new Date();
+    const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(
+      now.getHours(),
+    )}${pad(now.getMinutes())}`;
+    const plat = (platform || 'all').replace(/[^A-Za-z0-9_-]/g, '-') || 'all';
+    const scope = selectedIds.length ? 'selected' : 'all';
+    a.download = `scenarios.${plat}.${scope}.${ts}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAssignSuite = async (suiteId: number | null) => {
+    if (!selectedCase) {
+      toast.error('请先在左侧选择一个用例');
+      return;
+    }
+    const prevSuiteId = selectedSuiteId;
+    const target = suiteId ? suites.find((s) => s.id === suiteId) : null;
+    setSelectedSuiteId(suiteId);
+    if (suiteId && target) {
+      setSuitePreSteps(target.sharedPreSteps || []);
+      setSuitePreStepDraft('');
+      setSuiteDescDraft(target.description || '');
+    } else if (suiteId === null) {
+      setSuitePreSteps([]);
+      setSuitePreStepDraft('');
+      setSuiteDescDraft('');
+    }
+    try {
+      await updateCaseMeta({ suiteId });
+      await loadSuites();
+    } catch {
+      // updateCaseMeta 已处理提示
+      setSelectedSuiteId(prevSuiteId ?? null);
+      if (prevSuiteId) {
+        const prevSuite = suites.find((s) => s.id === prevSuiteId);
+        setSuitePreSteps(prevSuite?.sharedPreSteps || []);
+        setSuitePreStepDraft('');
+        setSuiteDescDraft(prevSuite?.description || '');
+      } else {
+        setSuitePreSteps([]);
+        setSuitePreStepDraft('');
+        setSuiteDescDraft('');
       }
-      // 先规范化现有步骤的顺序，从 1 开始
-      const normalized = list.map((s, idx) => ({
-        ...s,
-        order: idx + 1,
-      }))
-      const preStep: UserScenarioStep = {
-        id: `${caseId}-pre-${Date.now()}`,
-        order: 1,
-        action: '前置条件',
-        data: '',
-        expected: '',
-        binding: '',
+    }
+  };
+
+  const handleSaveSuitePreSteps = async () => {
+    if (!selectedSuiteId) {
+      toast.error('请选择一个套件');
+      return;
+    }
+    const steps = suitePreSteps
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const payload = {
+      description: suiteDescDraft || null,
+      sharedPreSteps: steps,
+    };
+    try {
+      setSuiteSaving(true);
+      const res = await fetch(`${apiPrefix}/suites/${selectedSuiteId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await normalizeResponseError(res as any);
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin');
+          } catch {}
+          throw new Error('Unauthorized');
+        }
+        throw new Error(err.message || '保存套件失败');
       }
-      const shifted = normalized.map((s) => ({
-        ...s,
-        order: s.order + 1,
-      }))
-      return { ...prev, [caseId]: [preStep, ...shifted] }
-    })
-  }
+      const updated = (await res.json()) as UserScenarioSuiteSummary;
+      const normalizedUpdated: UserScenarioSuiteSummary = {
+        ...updated,
+        caseCount:
+          (updated as any).caseCount ??
+          ((updated as any).cases?.length as number | undefined) ??
+          updated.caseIds?.length ??
+          0,
+      };
+      setSuites((prev) => {
+        const others = prev.filter((s) => s.id !== normalizedUpdated.id);
+        return [...others, normalizedUpdated].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        );
+      });
+      setSuitePreSteps(normalizedUpdated.sharedPreSteps || []);
+      setSuitePreStepDraft('');
+      setSuiteDescDraft(normalizedUpdated.description || '');
+      toast.success('已保存套件前置步骤');
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '保存套件失败');
+      }
+    } finally {
+      setSuiteSaving(false);
+    }
+  };
+
+  const handleCreateSuite = async () => {
+    if (!newSuiteName.trim()) {
+      toast.error('请填写套件名称');
+      return;
+    }
+    try {
+      setSuiteSaving(true);
+      const res = await fetch(`${apiPrefix}/suites`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: newSuiteName.trim(),
+          description: newSuiteDesc.trim() || undefined,
+          platform: selectedCase?.platform || platform || 'gettr-web',
+          module: selectedCase?.module || 'live-stream',
+          sharedPreSteps: [],
+        }),
+      });
+      if (!res.ok) {
+        const err = await normalizeResponseError(res as any);
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin');
+          } catch {}
+          throw new Error('Unauthorized');
+        }
+        throw new Error(err.message || '创建套件失败');
+      }
+      const created = (await res.json()) as UserScenarioSuiteSummary;
+      const normalizedCreated: UserScenarioSuiteSummary = {
+        ...created,
+        caseCount:
+          (created as any).caseCount ??
+          ((created as any).cases?.length as number | undefined) ??
+          created.caseIds?.length ??
+          0,
+      };
+      setSuites((prev) => [...prev, normalizedCreated]);
+      setNewSuiteName('');
+      setNewSuiteDesc('');
+      setSuiteDialogOpen(false);
+      if (selectedCase) {
+        await handleAssignSuite(created.id);
+      }
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '创建套件失败');
+      }
+    } finally {
+      setSuiteSaving(false);
+    }
+  };
+
+  const handleGenerateSuiteCode = async () => {
+    if (!selectedSuiteId) {
+      toast.error('请选择套件');
+      return;
+    }
+    const targetSuite = suites.find((s) => s.id === selectedSuiteId);
+    const suiteCaseCount =
+      (targetSuite?.caseCount as number | undefined) ??
+      targetSuite?.caseIds?.length ??
+      0;
+    if (suiteCaseCount === 0) {
+      toast.error('当前套件尚未包含任何用例');
+      return;
+    }
+    try {
+      setSuiteGenerating(true);
+      const res = await fetch(
+        `${apiPrefix}/suites/${selectedSuiteId}/generate-code`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      );
+      if (!res.ok) {
+        const err = await normalizeResponseError(res as any);
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin');
+          } catch {}
+          throw new Error('Unauthorized');
+        }
+        throw new Error(err.message || '生成套件代码失败');
+      }
+      const data = await res.json();
+      toast.success(data?.message || '已生成套件代码');
+      try {
+        if (data?.filePath) {
+          localStorage.setItem('gtt:testcases:lastFile', data.filePath);
+          localStorage.setItem('gtt:testcases:forceReload', '1');
+        }
+      } catch {}
+      await refreshCases();
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '生成套件代码失败');
+      }
+    } finally {
+      setSuiteGenerating(false);
+    }
+  };
 
   const getStepParamHint = (
-    step: UserScenarioStep
+    step: UserScenarioStep,
   ): { summary: string; example: string } | null => {
-    if (!actionCatalog || !step.binding) return null
-    let parsed: StepBindingV1 | null = null
+    if (!actionCatalog || !step.binding) return null;
+    let parsed: StepBindingV1 | null = null;
     try {
-      parsed = JSON.parse(step.binding) as StepBindingV1
+      parsed = JSON.parse(step.binding) as StepBindingV1;
     } catch {
-      return null
+      return null;
     }
-    if (!parsed || !parsed.pageKey || !parsed.actionKey) return null
-    const page = (actionCatalog.pages || []).find((p) => p.key === parsed!.pageKey)
-    if (!page) return null
-    const action = (page.actions || []).find((a) => a.key === parsed!.actionKey)
-    if (!action) return null
-    const params = action.params || []
-    if (!params.length) return null
+    if (!parsed || !parsed.pageKey || !parsed.actionKey) return null;
+    const page = (actionCatalog.pages || []).find(
+      (p) => p.key === parsed!.pageKey,
+    );
+    if (!page) return null;
+    const action = (page.actions || []).find(
+      (a) => a.key === parsed!.actionKey,
+    );
+    if (!action) return null;
+    const params = action.params || [];
+    if (!params.length) return null;
     const parts = params.map((p) => {
-      const type = (p.type || 'string').toString()
-      return `${p.name}(${type})`
-    })
-    const example = params.map((p) => `${p.name}=...`).join(', ')
+      const type = (p.type || 'string').toString();
+      return `${p.name}(${type})`;
+    });
+    const example = params.map((p) => `${p.name}=...`).join(', ');
     return {
       summary: parts.join(', '),
       example,
-    }
-  }
+    };
+  };
 
   const handleMoveStep = (stepId: string, direction: 'up' | 'down') => {
-    if (!selectedCase) return
+    if (!selectedCase) return;
     setStepsByCase((prev) => {
-      const caseId = selectedCase.id
-      const list = (prev[caseId] || []).slice().sort((a, b) => a.order - b.order)
-      const index = list.findIndex((s) => s.id === stepId)
-      if (index === -1) return prev
-      const targetIndex = direction === 'up' ? index - 1 : index + 1
-      if (targetIndex < 0 || targetIndex >= list.length) return prev
-      const reordered = list.slice()
-      const [item] = reordered.splice(index, 1)
-      reordered.splice(targetIndex, 0, item)
+      const caseId = selectedCase.id;
+      const list = (prev[caseId] || [])
+        .slice()
+        .sort((a, b) => a.order - b.order);
+      const index = list.findIndex((s) => s.id === stepId);
+      if (index === -1) return prev;
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= list.length) return prev;
+      const reordered = list.slice();
+      const [item] = reordered.splice(index, 1);
+      reordered.splice(targetIndex, 0, item);
       const normalized = reordered.map((s, idx) => ({
         ...s,
         order: idx + 1,
-      }))
-      return { ...prev, [caseId]: normalized }
-    })
-  }
+      }));
+      return { ...prev, [caseId]: normalized };
+    });
+  };
 
   const handleEditStepInDialog = (stepId: string) => {
     if (!selectedCase) {
-      toast.error('请先在左侧选择一个用例')
-      return
+      toast.error('请先在左侧选择一个用例');
+      return;
     }
-    const plat = (selectedCase.platform || platform || '').toString().toLowerCase()
-    const isApiPlatform = plat.includes('-api-')
-    const list = stepsByCase[selectedCase.id] || []
-    const step = list.find((s) => s.id === stepId)
-    if (!step) return
+    const plat = (selectedCase.platform || platform || '')
+      .toString()
+      .toLowerCase();
+    const isApiPlatform = plat.includes('-api-');
+    const list = stepsByCase[selectedCase.id] || [];
+    const step = list.find((s) => s.id === stepId);
+    if (!step) return;
 
     // 对于 API 平台（如 gettr-api-*），不依赖页面动作目录，直接编辑步骤文本
     if (isApiPlatform) {
       // 解析 data 字段中的简单 key=value 对，支持 method/path/body
-      let method = 'GET'
-      let pathVal = ''
-      let bodyVal = ''
-      const rawData = (step.data || '').toString()
+      let method = 'GET';
+      let pathVal = '';
+      let bodyVal = '';
+      const rawData = (step.data || '').toString();
       if (rawData.trim()) {
         for (const part of rawData.split(',')) {
-          const seg = part.trim()
-          if (!seg) continue
-          const eqIdx = seg.indexOf('=')
-          if (eqIdx <= 0) continue
-          const name = seg
-            .slice(0, eqIdx)
-            .trim()
-            .toLowerCase()
-          const value = seg.slice(eqIdx + 1).trim()
+          const seg = part.trim();
+          if (!seg) continue;
+          const eqIdx = seg.indexOf('=');
+          if (eqIdx <= 0) continue;
+          const name = seg.slice(0, eqIdx).trim().toLowerCase();
+          const value = seg.slice(eqIdx + 1).trim();
           if (name === 'method') {
-            method = value || method
+            method = value || method;
           } else if (name === 'path') {
-            pathVal = value
+            pathVal = value;
           } else if (name === 'body' || name === 'payload') {
-            bodyVal = value
+            bodyVal = value;
           }
         }
       }
-      setEditingStepIdForDialog(stepId)
-      setStepDialogPageKey(undefined)
-      setStepDialogActionKey(undefined)
-      setStepDialogArgs({})
-      setStepDialogExpected(step.expected || '')
-      setStepDialogActionText(step.action || '')
-      setStepDialogCheckType('')
-      setStepDialogCheckLocator('')
-      setStepDialogCheckExpectedUrl('')
-      setStepDialogCheckTimeoutMs('')
-      setStepDialogOrder(Number.isFinite(step.order) ? step.order : 1)
-      setStepDialogApiMethod(method || 'GET')
-      setStepDialogApiPath(pathVal)
-      setStepDialogApiBody(bodyVal)
-      setStepDialogOpen(true)
-      return
+      setEditingStepIdForDialog(stepId);
+      setStepDialogPageKey(undefined);
+      setStepDialogActionKey(undefined);
+      setStepDialogArgs({});
+      setStepDialogExpected(step.expected || '');
+      setStepDialogActionText(step.action || '');
+      setStepDialogCheckType('');
+      setStepDialogCheckLocator('');
+      setStepDialogCheckExpectedUrl('');
+      setStepDialogCheckTimeoutMs('');
+      setStepDialogOrder(Number.isFinite(step.order) ? step.order : 1);
+      setStepDialogApiMethod(method || 'GET');
+      setStepDialogApiPath(pathVal);
+      setStepDialogApiBody(bodyVal);
+      setStepDialogOpen(true);
+      return;
     }
 
     if (!actionCatalog || !actionCatalog.pages?.length) {
-      toast.error('页面动作目录尚未加载，无法使用绑定编辑')
-      return
+      toast.error('页面动作目录尚未加载，无法使用绑定编辑');
+      return;
     }
 
-    let binding: StepBindingV1 | null = null
+    let binding: StepBindingV1 | null = null;
     try {
       if (step.binding) {
-        binding = JSON.parse(step.binding) as StepBindingV1
+        binding = JSON.parse(step.binding) as StepBindingV1;
       }
     } catch {
-      binding = null
+      binding = null;
     }
-    const catalog = actionCatalog
-    let pageKey: string | undefined
-    let actionKey: string | undefined
-    let argsFromBinding: Record<string, string> = {}
+    const catalog = actionCatalog;
+    let pageKey: string | undefined;
+    let actionKey: string | undefined;
+    let argsFromBinding: Record<string, string> = {};
 
     if (binding && binding.pageKey && binding.actionKey) {
-      pageKey = binding.pageKey
-      actionKey = binding.actionKey
+      pageKey = binding.pageKey;
+      actionKey = binding.actionKey;
       if (Array.isArray(binding.args)) {
         for (const arg of binding.args) {
-          if (!arg || !arg.name) continue
-          argsFromBinding[arg.name] = arg.value ?? ''
+          if (!arg || !arg.name) continue;
+          argsFromBinding[arg.name] = arg.value ?? '';
         }
       }
     }
 
-    const pages = catalog.pages || []
-    const resolvedPage = (pageKey && pages.find((p) => p.key === pageKey)) || pages[0] || null
+    const pages = catalog.pages || [];
+    const resolvedPage =
+      (pageKey && pages.find((p) => p.key === pageKey)) || pages[0] || null;
 
     const resolvedAction =
       resolvedPage &&
       ((actionKey && resolvedPage.actions.find((a) => a.key === actionKey)) ||
         resolvedPage.actions[0] ||
-        null)
+        null);
 
     if (!resolvedPage || !resolvedAction) {
-      toast.error('当前步骤未绑定到可解析的页面/动作，请重新选择')
-      setEditingStepIdForDialog(null)
-      setStepDialogPageKey(pages[0]?.key)
-      setStepDialogActionKey(undefined)
-      setStepDialogArgs({})
-      setStepDialogExpected(step.expected || '')
-      setStepDialogOrder(Number.isFinite(step.order) ? step.order : 1)
-      setStepDialogOpen(true)
-      return
+      toast.error('当前步骤未绑定到可解析的页面/动作，请重新选择');
+      setEditingStepIdForDialog(null);
+      setStepDialogPageKey(pages[0]?.key);
+      setStepDialogActionKey(undefined);
+      setStepDialogArgs({});
+      setStepDialogExpected(step.expected || '');
+      setStepDialogOrder(Number.isFinite(step.order) ? step.order : 1);
+      setStepDialogOpen(true);
+      return;
     }
 
-    const paramArgs: Record<string, string> = {}
-    const params = resolvedAction.params || []
+    const paramArgs: Record<string, string> = {};
+    const params = resolvedAction.params || [];
     // 先用 binding.args，缺失的尝试从 data 文本中回填
-    const mapFromData: Record<string, string> = {}
-    const rawData = (step.data || '').toString()
+    const mapFromData: Record<string, string> = {};
+    const rawData = (step.data || '').toString();
     if (rawData.trim()) {
       for (const part of rawData.split(',')) {
-        const seg = part.trim()
-        if (!seg) continue
-        const eqIdx = seg.indexOf('=')
-        if (eqIdx <= 0) continue
-        const n = seg.slice(0, eqIdx).trim()
-        const v = seg.slice(eqIdx + 1).trim()
-        if (n) mapFromData[n] = v
+        const seg = part.trim();
+        if (!seg) continue;
+        const eqIdx = seg.indexOf('=');
+        if (eqIdx <= 0) continue;
+        const n = seg.slice(0, eqIdx).trim();
+        const v = seg.slice(eqIdx + 1).trim();
+        if (n) mapFromData[n] = v;
       }
     }
     for (const p of params) {
-      const name = p.name
+      const name = p.name;
       if (argsFromBinding[name] != null) {
-        paramArgs[name] = argsFromBinding[name]
+        paramArgs[name] = argsFromBinding[name];
       } else if (mapFromData[name] != null) {
-        paramArgs[name] = mapFromData[name]
+        paramArgs[name] = mapFromData[name];
       } else {
-        paramArgs[name] = ''
+        paramArgs[name] = '';
       }
     }
 
-    let checkType: StepCheckRuleType | '' = ''
-    let checkLocator = ''
-    let checkExpectedUrl = ''
-    let checkTimeout = ''
+    let checkType: StepCheckRuleType | '' = '';
+    let checkLocator = '';
+    let checkExpectedUrl = '';
+    let checkTimeout = '';
 
-    if (binding && (binding as any).checkRule && typeof (binding as any).checkRule === 'object') {
-      const rule = (binding as any).checkRule as StepCheckRule
+    if (
+      binding &&
+      (binding as any).checkRule &&
+      typeof (binding as any).checkRule === 'object'
+    ) {
+      const rule = (binding as any).checkRule as StepCheckRule;
       if (
         rule.type === 'element-visible' ||
         rule.type === 'element-hidden' ||
         rule.type === 'url-contains' ||
         rule.type === 'url-equals'
       ) {
-        checkType = rule.type
+        checkType = rule.type;
       }
       if (typeof rule.locator === 'string') {
-        checkLocator = rule.locator
+        checkLocator = rule.locator;
       }
       if (typeof rule.expectedUrl === 'string') {
-        checkExpectedUrl = rule.expectedUrl
+        checkExpectedUrl = rule.expectedUrl;
       }
-      if (typeof rule.timeoutMs === 'number' && Number.isFinite(rule.timeoutMs) && rule.timeoutMs > 0) {
-        checkTimeout = String(rule.timeoutMs)
+      if (
+        typeof rule.timeoutMs === 'number' &&
+        Number.isFinite(rule.timeoutMs) &&
+        rule.timeoutMs > 0
+      ) {
+        checkTimeout = String(rule.timeoutMs);
       }
     }
 
     if (!checkType && resolvedAction.kind === 'assert') {
-      const locRaw = (resolvedAction as any).locator as string | null | undefined
+      const locRaw = (resolvedAction as any).locator as
+        | string
+        | null
+        | undefined;
       if (locRaw && locRaw.trim()) {
-        checkType = 'element-visible'
-        checkLocator = locRaw.trim()
+        checkType = 'element-visible';
+        checkLocator = locRaw.trim();
       }
     }
 
-    setEditingStepIdForDialog(stepId)
-    setStepDialogPageKey(resolvedPage.key)
-    setStepDialogActionKey(resolvedAction.key)
-    setStepDialogArgs(paramArgs)
-    setStepDialogExpected(step.expected || resolvedAction.defaultExpected || '')
-    setStepDialogActionText(step.action || '')
-    setStepDialogCheckType(checkType)
-    setStepDialogCheckLocator(checkLocator)
-    setStepDialogCheckExpectedUrl(checkExpectedUrl)
-    setStepDialogCheckTimeoutMs(checkTimeout)
-    setStepDialogOpen(true)
-  }
+    setEditingStepIdForDialog(stepId);
+    setStepDialogPageKey(resolvedPage.key);
+    setStepDialogActionKey(resolvedAction.key);
+    setStepDialogArgs(paramArgs);
+    setStepDialogExpected(
+      step.expected || resolvedAction.defaultExpected || '',
+    );
+    setStepDialogActionText(step.action || '');
+    setStepDialogCheckType(checkType);
+    setStepDialogCheckLocator(checkLocator);
+    setStepDialogCheckExpectedUrl(checkExpectedUrl);
+    setStepDialogCheckTimeoutMs(checkTimeout);
+    setStepDialogOpen(true);
+  };
 
-  const handleDeleteCase = async (id: number) => {
-    const confirmed = window.confirm('确认删除该用户场景？将同时删除其所有步骤。')
-    if (!confirmed) return
+  const refreshCases = useCallback(async () => {
     try {
-      setDeletingId(id)
-      const res = await fetch(`${apiPrefix}/${id}`, {
-        method: 'DELETE',
-      })
+      setLoadingCases(true);
+      const qs = new URLSearchParams();
+      if (platform) qs.set('platform', platform);
+      const res = await fetch(`${apiPrefix}?${qs.toString()}`, {
+        cache: 'no-store',
+      });
       if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
+        const err = await normalizeResponseError(res as any);
         if (isUnauthorizedError(err)) {
           try {
-            router.push('/signin')
+            router.push('/signin');
           } catch {}
-          throw new Error('Unauthorized')
+          throw new Error('Unauthorized');
         }
-        throw new Error(err.message || '删除用例失败')
+        throw new Error(err.message || '获取用例列表失败');
       }
-      setStepsByCase((prev) => {
-        const { [id]: _removed, ...rest } = prev
-        return rest
-      })
-      if (selectedCaseId === id) {
-        setSelectedCaseId(null)
+      const data = (await res.json()) as UserScenarioSummary[];
+      setCases(data || []);
+      if (!selectedCaseId && data.length) {
+        setSelectedCaseId(data[0].id);
       }
-      setTableSelectedKeys((prev) => {
-        const next = new Set(prev)
-        next.delete(`id:${id}`)
-        return next
-      })
-      toast.success('已删除该用户场景')
-      await refreshCases()
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
-        toast.error(e?.message || '删除用例失败')
+        toast.error(e?.message || '获取用例列表失败');
       }
     } finally {
-      setDeletingId((curr) => (curr === id ? null : curr))
+      setLoadingCases(false);
     }
-  }
+  }, [apiPrefix, platform, router, selectedCaseId]);
+
+  const handleDeleteCase = useCallback(async (id: number) => {
+    const confirmed = window.confirm(
+      '确认删除该用户场景？将同时删除其所有步骤。',
+    );
+    if (!confirmed) return;
+    try {
+      setDeletingId(id);
+      const res = await fetch(`${apiPrefix}/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const err = await normalizeResponseError(res as any);
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin');
+          } catch {}
+          throw new Error('Unauthorized');
+        }
+        throw new Error(err.message || '删除用例失败');
+      }
+      setStepsByCase((prev) => {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      if (selectedCaseId === id) {
+        setSelectedCaseId(null);
+      }
+      setTableSelectedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(`id:${id}`);
+        return next;
+      });
+      toast.success('已删除该用户场景');
+      await refreshCases();
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '删除用例失败');
+      }
+    } finally {
+      setDeletingId((curr) => (curr === id ? null : curr));
+    }
+  }, [apiPrefix, refreshCases, router, selectedCaseId]);
 
   const handleSaveSteps = async () => {
     if (!selectedCase) {
-      toast.error('请先在左侧选择一个用例')
-      return
+      toast.error('请先在左侧选择一个用例');
+      return;
     }
     const steps = currentSteps.map((s) => {
-      let nextBinding = s.binding
+      let nextBinding = s.binding;
       if (nextBinding) {
         try {
-          const parsed = JSON.parse(nextBinding) as StepBindingV1
+          const parsed = JSON.parse(nextBinding) as StepBindingV1;
           if (parsed && Array.isArray(parsed.args)) {
-            const map: Record<string, string> = {}
-            const raw = (s.data || '').toString()
+            const map: Record<string, string> = {};
+            const raw = (s.data || '').toString();
             if (raw.trim()) {
               for (const part of raw.split(',')) {
-                const seg = part.trim()
-                if (!seg) continue
-                const eqIdx = seg.indexOf('=')
-                if (eqIdx <= 0) continue
-                const name = seg.slice(0, eqIdx).trim()
-                const value = seg.slice(eqIdx + 1).trim()
+                const seg = part.trim();
+                if (!seg) continue;
+                const eqIdx = seg.indexOf('=');
+                if (eqIdx <= 0) continue;
+                const name = seg.slice(0, eqIdx).trim();
+                const value = seg.slice(eqIdx + 1).trim();
                 if (name) {
-                  map[name] = value
+                  map[name] = value;
                 }
               }
             }
@@ -1024,10 +1451,10 @@ export default function ScenariosPage() {
               parsed.args = parsed.args.map((arg) => ({
                 ...arg,
                 value: map[arg.name] ?? arg.value ?? '',
-              }))
+              }));
             }
           }
-          nextBinding = JSON.stringify(parsed)
+          nextBinding = JSON.stringify(parsed);
         } catch {
           // ignore parse errors, keep original binding
         }
@@ -1038,63 +1465,71 @@ export default function ScenariosPage() {
         data: s.data,
         expected: s.expected,
         binding: nextBinding,
-      }
-    })
+      };
+    });
     try {
       const res = await fetch(`${apiPrefix}/${selectedCase.id}/steps`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ steps }),
-      })
+      });
       if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
+        const err = await normalizeResponseError(res as any);
         if (isUnauthorizedError(err)) {
           try {
-            router.push('/signin')
+            router.push('/signin');
           } catch {}
-          throw new Error('Unauthorized')
+          throw new Error('Unauthorized');
         }
-        throw new Error(err.message || '保存步骤失败')
+        throw new Error(err.message || '保存步骤失败');
       }
-      toast.success('已保存步骤')
+      toast.success('已保存步骤');
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
-        toast.error(e?.message || '保存步骤失败')
+        toast.error(e?.message || '保存步骤失败');
       }
     }
-  }
+  };
 
-  const openEnvTemplateDialogForCase = async (
+  const openEnvTemplateDialogForCase = useCallback(async (
     caseId: number,
-    casePlatform?: string | null
+    casePlatform?: string | null,
   ) => {
-    const rawPlatform = (casePlatform || platform || 'gettr-web').toString().trim()
-    const p = rawPlatform || 'gettr-web'
+    const rawPlatform = (casePlatform || platform || 'gettr-web')
+      .toString()
+      .trim();
+    const p = rawPlatform || 'gettr-web';
     const d: 'browser' | 'android' | 'ios' | 'other' =
-      p === 'gettr-android' ? 'android' : p.includes('-api-') ? 'other' : 'browser'
-    setEnvDialogCaseId(caseId)
-    setEnvDialogPlatform(p)
-    setEnvDialogDriver(d)
-    setEnvDialogSelectedId('none')
-    setEnvDialogOpen(true)
-    setEnvDialogLoading(true)
+      p === 'gettr-android'
+        ? 'android'
+        : p.includes('-api-')
+          ? 'other'
+          : 'browser';
+    setEnvDialogCaseId(caseId);
+    setEnvDialogPlatform(p);
+    setEnvDialogDriver(d);
+    setEnvDialogSelectedId('none');
+    setEnvDialogOpen(true);
+    setEnvDialogLoading(true);
     try {
-      const qs = new URLSearchParams()
-      qs.set('platform', p)
-      qs.set('driver', d)
-      const res = await fetch(`/api/env-templates?${qs.toString()}`, { cache: 'no-store' })
+      const qs = new URLSearchParams();
+      qs.set('platform', p);
+      qs.set('driver', d);
+      const res = await fetch(`/api/env-templates?${qs.toString()}`, {
+        cache: 'no-store',
+      });
       if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
+        const err = await normalizeResponseError(res as any);
         if (isUnauthorizedError(err)) {
           try {
-            router.push('/signin')
+            router.push('/signin');
           } catch {}
-          throw new Error('Unauthorized')
+          throw new Error('Unauthorized');
         }
-        throw new Error(err.message || '加载环境模板失败')
+        throw new Error(err.message || '加载环境模板失败');
       }
-      const data = await res.json()
-      const list: any[] = Array.isArray(data?.items) ? data.items : []
+      const data = await res.json();
+      const list: any[] = Array.isArray(data?.items) ? data.items : [];
       const mapped: EnvTemplateSummary[] = list.map((it) => ({
         id: Number(it.id),
         platform: String(it.platform || p),
@@ -1102,18 +1537,21 @@ export default function ScenariosPage() {
         key: String(it.key || ''),
         name: String(it.name || it.key || ''),
         description: (it.description as string | null | undefined) ?? null,
-      }))
-      setEnvDialogTemplates(mapped)
+      }));
+      setEnvDialogTemplates(mapped);
       if (mapped.length === 1) {
-        setEnvDialogSelectedId(mapped[0]!.id)
+        setEnvDialogSelectedId(mapped[0]!.id);
       } else if (mapped.length > 1) {
         try {
-          const key = getEnvTemplateStorageKey(p, d)
-          const raw = localStorage.getItem(key)
+          const key = getEnvTemplateStorageKey(p, d);
+          const raw = localStorage.getItem(key);
           if (raw) {
-            const lastId = Number(raw)
-            if (Number.isFinite(lastId) && mapped.some((tpl) => tpl.id === lastId)) {
-              setEnvDialogSelectedId(lastId)
+            const lastId = Number(raw);
+            if (
+              Number.isFinite(lastId) &&
+              mapped.some((tpl) => tpl.id === lastId)
+            ) {
+              setEnvDialogSelectedId(lastId);
             }
           }
         } catch {
@@ -1122,33 +1560,38 @@ export default function ScenariosPage() {
       }
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
-        toast.error(e?.message || '加载环境模板失败')
+        toast.error(e?.message || '加载环境模板失败');
       }
-      setEnvDialogTemplates([])
+      setEnvDialogTemplates([]);
     } finally {
-      setEnvDialogLoading(false)
+      setEnvDialogLoading(false);
     }
-  }
+  }, [platform, router]);
 
-  const generateCodeForCase = async (caseId: number, envTemplateId?: number | null) => {
+  const generateCodeForCase = async (
+    caseId: number,
+    envTemplateId?: number | null,
+  ) => {
     try {
       const res = await fetch(`${apiPrefix}/${caseId}/generate-code`, {
         method: 'POST',
-        headers: envTemplateId ? { 'content-type': 'application/json' } : undefined,
+        headers: envTemplateId
+          ? { 'content-type': 'application/json' }
+          : undefined,
         body: envTemplateId ? JSON.stringify({ envTemplateId }) : undefined,
-      })
+      });
       if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
+        const err = await normalizeResponseError(res as any);
         if (isUnauthorizedError(err)) {
           try {
-            router.push('/signin')
+            router.push('/signin');
           } catch {}
-          throw new Error('Unauthorized')
+          throw new Error('Unauthorized');
         }
-        throw new Error(err.message || '生成代码失败')
+        throw new Error(err.message || '生成代码失败');
       }
-      const data = await res.json()
-      const filePath = (data?.filePath as string) || ''
+      const data = await res.json();
+      const filePath = (data?.filePath as string) || '';
       if (filePath) {
         toast.success(
           <div className="flex flex-col gap-1">
@@ -1160,163 +1603,133 @@ export default function ScenariosPage() {
                 variant="outline"
                 className="h-6 px-2 text-[11px]"
                 onClick={() => {
-                  router.push('/testcases')
+                  router.push('/testcases');
                 }}
               >
                 在「用例库」中打开
               </Button>
             </div>
-          </div>
-        )
+          </div>,
+        );
       } else {
-        toast.success(data?.message || '已触发代码生成')
+        toast.success(data?.message || '已触发代码生成');
       }
       try {
         if (filePath) {
-          localStorage.setItem('gtt:testcases:lastFile', filePath)
-          localStorage.setItem('gtt:testcases:forceReload', '1')
+          localStorage.setItem('gtt:testcases:lastFile', filePath);
+          localStorage.setItem('gtt:testcases:forceReload', '1');
         }
       } catch {}
-      await refreshCases()
+      await refreshCases();
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
-        toast.error(e?.message || '生成代码失败')
+        toast.error(e?.message || '生成代码失败');
       }
     }
-  }
+  };
 
   const handleGenerateCode = async () => {
     if (!selectedCase) {
-      toast.error('请先在左侧选择一个用例')
-      return
+      toast.error('请先在左侧选择一个用例');
+      return;
     }
-    await openEnvTemplateDialogForCase(selectedCase.id, selectedCase.platform || platform)
-  }
-
-  const refreshCases = async () => {
-    try {
-      setLoadingCases(true)
-      const qs = new URLSearchParams()
-      if (platform) qs.set('platform', platform)
-      const res = await fetch(`${apiPrefix}?${qs.toString()}`, {
-        cache: 'no-store',
-      })
-      if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
-        if (isUnauthorizedError(err)) {
-          try {
-            router.push('/signin')
-          } catch {}
-          throw new Error('Unauthorized')
-        }
-        throw new Error(err.message || '获取用例列表失败')
-      }
-      const data = (await res.json()) as UserScenarioSummary[]
-      setCases(data || [])
-      if (!selectedCaseId && data.length) {
-        // 默认选中第一条，用于首次加载
-        setSelectedCaseId(data[0].id)
-      }
-    } catch (e: any) {
-      if (!isUnauthorizedError(e)) {
-        toast.error(e?.message || '获取用例列表失败')
-      }
-    } finally {
-      setLoadingCases(false)
-    }
-  }
+    await openEnvTemplateDialogForCase(
+      selectedCase.id,
+      selectedCase.platform || platform,
+    );
+  };
 
   const fetchActionCatalog = async () => {
     try {
-      setLoadingCatalog(true)
+      setLoadingCatalog(true);
       const res = await fetch(
         `${apiPrefix}/action-catalog?platform=${encodeURIComponent(platform || 'gettr-web')}`,
         {
           cache: 'no-store',
-        }
-      )
+        },
+      );
       await ensureResponseOk(res, {
         defaultMessage: '获取页面动作目录失败',
         onUnauthorized: () => {
           try {
-            router.push('/signin')
+            router.push('/signin');
           } catch {
             // ignore navigation errors
           }
         },
-      })
-      const data = await res.json()
+      });
+      const data = await res.json();
       const catalog: ActionCatalog | null =
         (data && (data.catalog as ActionCatalog)) ||
-        (data?.platform ? (data as ActionCatalog) : null)
+        (data?.platform ? (data as ActionCatalog) : null);
       if (catalog && Array.isArray(catalog.pages)) {
-        setActionCatalog(catalog)
+        setActionCatalog(catalog);
       }
     } catch (e: any) {
       // 加载失败不影响主流程；鉴权错误已跳转登录页，不再打印
       if (isUnauthorizedError(e)) {
-        return
+        return;
       }
       // 其它错误仅在控制台提示，避免打断主流程
-      // eslint-disable-next-line no-console
-      console.error(e?.message || e)
+      console.error(e?.message || e);
     } finally {
-      setLoadingCatalog(false)
+      setLoadingCatalog(false);
     }
-  }
+  };
 
   const updateCaseMeta = async (patch: {
-    title?: string
-    status?: CaseStatus
-    submenu?: string
-    priority?: 'P0' | 'P1' | 'P2'
-    platform?: string
+    title?: string;
+    status?: CaseStatus;
+    submenu?: string;
+    priority?: 'P0' | 'P1' | 'P2';
+    platform?: string;
+    suiteId?: number | null;
   }) => {
     if (!selectedCase) {
-      toast.error('请先选择一个用例')
-      return
+      toast.error('请先选择一个用例');
+      return;
     }
     try {
       const res = await fetch(`${apiPrefix}/${selectedCase.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(patch),
-      })
+      });
       if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
+        const err = await normalizeResponseError(res as any);
         if (isUnauthorizedError(err)) {
           try {
-            router.push('/signin')
+            router.push('/signin');
           } catch {}
-          throw new Error('Unauthorized')
+          throw new Error('Unauthorized');
         }
-        throw new Error(err.message || '更新用例失败')
+        throw new Error(err.message || '更新用例失败');
       }
-      await refreshCases()
-      toast.success('已更新用例信息')
+      await refreshCases();
+      toast.success('已更新用例信息');
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
-        toast.error(e?.message || '更新用例失败')
+        toast.error(e?.message || '更新用例失败');
       }
     }
-  }
+  };
 
   const loadCaseSteps = async (caseId: number) => {
     try {
       const res = await fetch(`${apiPrefix}/${caseId}`, {
         cache: 'no-store',
-      })
+      });
       if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
+        const err = await normalizeResponseError(res as any);
         if (isUnauthorizedError(err)) {
           try {
-            router.push('/signin')
+            router.push('/signin');
           } catch {}
-          throw new Error('Unauthorized')
+          throw new Error('Unauthorized');
         }
-        throw new Error(err.message || '获取用例详情失败')
+        throw new Error(err.message || '获取用例详情失败');
       }
-      const data = await res.json()
+      const data = await res.json();
       const steps: UserScenarioStep[] = (data?.steps || []).map((s: any) => ({
         id: String(s.id),
         order: s.order,
@@ -1324,36 +1737,38 @@ export default function ScenariosPage() {
         data: s.data || '',
         expected: s.expected || '',
         binding: s.binding || '',
-      }))
-      setStepsByCase((prev) => ({ ...prev, [caseId]: steps }))
+      }));
+      setStepsByCase((prev) => ({ ...prev, [caseId]: steps }));
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
-        toast.error(e?.message || '获取用例详情失败')
+        toast.error(e?.message || '获取用例详情失败');
       }
     }
-  }
+  };
 
   useEffect(() => {
-    void refreshCases()
-    void fetchActionCatalog()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [platform])
+    void refreshCases();
+    void fetchActionCatalog();
+    void loadSuites();
+  }, [platform]);
 
   const loadPlatforms = async () => {
     try {
       const res = await fetch('/api/action-catalog/platforms', {
         cache: 'no-store',
-      })
+      });
       if (!res.ok) {
-        return
+        return;
       }
-      const data = await res.json()
-      const items = Array.isArray(data?.items) ? data.items : []
+      const data = await res.json();
+      const items = Array.isArray(data?.items) ? data.items : [];
       const optsBase: OptionsSelectItem<string>[] = items.map((p: any) => ({
         value: p.key as string,
         label: (p.label as string) || (p.key as string),
-      }))
-      const hasApiLivestream = optsBase.some((p) => p.value === 'gettr-api-livestream')
+      }));
+      const hasApiLivestream = optsBase.some(
+        (p) => p.value === 'gettr-api-livestream',
+      );
       const opts: OptionsSelectItem<string>[] = hasApiLivestream
         ? optsBase
         : optsBase.concat([
@@ -1361,46 +1776,95 @@ export default function ScenariosPage() {
               value: 'gettr-api-livestream',
               label: 'GETTR API (Livestream)',
             },
-          ])
-      setPlatforms(opts)
+          ]);
+      setPlatforms(opts);
       if (!platform && opts.length) {
         const def =
-          opts.find((p) => p.value === 'gettr-web')?.value || opts[0]?.value || 'gettr-web'
-        setPlatform(def)
+          opts.find((p) => p.value === 'gettr-web')?.value ||
+          opts[0]?.value ||
+          'gettr-web';
+        setPlatform(def);
       }
     } catch {
       // ignore
     }
-  }
+  };
+
+  const loadSuites = async () => {
+    try {
+      setSuiteLoading(true);
+      const qs = platform ? `?platform=${encodeURIComponent(platform)}` : '';
+      const res = await fetch(`${apiPrefix}/suites${qs}`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const err = await normalizeResponseError(res as any);
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin');
+          } catch {}
+          throw new Error('Unauthorized');
+        }
+        throw new Error(err.message || '获取套件列表失败');
+      }
+      const data = await res.json();
+      const itemsRaw: UserScenarioSuiteSummary[] = Array.isArray(data)
+        ? data
+        : [];
+      const mapped = itemsRaw.map((s) => ({
+        ...s,
+        sharedPreSteps: (s.sharedPreSteps || []).map((p) =>
+          (p || '').toString(),
+        ),
+        caseCount:
+          (s as any).caseCount ??
+          ((s as any).cases?.length as number | undefined) ??
+          s.caseIds?.length ??
+          0,
+      }));
+      setSuites(mapped);
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '获取套件列表失败');
+      }
+    } finally {
+      setSuiteLoading(false);
+    }
+  };
 
   useEffect(() => {
-    void loadPlatforms()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    void loadPlatforms();
+  }, []);
 
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const kinds: Array<'module' | 'submenu' | 'priority'> = ['module', 'submenu', 'priority']
+        const kinds: Array<'module' | 'submenu' | 'priority'> = [
+          'module',
+          'submenu',
+          'priority',
+        ];
         for (const kind of kinds) {
           const res = await fetch(`${apiPrefix}/options?kind=${kind}`, {
             cache: 'no-store',
-          })
-          if (!res.ok) continue
-          const data = await res.json()
-          const items: OptionsSelectItem<string>[] = Array.isArray(data?.items) ? data.items : []
+          });
+          if (!res.ok) continue;
+          const data = await res.json();
+          const items: OptionsSelectItem<string>[] = Array.isArray(data?.items)
+            ? data.items
+            : [];
           if (kind === 'module') {
-            setModuleItems(items)
+            setModuleItems(items);
           } else if (kind === 'submenu') {
-            setSubmenuItems(items)
+            setSubmenuItems(items);
           } else if (kind === 'priority') {
             const casted = items.map(
               (it) =>
                 ({
                   value: (it.value as 'P0' | 'P1' | 'P2') ?? 'P1',
                   label: it.label,
-                }) as OptionsSelectItem<'P0' | 'P1' | 'P2'>
-            )
+                }) as OptionsSelectItem<'P0' | 'P1' | 'P2'>,
+            );
             setPriorityItems(
               casted.length
                 ? casted
@@ -1408,8 +1872,8 @@ export default function ScenariosPage() {
                     { value: 'P0', label: 'P0' },
                     { value: 'P1', label: 'P1' },
                     { value: 'P2', label: 'P2' },
-                  ]
-            )
+                  ],
+            );
           }
         }
         if (!priorityItems.length) {
@@ -1417,27 +1881,26 @@ export default function ScenariosPage() {
             { value: 'P0', label: 'P0' },
             { value: 'P1', label: 'P1' },
             { value: 'P2', label: 'P2' },
-          ])
+          ]);
         }
       } catch {
         // ignore
       }
-    }
-    void loadOptions()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    };
+    void loadOptions();
+  }, []);
 
   const handleCreateCase = async () => {
     if (!newCaseCode.trim()) {
-      toast.error('用例编号不能为空')
-      return
+      toast.error('用例编号不能为空');
+      return;
     }
     if (!newCaseTitle.trim()) {
-      toast.error('标题不能为空')
-      return
+      toast.error('标题不能为空');
+      return;
     }
     try {
-      setNewCaseSubmitting(true)
+      setNewCaseSubmitting(true);
       const payload: any = {
         code: newCaseCode.trim(),
         title: newCaseTitle.trim(),
@@ -1448,36 +1911,38 @@ export default function ScenariosPage() {
         platform: platform || 'gettr-web',
         description: newCaseDesc.trim() || undefined,
         acceptanceCriteria: newCaseAcceptance.trim() || undefined,
-      }
+      };
       const res = await fetch(apiPrefix, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
-      })
+      });
       if (!res.ok) {
-        const err = await normalizeResponseError(res as any)
-        throw new Error(err.message || '创建用户场景失败')
+        const err = await normalizeResponseError(res as any);
+        throw new Error(err.message || '创建用户场景失败');
       }
-      const created = (await res.json()) as UserScenarioSummary
-      toast.success('已创建用户场景')
-      setNewCaseOpen(false)
-      await refreshCases()
+      const created = (await res.json()) as UserScenarioSummary;
+      toast.success('已创建用户场景');
+      setNewCaseOpen(false);
+      await refreshCases();
       if (created?.id) {
-        setSelectedCaseId(created.id)
+        setSelectedCaseId(created.id);
       }
     } catch (e: any) {
-      toast.error(e?.message || '创建用户场景失败')
+      toast.error(e?.message || '创建用户场景失败');
     } finally {
-      setNewCaseSubmitting(false)
+      setNewCaseSubmitting(false);
     }
-  }
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
       <div>
         <h1 className="text-2xl font-semibold">用户场景管理</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          可从结构化 CSV（推荐使用 Livestream CSV 模板）或说明文档/设计文档导入用例草稿，在此补充详细步骤与检查点，并生成 workspace 测试代码。
+          可从结构化 CSV（推荐使用 Livestream CSV
+          模板）或说明文档/设计文档导入用例草稿，在此补充详细步骤与检查点，并生成
+          workspace 测试代码。
         </p>
       </div>
 
@@ -1502,39 +1967,47 @@ export default function ScenariosPage() {
                   <TooltipContent sideOffset={6}>刷新列表</TooltipContent>
                 </Tooltip>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <form className="flex items-center gap-1.5" onSubmit={(e) => e.preventDefault()}>
+                  <form
+                    className="flex items-center gap-1.5"
+                    onSubmit={(e) => e.preventDefault()}
+                  >
                     <input
                       id="ls-upload-csv"
                       type="file"
                       accept=".csv,text/csv"
                       className="hidden"
                       onChange={async (event) => {
-                        const file = event.target.files?.[0]
-                        if (!file) return
+                        const file = event.target.files?.[0];
+                        if (!file) return;
                         try {
-                          const formData = new FormData()
-                          formData.append('file', file)
-                          formData.append('platform', platform || 'gettr-web')
-                          const res = await fetch(`${apiPrefix}/sync-from-csv-upload`, {
-                            method: 'POST',
-                            body: formData,
-                          })
+                          const formData = new FormData();
+                          formData.append('file', file);
+                          formData.append('platform', platform || 'gettr-web');
+                          const res = await fetch(
+                            `${apiPrefix}/sync-from-csv-upload`,
+                            {
+                              method: 'POST',
+                              body: formData,
+                            },
+                          );
                           if (!res.ok) {
-                            const err = await normalizeResponseError(res as any)
-                            throw new Error(err.message || '上传 CSV 失败')
+                            const err = await normalizeResponseError(
+                              res as any,
+                            );
+                            throw new Error(err.message || '上传 CSV 失败');
                           }
-                          const data = await res.json()
+                          const data = await res.json();
                           toast.success(
                             data?.message ||
                               `导入完成：新增 ${data?.created ?? 0} 条，更新 ${
                                 data?.updated ?? 0
-                              } 条`
-                          )
-                          await refreshCases()
+                              } 条`,
+                          );
+                          await refreshCases();
                         } catch (e: any) {
-                          toast.error(e?.message || '上传 CSV 失败')
+                          toast.error(e?.message || '上传 CSV 失败');
                         } finally {
-                          event.target.value = ''
+                          event.target.value = '';
                         }
                       }}
                     />
@@ -1547,9 +2020,9 @@ export default function ScenariosPage() {
                           className="h-8 w-8 rounded-full"
                           onClick={() => {
                             const input = document.getElementById(
-                              'ls-upload-csv'
-                            ) as HTMLInputElement | null
-                            input?.click()
+                              'ls-upload-csv',
+                            ) as HTMLInputElement | null;
+                            input?.click();
                           }}
                         >
                           <FileUp className="h-4 w-4" />
@@ -1560,84 +2033,97 @@ export default function ScenariosPage() {
                       </TooltipContent>
                     </Tooltip>
                   </form>
-                  <form className="flex items-center gap-1.5" onSubmit={(e) => e.preventDefault()}>
+                  <form
+                    className="flex items-center gap-1.5"
+                    onSubmit={(e) => e.preventDefault()}
+                  >
                     <input
                       id="ls-upload-doc"
                       type="file"
                       accept=".csv,text/csv,.txt,.md,.markdown,.log"
                       className="hidden"
                       onChange={async (event) => {
-                        const file = event.target.files?.[0]
-                        if (!file) return
-                        setIngestingDoc(true)
-                        const toastAny = toast as any
-                        let progressId: any = null
-                        let refreshId: any = null
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        setIngestingDoc(true);
+                        const toastAny = toast as any;
+                        let progressId: any = null;
+                        let refreshId: any = null;
                         if (toastAny) {
                           progressId =
                             toastAny.message?.(
                               '步骤 1/2：已上传用例说明表（CSV/文档），正在解析生成用户场景，这一步通常需要 10～60 秒，请稍候…',
-                              { duration: 120000 }
+                              { duration: 120000 },
                             ) ??
                             toastAny(
                               '步骤 1/2：已上传用例说明表（CSV/文档），正在解析生成用户场景，这一步通常需要 10～60 秒，请稍候…',
-                              { duration: 120000 }
-                            )
+                              { duration: 120000 },
+                            );
                         }
                         try {
-                          const formData = new FormData()
-                          formData.append('file', file)
-                          formData.append('project', 'live-stream')
-                          formData.append('docType', 'livekit')
-                          formData.append('sourceDoc', file.name || 'livekit')
-                          formData.append('platform', platform || 'gettr-web')
+                          const formData = new FormData();
+                          formData.append('file', file);
+                          formData.append('project', 'live-stream');
+                          formData.append('docType', 'livekit');
+                          formData.append('sourceDoc', file.name || 'livekit');
+                          formData.append('platform', platform || 'gettr-web');
                           if (docAiPromptText && docAiPromptText.trim()) {
-                            formData.append('aiHint', docAiPromptText.trim())
+                            formData.append('aiHint', docAiPromptText.trim());
                           }
-                          const res = await fetch(`${apiPrefix}/ingest-doc-upload`, {
-                            method: 'POST',
-                            body: formData,
-                          })
+                          const res = await fetch(
+                            `${apiPrefix}/ingest-doc-upload`,
+                            {
+                              method: 'POST',
+                              body: formData,
+                            },
+                          );
                           if (!res.ok) {
-                            const err = await normalizeResponseError(res as any)
-                            throw new Error(err.message || '从说明文档导入失败')
+                            const err = await normalizeResponseError(
+                              res as any,
+                            );
+                            throw new Error(
+                              err.message || '从说明文档导入失败',
+                            );
                           }
                           if (progressId != null && toastAny?.dismiss) {
-                            toastAny.dismiss(progressId)
-                            progressId = null
+                            toastAny.dismiss(progressId);
+                            progressId = null;
                           }
                           if (toastAny) {
                             refreshId =
                               toastAny.message?.(
                                 '步骤 2/2：解析完成，正在写入用户场景并刷新列表…',
-                                { duration: 60000 }
+                                { duration: 60000 },
                               ) ??
-                              toastAny('步骤 2/2：解析完成，正在写入用户场景并刷新列表…', {
-                                duration: 60000,
-                              })
+                              toastAny(
+                                '步骤 2/2：解析完成，正在写入用户场景并刷新列表…',
+                                {
+                                  duration: 60000,
+                                },
+                              );
                           }
-                          const data = await res.json()
-                          await refreshCases()
+                          const data = await res.json();
+                          await refreshCases();
                           if (refreshId != null && toastAny?.dismiss) {
-                            toastAny.dismiss(refreshId)
-                            refreshId = null
+                            toastAny.dismiss(refreshId);
+                            refreshId = null;
                           }
                           toast.success(
                             data?.message ||
                               `从说明文档导入完成：新增 ${
                                 data?.created ?? 0
-                              } 条，更新 ${data?.updated ?? 0} 条`
-                          )
+                              } 条，更新 ${data?.updated ?? 0} 条`,
+                          );
                         } catch (e: any) {
-                          toast.error(e?.message || '从说明文档导入失败')
+                          toast.error(e?.message || '从说明文档导入失败');
                         } finally {
-                          event.target.value = ''
-                          setIngestingDoc(false)
+                          event.target.value = '';
+                          setIngestingDoc(false);
                           if (progressId != null && toastAny?.dismiss) {
-                            toastAny.dismiss(progressId)
+                            toastAny.dismiss(progressId);
                           }
                           if (refreshId != null && toastAny?.dismiss) {
-                            toastAny.dismiss(refreshId)
+                            toastAny.dismiss(refreshId);
                           }
                         }
                       }}
@@ -1651,8 +2137,8 @@ export default function ScenariosPage() {
                           className="h-8 w-8 rounded-full"
                           disabled={ingestingDoc}
                           onClick={() => {
-                            if (ingestingDoc) return
-                            setDocAiPromptOpen(true)
+                            if (ingestingDoc) return;
+                            setDocAiPromptOpen(true);
                           }}
                         >
                           {ingestingDoc ? (
@@ -1663,7 +2149,8 @@ export default function ScenariosPage() {
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent sideOffset={6}>
-                        从说明文档/设计文档导入（支持 md/txt/csv，自动解析为用例草稿）
+                        从说明文档/设计文档导入（支持
+                        md/txt/csv，自动解析为用例草稿）
                       </TooltipContent>
                     </Tooltip>
                   </form>
@@ -1673,16 +2160,21 @@ export default function ScenariosPage() {
                     id="ls-platform"
                     value={platform}
                     items={
-                      platforms.length ? platforms : [{ value: 'gettr-web', label: 'GETTR Web' }]
+                      platforms.length
+                        ? platforms
+                        : [{ value: 'gettr-web', label: 'GETTR Web' }]
                     }
                     placeholder="平台"
                     onSelect={(item) => {
-                      setPlatform(item.value)
+                      setPlatform(item.value);
                       try {
-                        localStorage.setItem('gtt:scenarios:platform', item.value)
+                        localStorage.setItem(
+                          'gtt:scenarios:platform',
+                          item.value,
+                        );
                       } catch {}
-                      setSelectedCaseId(null)
-                      setStepsByCase({})
+                      setSelectedCaseId(null);
+                      setStepsByCase({});
                     }}
                     size="sm"
                     triggerClassName="min-w-[140px]"
@@ -1705,8 +2197,8 @@ export default function ScenariosPage() {
                   pageSizeMax={200}
                   onPageChange={(p) => setTablePage(p)}
                   onPageSizeChange={(size) => {
-                    setTablePageSize(size)
-                    setTablePage(1)
+                    setTablePageSize(size);
+                    setTablePage(1);
                   }}
                   rightActions={
                     <>
@@ -1718,15 +2210,15 @@ export default function ScenariosPage() {
                             className="h-8 w-8 rounded-full"
                             type="button"
                             onClick={() => {
-                              setNewCaseCode('')
-                              setNewCaseTitle('')
-                              setNewCaseFeature('')
-                              setNewCaseSubmenu(undefined)
-                              setNewCasePriority('P1')
-                              setNewCaseStatus('draft')
-                              setNewCaseDesc('')
-                              setNewCaseAcceptance('')
-                              setNewCaseOpen(true)
+                              setNewCaseCode('');
+                              setNewCaseTitle('');
+                              setNewCaseFeature('');
+                              setNewCaseSubmenu(undefined);
+                              setNewCasePriority('P1');
+                              setNewCaseStatus('draft');
+                              setNewCaseDesc('');
+                              setNewCaseAcceptance('');
+                              setNewCaseOpen(true);
                             }}
                           >
                             <Plus className="h-4 w-4" />
@@ -1753,6 +2245,23 @@ export default function ScenariosPage() {
                         </TooltipTrigger>
                         <TooltipContent sideOffset={6}>删除所选</TooltipContent>
                       </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            disabled={!filteredCases.length}
+                            onClick={handleExportCases}
+                            type="button"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>
+                          导出{selectedIds.length ? '所选' : '全部'}用例
+                        </TooltipContent>
+                      </Tooltip>
                     </>
                   }
                 />
@@ -1774,7 +2283,7 @@ export default function ScenariosPage() {
                               type="button"
                               className={cn(
                                 'w-full truncate text-left',
-                                selectedCaseId === row.id && 'font-semibold'
+                                selectedCaseId === row.id && 'font-semibold',
                               )}
                               onClick={() => setSelectedCaseId(row.id)}
                             >
@@ -1794,7 +2303,7 @@ export default function ScenariosPage() {
                               type="button"
                               className={cn(
                                 'w-full truncate text-left',
-                                selectedCaseId === row.id && 'font-semibold'
+                                selectedCaseId === row.id && 'font-semibold',
                               )}
                               title={row.title}
                               onClick={() => setSelectedCaseId(row.id)}
@@ -1810,7 +2319,9 @@ export default function ScenariosPage() {
                           minWidth: 96,
                           filterType: 'select' as const,
                           accessor: (row: UserScenarioSummary) =>
-                            row.module ? moduleLabelMap[row.module] || row.module : '',
+                            row.module
+                              ? moduleLabelMap[row.module] || row.module
+                              : '',
                         },
                         {
                           key: 'submenu',
@@ -1819,7 +2330,9 @@ export default function ScenariosPage() {
                           minWidth: 72,
                           filterType: 'select' as const,
                           accessor: (row: UserScenarioSummary) =>
-                            row.submenu ? SUBMENU_LABEL[row.submenu] || row.submenu : '-',
+                            row.submenu
+                              ? SUBMENU_LABEL[row.submenu] || row.submenu
+                              : '-',
                         },
                         {
                           key: 'priority',
@@ -1836,7 +2349,8 @@ export default function ScenariosPage() {
                           width: 80,
                           minWidth: 72,
                           filterType: 'select' as const,
-                          accessor: (row: UserScenarioSummary) => STATUS_LABEL[row.status],
+                          accessor: (row: UserScenarioSummary) =>
+                            STATUS_LABEL[row.status],
                         },
                         {
                           key: 'actions',
@@ -1853,15 +2367,17 @@ export default function ScenariosPage() {
                                     size="icon"
                                     className="h-7 w-7"
                                     onClick={() => {
-                                      setSelectedCaseId(row.id)
-                                      setDetailsOpen(true)
+                                      setSelectedCaseId(row.id);
+                                      setDetailsOpen(true);
                                     }}
                                     aria-label="编辑步骤"
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent sideOffset={6}>编辑步骤</TooltipContent>
+                                <TooltipContent sideOffset={6}>
+                                  编辑步骤
+                                </TooltipContent>
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1871,15 +2387,17 @@ export default function ScenariosPage() {
                                     size="icon"
                                     className="h-7 w-7"
                                     onClick={() => {
-                                      setSelectedCaseId(row.id)
-                                      setMetaDialogOpen(true)
+                                      setSelectedCaseId(row.id);
+                                      setMetaDialogOpen(true);
                                     }}
                                     aria-label="编辑基本信息"
                                   >
                                     <FileText className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent sideOffset={6}>编辑基本信息</TooltipContent>
+                                <TooltipContent sideOffset={6}>
+                                  编辑基本信息
+                                </TooltipContent>
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1891,7 +2409,7 @@ export default function ScenariosPage() {
                                     onClick={() =>
                                       void openEnvTemplateDialogForCase(
                                         row.id,
-                                        row.platform || platform
+                                        row.platform || platform,
                                       )
                                     }
                                     aria-label="为该用例生成代码"
@@ -1899,7 +2417,9 @@ export default function ScenariosPage() {
                                     <FileCode className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent sideOffset={6}>为该用例生成代码</TooltipContent>
+                                <TooltipContent sideOffset={6}>
+                                  为该用例生成代码
+                                </TooltipContent>
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1907,7 +2427,7 @@ export default function ScenariosPage() {
                                     const canOpen =
                                       row.status === 'code_generated' &&
                                       !!row.generatedFilePath &&
-                                      row.generatedFilePath.trim().length > 0
+                                      row.generatedFilePath.trim().length > 0;
                                     return (
                                       <Button
                                         type="button"
@@ -1916,25 +2436,31 @@ export default function ScenariosPage() {
                                         className="h-7 w-7"
                                         disabled={!canOpen}
                                         onClick={() => {
-                                          if (!canOpen) return
-                                          const path = (row.generatedFilePath || '').trim()
+                                          if (!canOpen) return;
+                                          const path = (
+                                            row.generatedFilePath || ''
+                                          ).trim();
                                           try {
                                             if (path) {
-                                              localStorage.setItem('gtt:testcases:lastFile', path)
+                                              localStorage.setItem(
+                                                'gtt:testcases:lastFile',
+                                                path,
+                                              );
                                             }
                                           } catch {}
-                                          router.push('/testcases')
+                                          router.push('/testcases');
                                         }}
                                         aria-label="在用例库中打开生成代码"
                                       >
                                         <ExternalLink
                                           className={cn(
                                             'h-3.5 w-3.5',
-                                            !canOpen && 'opacity-30 cursor-default'
+                                            !canOpen &&
+                                              'opacity-30 cursor-default',
                                           )}
                                         />
                                       </Button>
-                                    )
+                                    );
                                   })()}
                                 </TooltipTrigger>
                                 <TooltipContent sideOffset={6}>
@@ -1949,61 +2475,77 @@ export default function ScenariosPage() {
                                     size="icon"
                                     className="text-destructive h-7 w-7"
                                     disabled={deletingId === row.id}
-                                    onClick={() => void handleDeleteCase(row.id)}
+                                    onClick={() =>
+                                      void handleDeleteCase(row.id)
+                                    }
                                     aria-label="删除用户场景"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent sideOffset={6}>删除用例</TooltipContent>
+                                <TooltipContent sideOffset={6}>
+                                  删除用例
+                                </TooltipContent>
                               </Tooltip>
                             </div>
                           ),
                         },
                       ],
-                      [selectedCaseId, deletingId, moduleLabelMap]
+                      [
+                        selectedCaseId,
+                        deletingId,
+                        moduleLabelMap,
+                        handleDeleteCase,
+                        openEnvTemplateDialogForCase,
+                        platform,
+                        router,
+                      ],
                     )}
                     getRowKey={(row) => `id:${row.id}`}
                     page={safePage}
                     pageSize={tablePageSize}
-                    headerLightClass="bg-muted/70 text-foreground border-b border-border/70"
-                    headerDarkClass="dark:bg-muted/20 dark:text-foreground dark:border-border/50"
+                    headerLightClass="bg-muted text-foreground border-b border-border"
+                    headerDarkClass="dark:bg-muted dark:text-foreground dark:border-border"
                     density="compact"
                     selection={{
                       enabled: true,
                       keys: tableSelectedKeys,
                       onChange: (keys) => {
-                        setTableSelectedKeys(keys)
-                        const ids: number[] = []
+                        setTableSelectedKeys(keys);
+                        const ids: number[] = [];
                         for (const k of keys) {
-                          const parts = k.split(':')
-                          const n = Number(parts[1] ?? parts[0])
-                          if (Number.isFinite(n)) ids.push(n)
+                          const parts = k.split(':');
+                          const n = Number(parts[1] ?? parts[0]);
+                          if (Number.isFinite(n)) ids.push(n);
                         }
-                        setSelectedIds(ids)
+                        setSelectedIds(ids);
                       },
                       width: 40,
                       minWidth: 36,
                     }}
                     containerClassName="h-full overflow-x-auto overflow-y-auto"
                     rowClassName={(row) =>
-                      selectedCaseId === row.id ? 'bg-primary/10 dark:bg-primary/20' : ''
+                      selectedCaseId === row.id
+                        ? 'bg-primary/10 dark:bg-primary/20'
+                        : ''
                     }
                     enableFilters
                     onRowCountChange={(total, filtered) => {
-                      setTableTotalRows(total)
-                      setTableFilteredRows(filtered)
+                      setTableTotalRows(total);
+                      setTableFilteredRows(filtered);
                     }}
                     onRowDoubleClick={(row) => {
-                      setSelectedCaseId(row.id)
-                      setDetailsOpen(true)
+                      setSelectedCaseId(row.id);
+                      setDetailsOpen(true);
                     }}
                   />
-                  {!loadingCases && (tableFilteredRows || filteredCases.length) === 0 && (
-                    <p className="text-muted-foreground pointer-events-none absolute inset-x-0 top-12 text-center text-xs">
-                      暂无匹配的用户场景，请调整筛选条件或点击右上角 + 按钮新建。
-                    </p>
-                  )}
+                  {!loadingCases &&
+                    (tableFilteredRows || filteredCases.length) === 0 && (
+                      <p className="text-muted-foreground pointer-events-none absolute inset-x-0 top-12 text-center text-xs">
+                        暂无匹配的用户场景，请调整筛选条件或点击右上角 +
+                        按钮新建。
+                      </p>
+                    )}
                 </div>
               </div>
             </CardContent>
@@ -2015,7 +2557,9 @@ export default function ScenariosPage() {
             {!selectedCase && (
               <Card className="flex flex-1 items-center justify-center">
                 <CardContent>
-                  <p className="text-muted-foreground text-sm">请先在左侧选择一个用户场景。</p>
+                  <p className="text-muted-foreground text-sm">
+                    请先在左侧选择一个用户场景。
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -2027,11 +2571,14 @@ export default function ScenariosPage() {
                       <div>
                         <CardTitle>用例基本信息：{selectedCase.id}</CardTitle>
                         <p className="text-muted-foreground mt-1 text-xs">
-                          来自 CSV 或说明文档的检查点描述，可在此补充更详细的说明与分组信息。
+                          来自 CSV
+                          或说明文档的检查点描述，可在此补充更详细的说明与分组信息。
                         </p>
                       </div>
                       <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                        <span>当前状态：{STATUS_LABEL[selectedCase.status]}</span>
+                        <span>
+                          当前状态：{STATUS_LABEL[selectedCase.status]}
+                        </span>
                         <CollapsibleTrigger asChild>
                           <Button
                             variant="ghost"
@@ -2051,7 +2598,11 @@ export default function ScenariosPage() {
                             <Label htmlFor="ls-title">标题</Label>
                             <Input
                               id="ls-title"
-                              value={editingTitle != null ? editingTitle : selectedCase.title || ''}
+                              value={
+                                editingTitle != null
+                                  ? editingTitle
+                                  : selectedCase.title || ''
+                              }
                               onChange={(e) => setEditingTitle(e.target.value)}
                               placeholder="请输入用例标题"
                               className="h-9"
@@ -2062,7 +2613,9 @@ export default function ScenariosPage() {
                             <OptionsSelect
                               id="ls-platform-edit"
                               placeholder="选择平台"
-                              value={selectedCase.platform || platform || 'gettr-web'}
+                              value={
+                                selectedCase.platform || platform || 'gettr-web'
+                              }
                               items={
                                 platforms.length
                                   ? platforms
@@ -2076,7 +2629,9 @@ export default function ScenariosPage() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label htmlFor="ls-submenu-edit">子菜单 / 角色</Label>
+                            <Label htmlFor="ls-submenu-edit">
+                              子菜单 / 角色
+                            </Label>
                             <OptionsSelectInput
                               id="ls-submenu-edit"
                               placeholder="输入或选择角色，例如 host / viewer"
@@ -2111,10 +2666,13 @@ export default function ScenariosPage() {
                               value={
                                 editingModule != null
                                   ? editingModule
-                                  : (selectedCase.module as string) || 'live-stream'
+                                  : (selectedCase.module as string) ||
+                                    'live-stream'
                               }
                               onChange={(val) =>
-                                setEditingModule(val.replace(/[^A-Za-z0-9]+/g, ''))
+                                setEditingModule(
+                                  val.replace(/[^A-Za-z0-9]+/g, ''),
+                                )
                               }
                               items={moduleItems}
                             />
@@ -2146,7 +2704,9 @@ export default function ScenariosPage() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label htmlFor="ls-acceptance">验收标准（Acceptance Criteria）</Label>
+                            <Label htmlFor="ls-acceptance">
+                              验收标准（Acceptance Criteria）
+                            </Label>
                             <Textarea
                               id="ls-acceptance"
                               rows={3}
@@ -2160,7 +2720,11 @@ export default function ScenariosPage() {
                           <Button size="sm" onClick={handleMockSaveCase}>
                             保存基本信息
                           </Button>
-                          <Button size="sm" variant="outline" onClick={handleGenerateCode}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleGenerateCode}
+                          >
                             为该用例生成代码
                           </Button>
                         </div>
@@ -2178,20 +2742,6 @@ export default function ScenariosPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-8 w-8 rounded-full"
-                            onClick={handleAddPreconditionStep}
-                          >
-                            <ListChecks className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent sideOffset={6}>添加前置步骤</TooltipContent>
-                      </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -2250,9 +2800,30 @@ export default function ScenariosPage() {
             )}
           </SheetHeader>
           {!selectedCase ? (
-            <p className="text-muted-foreground mt-2 text-sm">请先在列表中选择一个用户场景。</p>
+            <p className="text-muted-foreground mt-2 text-sm">
+              请先在列表中选择一个用户场景。
+            </p>
           ) : (
-            <div className="mt-3 flex min-h-0 flex-1 flex-col">
+            <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
+              <SuitePanel
+                suites={suites}
+                selectedSuiteId={selectedSuiteId}
+                suiteLoading={suiteLoading}
+                suiteGenerating={suiteGenerating}
+                suiteDescDraft={suiteDescDraft}
+                suitePreSteps={suitePreSteps}
+                suitePreStepDraft={suitePreStepDraft}
+                onSuiteDescChange={setSuiteDescDraft}
+                onSuitePreStepsChange={setSuitePreSteps}
+                onSuitePreStepDraftChange={setSuitePreStepDraft}
+                onOpenSuiteStepDialog={handleAddSuitePreStep}
+                onAssignSuite={(id) => void handleAssignSuite(id)}
+                onSaveSuitePreSteps={handleSaveSuitePreSteps}
+                onOpenCreateSuite={() => setSuiteDialogOpen(true)}
+                onGenerateSuiteCode={handleGenerateSuiteCode}
+                suiteSaving={suiteSaving}
+              />
+
               <Card className="flex min-h-0 flex-1 flex-col border-none shadow-none">
                 <CardHeader className="flex flex-row items-center justify-between gap-2">
                   <div>
@@ -2261,33 +2832,19 @@ export default function ScenariosPage() {
                       为当前用例补充详细执行步骤，每一步包含操作、数据与期望结果。
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-8 w-8 rounded-full"
-                          onClick={handleAddPreconditionStep}
-                        >
-                          <ListChecks className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>添加前置步骤</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-8 w-8 rounded-full"
-                          onClick={handleAddStep}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
+                    <div className="flex items-center gap-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-8 w-8 rounded-full"
+                            onClick={handleAddStep}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
                       <TooltipContent sideOffset={6}>添加步骤</TooltipContent>
                     </Tooltip>
                     <Tooltip>
@@ -2333,7 +2890,9 @@ export default function ScenariosPage() {
             )}
           </DialogHeader>
           {!selectedCase ? (
-            <p className="text-muted-foreground text-sm">请先在列表中选择一个用户场景。</p>
+            <p className="text-muted-foreground text-sm">
+              请先在列表中选择一个用户场景。
+            </p>
           ) : (
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-2">
@@ -2341,7 +2900,11 @@ export default function ScenariosPage() {
                   <Label htmlFor="md-title">标题</Label>
                   <Input
                     id="md-title"
-                    value={editingTitle != null ? editingTitle : selectedCase.title || ''}
+                    value={
+                      editingTitle != null
+                        ? editingTitle
+                        : selectedCase.title || ''
+                    }
                     onChange={(e) => setEditingTitle(e.target.value)}
                     placeholder="请输入用例标题"
                     className="h-9"
@@ -2354,7 +2917,9 @@ export default function ScenariosPage() {
                     placeholder="选择平台"
                     value={selectedCase.platform || platform || 'gettr-web'}
                     items={
-                      platforms.length ? platforms : [{ value: 'gettr-web', label: 'GETTR Web' }]
+                      platforms.length
+                        ? platforms
+                        : [{ value: 'gettr-web', label: 'GETTR Web' }]
                     }
                     onSelect={(item) =>
                       updateCaseMeta({
@@ -2382,7 +2947,11 @@ export default function ScenariosPage() {
                   <OptionsSelectInput<'P0' | 'P1' | 'P2'>
                     id="md-priority"
                     placeholder="输入或选择优先级（P0 / P1 / P2）"
-                    value={editingPriority != null ? editingPriority : selectedCase.priority || ''}
+                    value={
+                      editingPriority != null
+                        ? editingPriority
+                        : selectedCase.priority || ''
+                    }
                     onChange={(val) => setEditingPriority(val)}
                     items={priorityItems}
                   />
@@ -2397,7 +2966,9 @@ export default function ScenariosPage() {
                         ? editingModule
                         : (selectedCase.module as string) || 'live-stream'
                     }
-                    onChange={(val) => setEditingModule(val.replace(/[^A-Za-z0-9]+/g, ''))}
+                    onChange={(val) =>
+                      setEditingModule(val.replace(/[^A-Za-z0-9]+/g, ''))
+                    }
                     items={moduleItems}
                   />
                 </div>
@@ -2417,14 +2988,18 @@ export default function ScenariosPage() {
                 </div>
               </div>
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setMetaDialogOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setMetaDialogOpen(false)}
+                >
                   取消
                 </Button>
                 <Button
                   type="button"
                   onClick={async () => {
-                    await handleMockSaveCase()
-                    setMetaDialogOpen(false)
+                    await handleMockSaveCase();
+                    setMetaDialogOpen(false);
                   }}
                 >
                   保存
@@ -2435,24 +3010,36 @@ export default function ScenariosPage() {
         </DialogContent>
       </Dialog>
 
+      <NewSuiteDialog
+        open={suiteDialogOpen}
+        saving={suiteSaving}
+        name={newSuiteName}
+        description={newSuiteDesc}
+        onOpenChange={setSuiteDialogOpen}
+        onNameChange={setNewSuiteName}
+        onDescChange={setNewSuiteDesc}
+        onSubmit={handleCreateSuite}
+      />
+
       {/* 生成代码：选择环境模板对话框 */}
       <Dialog open={envDialogOpen} onOpenChange={setEnvDialogOpen}>
         <DialogContent
           className="sm:max-w-md"
           onEscapeKeyDown={(e) => {
-            if (envDialogLoading) e.preventDefault()
+            if (envDialogLoading) e.preventDefault();
           }}
           onPointerDownOutside={(e) => {
-            if (envDialogLoading) e.preventDefault()
+            if (envDialogLoading) e.preventDefault();
           }}
           onInteractOutside={(e) => {
-            if (envDialogLoading) e.preventDefault()
+            if (envDialogLoading) e.preventDefault();
           }}
         >
           <DialogHeader>
             <DialogTitle>选择环境模板生成代码</DialogTitle>
             <DialogDescription>
-              为当前用例选择一套预定义的运行环境配置（useTestCase 参数）。如不选择，将使用默认占位配置。
+              为当前用例选择一套预定义的运行环境配置（useTestCase
+              参数）。如不选择，将使用默认占位配置。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -2461,8 +3048,8 @@ export default function ScenariosPage() {
               {envDialogDriver === 'android'
                 ? 'Android'
                 : envDialogDriver === 'browser'
-                ? 'Browser'
-                : envDialogDriver}
+                  ? 'Browser'
+                  : envDialogDriver}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">环境模板</Label>
@@ -2471,10 +3058,10 @@ export default function ScenariosPage() {
                   envDialogSelectedId == null
                     ? 'none'
                     : envDialogSelectedId === 'none'
-                    ? 'none'
-                    : String(envDialogSelectedId)
+                      ? 'none'
+                      : String(envDialogSelectedId)
                 }
-                    items={[
+                items={[
                   {
                     value: 'none',
                     label: '不使用模板（使用默认配置）',
@@ -2486,10 +3073,10 @@ export default function ScenariosPage() {
                 ]}
                 onSelect={(item) => {
                   if (item.value === 'none') {
-                    setEnvDialogSelectedId('none')
+                    setEnvDialogSelectedId('none');
                   } else {
-                    const n = Number(item.value)
-                    setEnvDialogSelectedId(Number.isFinite(n) ? n : null)
+                    const n = Number(item.value);
+                    setEnvDialogSelectedId(Number.isFinite(n) ? n : null);
                   }
                 }}
                 disabled={envDialogLoading}
@@ -2504,9 +3091,9 @@ export default function ScenariosPage() {
                 type="button"
                 className="mt-1 text-[11px] text-blue-600 hover:underline"
                 onClick={() => {
-                  if (envDialogLoading) return
-                  setEnvDialogOpen(false)
-                  router.push('/settings/env-templates')
+                  if (envDialogLoading) return;
+                  setEnvDialogOpen(false);
+                  router.push('/settings/env-templates');
                 }}
               >
                 在「环境模板管理」中配置更多模板…
@@ -2519,8 +3106,8 @@ export default function ScenariosPage() {
               variant="outline"
               disabled={envDialogLoading}
               onClick={() => {
-                if (envDialogLoading) return
-                setEnvDialogOpen(false)
+                if (envDialogLoading) return;
+                setEnvDialogOpen(false);
               }}
             >
               取消
@@ -2529,25 +3116,28 @@ export default function ScenariosPage() {
               type="button"
               disabled={envDialogLoading || !envDialogCaseId}
               onClick={async () => {
-                if (!envDialogCaseId) return
+                if (!envDialogCaseId) return;
                 const tplId =
                   envDialogSelectedId && envDialogSelectedId !== 'none'
                     ? Number(envDialogSelectedId)
-                    : null
-                setEnvDialogLoading(true)
+                    : null;
+                setEnvDialogLoading(true);
                 try {
                   if (tplId != null) {
                     try {
-                      const key = getEnvTemplateStorageKey(envDialogPlatform, envDialogDriver)
-                      localStorage.setItem(key, String(tplId))
+                      const key = getEnvTemplateStorageKey(
+                        envDialogPlatform,
+                        envDialogDriver,
+                      );
+                      localStorage.setItem(key, String(tplId));
                     } catch {
                       // ignore
                     }
                   }
-                  await generateCodeForCase(envDialogCaseId, tplId)
-                  setEnvDialogOpen(false)
+                  await generateCodeForCase(envDialogCaseId, tplId);
+                  setEnvDialogOpen(false);
                 } finally {
-                  setEnvDialogLoading(false)
+                  setEnvDialogLoading(false);
                 }
               }}
             >
@@ -2558,371 +3148,460 @@ export default function ScenariosPage() {
       </Dialog>
 
       {/* “添加步骤”对话框：页面 + 动作 + 参数 */}
-      <Dialog open={stepDialogOpen} onOpenChange={setStepDialogOpen}>
+      <Dialog
+        open={stepDialogOpen}
+        onOpenChange={(open) => {
+          setStepDialogOpen(open);
+          if (!open) {
+            setStepDialogTarget('case');
+            setEditingStepIdForDialog(null);
+          }
+        }}
+      >
         <DialogContent
           className="sm:max-w-lg"
           onEscapeKeyDown={(e) => {
-            if (loadingCatalog) e.preventDefault()
+            if (loadingCatalog) e.preventDefault();
           }}
           onPointerDownOutside={(e) => {
-            if (loadingCatalog) e.preventDefault()
+            if (loadingCatalog) e.preventDefault();
           }}
           onInteractOutside={(e) => {
-            if (loadingCatalog) e.preventDefault()
+            if (loadingCatalog) e.preventDefault();
           }}
         >
           <div className="max-h-[75vh] overflow-y-auto rounded-lg border-1 px-4 py-3">
             <DialogHeader>
               <DialogTitle>
                 {(() => {
-                  const plat = (selectedCase?.platform || platform || '').toString().toLowerCase()
-                  const isApiPlatform = plat.includes('-api-')
-                  if (isApiPlatform) {
-                    const base = editingStepIdForDialog != null ? '编辑步骤（API）' : '添加步骤（API）'
-                    return base
+                  if (isDialogApiPlatform) {
+                    const base =
+                      editingStepIdForDialog != null
+                        ? '编辑步骤（API）'
+                        : '添加步骤（API）';
+                    return base;
                   }
                   const page =
-                    (actionCatalog?.pages || []).find((p) => p.key === stepDialogPageKey) || null
-                  const action = page?.actions.find((a) => a.key === stepDialogActionKey) || null
-                  const base = editingStepIdForDialog != null ? '编辑步骤' : '添加步骤'
+                    (actionCatalog?.pages || []).find(
+                      (p) => p.key === stepDialogPageKey,
+                    ) || null;
+                  const action =
+                    page?.actions.find((a) => a.key === stepDialogActionKey) ||
+                    null;
+                  const base =
+                    editingStepIdForDialog != null ? '编辑步骤' : '添加步骤';
                   if (!action) {
-                    return `${base}：选择页面与动作`
+                    return `${base}：选择页面与动作`;
                   }
-                  const typeLabel = action.kind === 'assert' ? '检查点' : '操作'
-                  return `${base}（${typeLabel}）`
+                  const typeLabel =
+                    action.kind === 'assert' ? '检查点' : '操作';
+                  return `${base}（${typeLabel}）`;
                 })()}
               </DialogTitle>
               <DialogDescription>
                 {(() => {
-                  const plat = (selectedCase?.platform || platform || '').toString().toLowerCase()
-                  const isApiPlatform = plat.includes('-api-')
-                  if (isApiPlatform) {
-                    return '直接编辑步骤说明与期望结果，适用于基于 API 的用户场景（不绑定页面动作）。'
+                  if (isDialogApiPlatform) {
+                    return '直接编辑步骤说明与期望结果，适用于基于 API 的用户场景（不绑定页面动作）。';
                   }
-                  return '通过下拉选择页面和动作，自动与 gettr-web-lib 中的 Page 类和方法建立映射，再补充参数与期望检查点。'
+                  return '通过下拉选择页面和动作，自动与 gettr-web-lib 中的 Page 类和方法建立映射，再补充参数与期望检查点。';
                 })()}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <Label>操作说明</Label>
-              <Textarea
-                rows={2}
-                value={stepDialogActionText}
-                onChange={(e) => setStepDialogActionText(e.target.value)}
-                placeholder={(() => {
-                  const plat = (selectedCase?.platform || platform || '')
-                    .toString()
-                    .toLowerCase()
-                  const isApiPlatform = plat.includes('-api-')
-                  if (isApiPlatform) {
-                    return '例如：调用 /u/live/stream 接口，校验返回流对象信息。'
-                  }
-                  const page =
-                    (actionCatalog?.pages || []).find((p) => p.key === stepDialogPageKey) || null
-                  const action = page?.actions.find((a) => a.key === stepDialogActionKey) || null
-                  if (page && action) return `${page.label} · ${action.label}`
-                  return '可选：补充对该步骤的人类可读说明'
-                })()}
-              />
-            </div>
-            {(() => {
-              const plat = (selectedCase?.platform || platform || '')
-                .toString()
-                .toLowerCase()
-              const isApiPlatform = plat.includes('-api-')
-              if (!isApiPlatform) return null
-              return (
-                <>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="api-step-method">HTTP 方法</Label>
-                      <OptionsSelect<string>
-                        id="api-step-method"
-                        value={stepDialogApiMethod}
-                        items={[
-                          { value: 'GET', label: 'GET' },
-                          { value: 'POST', label: 'POST' },
-                          { value: 'PUT', label: 'PUT' },
-                          { value: 'DELETE', label: 'DELETE' },
-                          { value: 'PATCH', label: 'PATCH' },
-                        ]}
-                        placeholder="选择方法"
-                        onSelect={(item) =>
-                          setStepDialogApiMethod(
-                            (item.value || 'GET').toString().toUpperCase() || 'GET'
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="api-step-path">请求路径</Label>
-                      <Input
-                        id="api-step-path"
-                        value={stepDialogApiPath}
-                        onChange={(e) => setStepDialogApiPath(e.target.value)}
-                        placeholder="/u/live/stream"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="api-step-body">请求 Body（JSON，可选）</Label>
-                    <Textarea
-                      id="api-step-body"
-                      rows={3}
-                      value={stepDialogApiBody}
-                      onChange={(e) => setStepDialogApiBody(e.target.value)}
-                      placeholder='例如：{"streamIds":["lv_p_cbx_live_1s"]}'
-                    />
-                  </div>
-                </>
-              )
-            })()}
-            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="ls-step-page">页面</Label>
-                <OptionsSelectSearch
-                  id="ls-step-page"
-                  placeholder="选择页面"
-                  value={stepDialogPageKey}
-                  items={(actionCatalog?.pages || []).map((p) => ({
-                    value: p.key,
-                    label: p.label,
-                  }))}
-                  onChange={(val) => {
-                    setStepDialogPageKey(val)
-                    setStepDialogActionKey(undefined)
-                    setStepDialogArgs({})
-                  }}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="ls-step-action">动作</Label>
-                <OptionsSelectSearch
-                  id="ls-step-action"
-                  placeholder="选择动作"
-                  value={stepDialogActionKey}
-                  items={
-                    (actionCatalog?.pages || [])
-                      .find((p) => p.key === stepDialogPageKey)
-                      ?.actions.map((a) => ({
-                        value: a.key,
-                        label: a.label,
-                      })) || []
-                  }
-                  onChange={(val) => {
-                    setStepDialogActionKey(val)
-                    setStepDialogArgs({})
+                <Label>操作说明</Label>
+                <Textarea
+                  rows={2}
+                  value={stepDialogActionText}
+                  onChange={(e) => setStepDialogActionText(e.target.value)}
+                  placeholder={(() => {
+                    if (isDialogApiPlatform) {
+                      return '例如：调用 /u/live/stream 接口，校验返回流对象信息。';
+                    }
                     const page =
-                      (actionCatalog?.pages || []).find((p) => p.key === stepDialogPageKey) || null
-                    const action = page?.actions.find((a) => a.key === val) || null
-                    if (action?.defaultExpected && !stepDialogExpected) {
-                      setStepDialogExpected(action.defaultExpected)
-                    }
-                    if (!stepDialogCheckType && action && action.kind === 'assert') {
-                      const locRaw = (action as any).locator as string | null | undefined
-                      if (locRaw && locRaw.trim()) {
-                        setStepDialogCheckType('element-visible')
-                        setStepDialogCheckLocator(locRaw.trim())
-                      }
-                    }
-                  }}
+                      (actionCatalog?.pages || []).find(
+                        (p) => p.key === stepDialogPageKey,
+                      ) || null;
+                    const action =
+                      page?.actions.find(
+                        (a) => a.key === stepDialogActionKey,
+                      ) || null;
+                    if (page && action)
+                      return `${page.label} · ${action.label}`;
+                    return '可选：补充对该步骤的人类可读说明';
+                  })()}
                 />
               </div>
-            </div>
-
-            <div className="space-y-3">
               {(() => {
-                const page =
-                  (actionCatalog?.pages || []).find((p) => p.key === stepDialogPageKey) || null
-                const action = page?.actions.find((a) => a.key === stepDialogActionKey) || null
-                const params = action?.params || []
-                if (!params.length) return null
-                return (
-                  <div className="space-y-2">
-                    <Label className="text-xs">动作参数</Label>
-                    <div className="space-y-2">
-                      {params.map((param) => (
-                        <div key={param.name} className="space-y-1">
-                          <Label className="flex items-center justify-between text-xs">
-                            <span>{param.name}</span>
-                            {param.required && (
-                              <span className="text-[11px] text-red-500">必填</span>
-                            )}
-                          </Label>
-                          <Input
-                            value={stepDialogArgs[param.name] || ''}
-                            onChange={(e) =>
-                              setStepDialogArgs((prev) => ({
-                                ...prev,
-                                [param.name]: e.target.value,
-                              }))
-                            }
-                            placeholder={param.placeholder || ''}
-                          />
-                        </div>
-                      ))}
+                  if (!isDialogApiPlatform) return null;
+                  return (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="api-step-method">HTTP 方法</Label>
+                        <OptionsSelect<string>
+                          id="api-step-method"
+                          value={stepDialogApiMethod}
+                          items={[
+                            { value: 'GET', label: 'GET' },
+                            { value: 'POST', label: 'POST' },
+                            { value: 'PUT', label: 'PUT' },
+                            { value: 'DELETE', label: 'DELETE' },
+                            { value: 'PATCH', label: 'PATCH' },
+                          ]}
+                          placeholder="选择方法"
+                          onSelect={(item) =>
+                            setStepDialogApiMethod(
+                              (item.value || 'GET').toString().toUpperCase() ||
+                                'GET',
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="api-step-path">请求路径</Label>
+                        <Input
+                          id="api-step-path"
+                          value={stepDialogApiPath}
+                          onChange={(e) => setStepDialogApiPath(e.target.value)}
+                          placeholder="/u/live/stream"
+                        />
+                      </div>
                     </div>
-                  </div>
-                )
-              })()}
-
-              {(() => {
-                const page =
-                  (actionCatalog?.pages || []).find((p) => p.key === stepDialogPageKey) || null
-                const action = page?.actions.find((a) => a.key === stepDialogActionKey) || null
-                const callSteps = (action as any)?.callSteps as
-                  | { targetActionKey: string; args?: string[]; sortOrder?: number }[]
-                  | undefined
-                if (!page || !action || action.kind !== 'call' || !callSteps || !callSteps.length) {
-                  return null
-                }
-                const stepsSorted = [...callSteps].sort((a, b) => {
-                  const sa =
-                    typeof a.sortOrder === 'number' && Number.isFinite(a.sortOrder)
-                      ? a.sortOrder
-                      : 0
-                  const sb =
-                    typeof b.sortOrder === 'number' && Number.isFinite(b.sortOrder)
-                      ? b.sortOrder
-                      : 0
-                  return sa - sb
-                })
-                return (
-                  <div className="space-y-2 rounded-md border px-2 py-2">
-                    <Label className="text-xs">内部调用预览（函数调用）</Label>
-                    <p className="text-[11px] text-muted-foreground">
-                      该动作为函数调用类型，将在 Page 类中生成一个组合方法，内部依次调用当前页面上的其它方法。
-                    </p>
                     <div className="space-y-1">
-                      {stepsSorted.map((step, idx) => {
-                        const target =
-                          page.actions.find((a) => a.key === step.targetActionKey) || null
-                        const targetLabel = target
-                          ? `${target.method || target.key} · ${target.label || target.key}`
-                          : step.targetActionKey
-                        const argList = (step.args || [])
-                          .map((v) => String(v || '').trim())
-                          .filter((v) => v.length > 0)
-                        const argPreview =
-                          argList.length > 0 ? argList.join(', ') : '（无参数或不传）'
-                        return (
-                          <div
-                            key={`${step.targetActionKey}-${idx}`}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted px-2 py-1.5 text-[11px]"
-                          >
-                            <div className="flex min-w-0 flex-1 flex-col">
-                              <span className="font-mono text-[11px]">
-                                步骤 {idx + 1}:{' '}
-                                <span className="font-normal">
-                                  {page.varName || 'page'}.{target ? target.method : step.targetActionKey}
-                                  ({argPreview})
-                                </span>
-                              </span>
-                              {target && (
-                                <span className="text-muted-foreground truncate">
-                                  {target.label}
+                      <Label htmlFor="api-step-body">
+                        请求 Body（JSON，可选）
+                      </Label>
+                      <Textarea
+                        id="api-step-body"
+                        rows={3}
+                        value={stepDialogApiBody}
+                        onChange={(e) => setStepDialogApiBody(e.target.value)}
+                        placeholder='例如：{"streamIds":["lv_p_cbx_live_1s"]}'
+                      />
+                    </div>
+                  </>
+                );
+              })()}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="ls-step-page">页面</Label>
+                  <OptionsSelectSearch
+                    id="ls-step-page"
+                    placeholder="选择页面"
+                    value={stepDialogPageKey}
+                    items={(actionCatalog?.pages || []).map((p) => ({
+                      value: p.key,
+                      label: p.label,
+                    }))}
+                    onChange={(val) => {
+                      setStepDialogPageKey(val);
+                      setStepDialogActionKey(undefined);
+                      setStepDialogArgs({});
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ls-step-action">动作</Label>
+                  <OptionsSelectSearch
+                    id="ls-step-action"
+                    placeholder="选择动作"
+                    value={stepDialogActionKey}
+                    items={
+                      (actionCatalog?.pages || [])
+                        .find((p) => p.key === stepDialogPageKey)
+                        ?.actions.map((a) => ({
+                          value: a.key,
+                          label: a.label,
+                        })) || []
+                    }
+                    onChange={(val) => {
+                      setStepDialogActionKey(val);
+                      setStepDialogArgs({});
+                      const page =
+                        (actionCatalog?.pages || []).find(
+                          (p) => p.key === stepDialogPageKey,
+                        ) || null;
+                      const action =
+                        page?.actions.find((a) => a.key === val) || null;
+                      if (action?.defaultExpected && !stepDialogExpected) {
+                        setStepDialogExpected(action.defaultExpected);
+                      }
+                      if (
+                        !stepDialogCheckType &&
+                        action &&
+                        action.kind === 'assert'
+                      ) {
+                        const locRaw = (action as any).locator as
+                          | string
+                          | null
+                          | undefined;
+                        if (locRaw && locRaw.trim()) {
+                          setStepDialogCheckType('element-visible');
+                          setStepDialogCheckLocator(locRaw.trim());
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {(() => {
+                  const page =
+                    (actionCatalog?.pages || []).find(
+                      (p) => p.key === stepDialogPageKey,
+                    ) || null;
+                  const action =
+                    page?.actions.find((a) => a.key === stepDialogActionKey) ||
+                    null;
+                  const params = action?.params || [];
+                  if (!params.length) return null;
+                  return (
+                    <div className="space-y-2">
+                      <Label className="text-xs">动作参数</Label>
+                      <div className="space-y-2">
+                        {params.map((param) => (
+                          <div key={param.name} className="space-y-1">
+                            <Label className="flex items-center justify-between text-xs">
+                              <span>{param.name}</span>
+                              {param.required && (
+                                <span className="text-[11px] text-red-500">
+                                  必填
                                 </span>
                               )}
-                            </div>
+                            </Label>
+                            <Input
+                              value={stepDialogArgs[param.name] || ''}
+                              onChange={(e) =>
+                                setStepDialogArgs((prev) => ({
+                                  ...prev,
+                                  [param.name]: e.target.value,
+                                }))
+                              }
+                              placeholder={param.placeholder || ''}
+                            />
                           </div>
-                        )
-                      })}
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {(() => {
+                  const page =
+                    (actionCatalog?.pages || []).find(
+                      (p) => p.key === stepDialogPageKey,
+                    ) || null;
+                  const action =
+                    page?.actions.find((a) => a.key === stepDialogActionKey) ||
+                    null;
+                  const callSteps = (action as any)?.callSteps as
+                    | {
+                        targetActionKey: string;
+                        args?: string[];
+                        sortOrder?: number;
+                      }[]
+                    | undefined;
+                  if (
+                    !page ||
+                    !action ||
+                    action.kind !== 'call' ||
+                    !callSteps ||
+                    !callSteps.length
+                  ) {
+                    return null;
+                  }
+                  const stepsSorted = [...callSteps].sort((a, b) => {
+                    const sa =
+                      typeof a.sortOrder === 'number' &&
+                      Number.isFinite(a.sortOrder)
+                        ? a.sortOrder
+                        : 0;
+                    const sb =
+                      typeof b.sortOrder === 'number' &&
+                      Number.isFinite(b.sortOrder)
+                        ? b.sortOrder
+                        : 0;
+                    return sa - sb;
+                  });
+                  return (
+                    <div className="space-y-2 rounded-md border px-2 py-2">
+                      <Label className="text-xs">
+                        内部调用预览（函数调用）
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        该动作为函数调用类型，将在 Page
+                        类中生成一个组合方法，内部依次调用当前页面上的其它方法。
+                      </p>
+                      <div className="space-y-1">
+                        {stepsSorted.map((step, idx) => {
+                          const target =
+                            page.actions.find(
+                              (a) => a.key === step.targetActionKey,
+                            ) || null;
+                          const targetLabel = target
+                            ? `${target.method || target.key} · ${target.label || target.key}`
+                            : step.targetActionKey;
+                          const argList = (step.args || [])
+                            .map((v) => String(v || '').trim())
+                            .filter((v) => v.length > 0);
+                          const argPreview =
+                            argList.length > 0
+                              ? argList.join(', ')
+                              : '（无参数或不传）';
+                          return (
+                            <div
+                              key={`${step.targetActionKey}-${idx}`}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted px-2 py-1.5 text-[11px]"
+                            >
+                              <div className="flex min-w-0 flex-1 flex-col">
+                                <span className="font-mono text-[11px]">
+                                  步骤 {idx + 1}:{' '}
+                                  <span className="font-normal">
+                                    {page.varName || 'page'}.
+                                    {target
+                                      ? target.method
+                                      : step.targetActionKey}
+                                    ({argPreview})
+                                  </span>
+                                </span>
+                                {target && (
+                                  <span className="text-muted-foreground truncate">
+                                    {target.label}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="space-y-2">
+                  <Label className="text-xs">自动检查规则（可选）</Label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="ls-step-check-type"
+                        className="text-[11px]"
+                      >
+                        检查类型
+                      </Label>
+                      <OptionsSelect<string>
+                        id="ls-step-check-type"
+                        value={stepDialogCheckType || 'none'}
+                        items={[
+                          { value: 'none', label: '不配置（仅写期望文案）' },
+                          {
+                            value: 'element-visible',
+                            label: '元素出现（element visible）',
+                          },
+                          {
+                            value: 'element-hidden',
+                            label: '元素消失（element hidden）',
+                          },
+                          {
+                            value: 'url-contains',
+                            label: '页面 URL 包含（url contains）',
+                          },
+                          {
+                            value: 'url-equals',
+                            label: '页面 URL 等于（url equals）',
+                          },
+                        ]}
+                        onSelect={(item) => {
+                          const v = item.value;
+                          if (
+                            v === 'element-visible' ||
+                            v === 'element-hidden' ||
+                            v === 'url-contains' ||
+                            v === 'url-equals'
+                          ) {
+                            setStepDialogCheckType(v);
+                          } else {
+                            setStepDialogCheckType('');
+                          }
+                        }}
+                        size="sm"
+                        triggerClassName="text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="ls-step-check-timeout"
+                        className="text-[11px]"
+                      >
+                        超时时间（毫秒，可选）
+                      </Label>
+                      <Input
+                        id="ls-step-check-timeout"
+                        className="h-8 text-xs"
+                        value={stepDialogCheckTimeoutMs}
+                        onChange={(e) =>
+                          setStepDialogCheckTimeoutMs(
+                            e.target.value.replace(/[^0-9]/g, ''),
+                          )
+                        }
+                        placeholder="例如：30000"
+                      />
                     </div>
                   </div>
-                )
-              })()}
-
-              <div className="space-y-2">
-                <Label className="text-xs">自动检查规则（可选）</Label>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="ls-step-check-type" className="text-[11px]">
-                      检查类型
-                    </Label>
-                    <OptionsSelect<string>
-                      id="ls-step-check-type"
-                      value={stepDialogCheckType || 'none'}
-                      items={[
-                        { value: 'none', label: '不配置（仅写期望文案）' },
-                        { value: 'element-visible', label: '元素出现（element visible）' },
-                        { value: 'element-hidden', label: '元素消失（element hidden）' },
-                        { value: 'url-contains', label: '页面 URL 包含（url contains）' },
-                        { value: 'url-equals', label: '页面 URL 等于（url equals）' },
-                      ]}
-                      onSelect={(item) => {
-                        const v = item.value
-                        if (
-                          v === 'element-visible' ||
-                          v === 'element-hidden' ||
-                          v === 'url-contains' ||
-                          v === 'url-equals'
-                        ) {
-                          setStepDialogCheckType(v)
-                        } else {
-                          setStepDialogCheckType('')
+                  {stepDialogCheckType === 'element-visible' ||
+                  stepDialogCheckType === 'element-hidden' ? (
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="ls-step-check-locator"
+                        className="text-[11px]"
+                      >
+                        元素定位字符串（CSS/XPath/资源 ID）
+                      </Label>
+                      <Input
+                        id="ls-step-check-locator"
+                        className="h-8 text-xs"
+                        value={stepDialogCheckLocator}
+                        onChange={(e) =>
+                          setStepDialogCheckLocator(e.target.value)
                         }
-                      }}
-                      size="sm"
-                      triggerClassName="text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="ls-step-check-timeout" className="text-[11px]">
-                      超时时间（毫秒，可选）
-                    </Label>
-                    <Input
-                      id="ls-step-check-timeout"
-                      className="h-8 text-xs"
-                      value={stepDialogCheckTimeoutMs}
-                      onChange={(e) => setStepDialogCheckTimeoutMs(e.target.value.replace(/[^0-9]/g, ''))}
-                      placeholder="例如：30000"
-                    />
-                  </div>
+                        placeholder='例如：div.action-bar > button，或 android=new UiSelector().resourceId("com.xx:id/btn")'
+                      />
+                    </div>
+                  ) : null}
+                  {stepDialogCheckType === 'url-contains' ||
+                  stepDialogCheckType === 'url-equals' ? (
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="ls-step-check-url"
+                        className="text-[11px]"
+                      >
+                        期望 URL
+                      </Label>
+                      <Input
+                        id="ls-step-check-url"
+                        className="h-8 text-xs"
+                        value={stepDialogCheckExpectedUrl}
+                        onChange={(e) =>
+                          setStepDialogCheckExpectedUrl(e.target.value)
+                        }
+                        placeholder="例如：/live 或 https://stg.gettr.com/live"
+                      />
+                    </div>
+                  ) : null}
                 </div>
-                {stepDialogCheckType === 'element-visible' ||
-                stepDialogCheckType === 'element-hidden' ? (
-                  <div className="space-y-1">
-                    <Label htmlFor="ls-step-check-locator" className="text-[11px]">
-                      元素定位字符串（CSS/XPath/资源 ID）
-                    </Label>
-                    <Input
-                      id="ls-step-check-locator"
-                      className="h-8 text-xs"
-                      value={stepDialogCheckLocator}
-                      onChange={(e) => setStepDialogCheckLocator(e.target.value)}
-                      placeholder='例如：div.action-bar > button，或 android=new UiSelector().resourceId("com.xx:id/btn")'
-                    />
-                  </div>
-                ) : null}
-                {stepDialogCheckType === 'url-contains' ||
-                stepDialogCheckType === 'url-equals' ? (
-                  <div className="space-y-1">
-                    <Label htmlFor="ls-step-check-url" className="text-[11px]">
-                      期望 URL
-                    </Label>
-                    <Input
-                      id="ls-step-check-url"
-                      className="h-8 text-xs"
-                      value={stepDialogCheckExpectedUrl}
-                      onChange={(e) => setStepDialogCheckExpectedUrl(e.target.value)}
-                      placeholder="例如：/live 或 https://stg.gettr.com/live"
-                    />
-                  </div>
-                ) : null}
-              </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="ls-step-expected">提示信息（可选）</Label>
-                <Textarea
-                  id="ls-step-expected"
-                  rows={3}
-                  value={stepDialogExpected}
-                  onChange={(e) => setStepDialogExpected(e.target.value)}
-                  placeholder="当检查失败时打印的提示，例如：在 30 秒内进入“直播中”状态，观众端可以看到直播画面。"
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="ls-step-expected">提示信息（可选）</Label>
+                  <Textarea
+                    id="ls-step-expected"
+                    rows={3}
+                    value={stepDialogExpected}
+                    onChange={(e) => setStepDialogExpected(e.target.value)}
+                    placeholder="当检查失败时打印的提示，例如：在 30 秒内进入“直播中”状态，观众端可以看到直播画面。"
+                  />
+                </div>
               </div>
-            </div>
             </div>
             <DialogFooter className="mt-3">
               <DialogClose asChild>
@@ -2930,38 +3609,67 @@ export default function ScenariosPage() {
                   取消
                 </Button>
               </DialogClose>
-              <Button
+                            <Button
                 type="button"
                 onClick={() => {
-                  if (!selectedCase) {
-                    toast.error('请先在左侧选择一个用例')
-                    return
-                  }
-                  const plat = (selectedCase.platform || platform || '')
+                  const isSuiteTarget = stepDialogTarget === 'suite';
+                  const effectivePlatform = (
+                    (isSuiteTarget ? platform : selectedCase?.platform) ||
+                    platform ||
+                    ''
+                  )
                     .toString()
-                    .toLowerCase()
-                  const isApiPlatform = plat.includes('-api-')
+                    .toLowerCase();
+                  const isApiPlatform = effectivePlatform.includes('-api-');
+
+                  if (!selectedCase && !isSuiteTarget) {
+                    toast.error('请先在左侧选择一个用例');
+                    return;
+                  }
 
                   if (isApiPlatform) {
-                    const caseId = selectedCase.id
-                    const list = stepsByCase[caseId] || []
                     const method =
-                      (stepDialogApiMethod || 'GET').toString().trim().toUpperCase() || 'GET'
-                    const pathVal = (stepDialogApiPath || '').toString().trim()
-                    const bodyVal = (stepDialogApiBody || '').toString().trim()
-                    const parts: string[] = []
-                    if (method) parts.push(`method=${method}`)
-                    if (pathVal) parts.push(`path=${pathVal}`)
-                    if (bodyVal) parts.push(`body=${bodyVal}`)
-                    const dataText = parts.join(', ')
-                    const actionText = (stepDialogActionText || '').trim() || 'API 调用'
-                    const expectedText = (stepDialogExpected || '').trim() || '（待补充）'
+                      (stepDialogApiMethod || 'GET')
+                        .toString()
+                        .trim()
+                        .toUpperCase() || 'GET';
+                    const pathVal = (stepDialogApiPath || '').toString().trim();
+                    const bodyVal = (stepDialogApiBody || '').toString().trim();
+                    const parts: string[] = [];
+                    if (method) parts.push(`method=${method}`);
+                    if (pathVal) parts.push(`path=${pathVal}`);
+                    if (bodyVal) parts.push(`body=${bodyVal}`);
+                    const dataText = parts.join(', ');
+                    const actionText =
+                      (stepDialogActionText || '').trim() || 'API 调用';
+                    const expectedText =
+                      (stepDialogExpected || '').trim() || '（待补充）';
 
+                    if (isSuiteTarget) {
+                      const summaryParts = [] as string[];
+                      if (actionText) summaryParts.push(actionText);
+                      const apiTarget = `${method}${pathVal ? ` ${pathVal}` : ''}`.trim();
+                      if (apiTarget) summaryParts.push(apiTarget);
+                      if (bodyVal) summaryParts.push(`body=${bodyVal}`);
+                      let summary = summaryParts.filter(Boolean).join(' | ');
+                      if (expectedText) {
+                        summary = summary
+                          ? `${summary} · 期望：${expectedText}`
+                          : `期望：${expectedText}`;
+                      }
+                      onSuitePreStepsChange([...suitePreSteps, summary || 'API 前置步骤']);
+                      setEditingStepIdForDialog(null);
+                      setStepDialogTarget('case');
+                      setStepDialogOpen(false);
+                      return;
+                    }
+
+                    const caseId = selectedCase!.id;
                     setStepsByCase((prev) => {
-                      const currentList = prev[caseId] || []
+                      const currentList = prev[caseId] || [];
 
                       if (editingStepIdForDialog) {
-                        const targetId = editingStepIdForDialog
+                        const targetId = editingStepIdForDialog;
                         const updated = currentList.map((s) =>
                           s.id === targetId
                             ? {
@@ -2970,17 +3678,17 @@ export default function ScenariosPage() {
                                 data: dataText,
                                 expected: expectedText,
                               }
-                            : s
-                        )
-                        return { ...prev, [caseId]: updated }
+                            : s,
+                        );
+                        return { ...prev, [caseId]: updated };
                       }
 
                       const baseOrder =
                         stepDialogOrder && Number.isFinite(stepDialogOrder)
                           ? stepDialogOrder
                           : currentList.length > 0
-                          ? Math.max(...currentList.map((s) => s.order)) + 1
-                          : 1
+                            ? Math.max(...currentList.map((s) => s.order)) + 1
+                            : 1;
 
                       const newStep: UserScenarioStep = {
                         id: `${caseId}-${Date.now()}`,
@@ -2988,41 +3696,43 @@ export default function ScenariosPage() {
                         action: actionText,
                         data: dataText,
                         expected: expectedText,
-                      }
-                      return { ...prev, [caseId]: [...currentList, newStep] }
-                    })
-                    setEditingStepIdForDialog(null)
-                    setStepDialogOpen(false)
-                    return
+                      };
+                      return { ...prev, [caseId]: [...currentList, newStep] };
+                    });
+                    setEditingStepIdForDialog(null);
+                    setStepDialogTarget('case');
+                    setStepDialogOpen(false);
+                    return;
                   }
 
-                  const catalog = actionCatalog
+                  const catalog = actionCatalog;
                   if (!catalog) {
-                    toast.error('页面动作目录尚未加载')
-                    return
+                    toast.error('页面动作目录尚未加载');
+                    return;
                   }
                   const page =
                     catalog.pages.find((p) => p.key === stepDialogPageKey) ||
                     catalog.pages[0] ||
-                    null
+                    null;
                   if (!page) {
-                    toast.error('请先选择页面')
-                    return
+                    toast.error('请先选择页面');
+                    return;
                   }
                   const action =
-                    page.actions.find((a) => a.key === stepDialogActionKey) || null
+                    page.actions.find((a) => a.key === stepDialogActionKey) ||
+                    null;
                   if (!action) {
-                    toast.error('请先选择动作')
-                    return
+                    toast.error('请先选择动作');
+                    return;
                   }
-                  const params = action.params || []
+                  const params = action.params || [];
                   for (const param of params) {
                     if (param.required && !stepDialogArgs[param.name]) {
-                      toast.error(`请输入参数：${param.name}`)
-                      return
+                      toast.error(`请输入参数：${param.name}`);
+                      return;
                     }
                   }
-                  let checkRule: StepCheckRule | undefined
+                  let checkRule: StepCheckRule | undefined;
                   if (stepDialogCheckType) {
                     if (
                       stepDialogCheckType === 'element-visible' ||
@@ -3032,12 +3742,14 @@ export default function ScenariosPage() {
                         stepDialogCheckLocator.trim() ||
                         ((action as any).locator
                           ? String((action as any).locator).trim()
-                          : '')
+                          : '');
                       if (!rawLocator) {
-                        toast.error('请选择“元素出现/消失”时需补充元素定位字符串')
-                        return
+                        toast.error(
+                          '请选择“元素出现/消失”时需补充元素定位字符串',
+                        );
+                        return;
                       }
-                      const timeoutNum = Number(stepDialogCheckTimeoutMs || '')
+                      const timeoutNum = Number(stepDialogCheckTimeoutMs || '');
                       checkRule = {
                         type: stepDialogCheckType,
                         locator: rawLocator,
@@ -3045,17 +3757,17 @@ export default function ScenariosPage() {
                           Number.isFinite(timeoutNum) && timeoutNum > 0
                             ? Math.floor(timeoutNum)
                             : undefined,
-                      }
+                      };
                     } else if (
                       stepDialogCheckType === 'url-contains' ||
                       stepDialogCheckType === 'url-equals'
                     ) {
-                      const rawUrl = stepDialogCheckExpectedUrl.trim()
+                      const rawUrl = stepDialogCheckExpectedUrl.trim();
                       if (!rawUrl) {
-                        toast.error('请选择“URL 检查”时需补充期望 URL')
-                        return
+                        toast.error('请选择“URL 检查”时需补充期望 URL');
+                        return;
                       }
-                      const timeoutNum = Number(stepDialogCheckTimeoutMs || '')
+                      const timeoutNum = Number(stepDialogCheckTimeoutMs || '');
                       checkRule = {
                         type: stepDialogCheckType,
                         expectedUrl: rawUrl,
@@ -3063,69 +3775,102 @@ export default function ScenariosPage() {
                           Number.isFinite(timeoutNum) && timeoutNum > 0
                             ? Math.floor(timeoutNum)
                             : undefined,
-                      }
+                      };
                     }
                   }
                   const binding: StepBindingV1 = {
-                    ver: 1,
-                    platform: catalog.platform,
                     pageKey: page.key,
                     actionKey: action.key,
-                    args: params.map((p) => ({
+                    args: action.params?.map((p) => ({
                       name: p.name,
                       value: stepDialogArgs[p.name] || '',
                     })),
-                    ...(checkRule ? { checkRule } : {}),
-                  }
-                  const defaultActionText = `${page.label} · ${action.label}`
-                  const actionText =
-                    (stepDialogActionText || '').trim() || defaultActionText
-                  const dataText =
-                    params.length > 0
-                      ? params
-                          .map((p) => `${p.name}=${stepDialogArgs[p.name] || ''}`)
-                          .join(', ')
-                      : ''
+                    checkRule,
+                  };
+                  const actionLabel = action.label || action.key || '步骤';
+                  const pageLabel = page.label || page.key || '页面';
+                  const humanAction =
+                    (stepDialogActionText || '').trim() ||
+                    `${pageLabel} · ${actionLabel}`;
                   const expectedText =
-                    stepDialogExpected || action.defaultExpected || '（待补充）'
+                    (stepDialogExpected || '').trim() || '（待补充）';
+
+                  if (isSuiteTarget) {
+                    const paramsPreview = Object.entries(stepDialogArgs)
+                      .map(([k, v]) => `${k}=${v}`)
+                      .filter((s) => s.trim().length > 0)
+                      .join(', ');
+                    const checkPreview = (() => {
+                      if (!stepDialogCheckType) return '';
+                      if (
+                        stepDialogCheckType === 'element-visible' ||
+                        stepDialogCheckType === 'element-hidden'
+                      ) {
+                        return `${stepDialogCheckType}@${stepDialogCheckLocator.trim() || (action as any)?.locator || ''}`;
+                      }
+                      if (
+                        stepDialogCheckType === 'url-contains' ||
+                        stepDialogCheckType === 'url-equals'
+                      ) {
+                        return `${stepDialogCheckType}@${stepDialogCheckExpectedUrl.trim()}`;
+                      }
+                      return '';
+                    })();
+                    const parts: string[] = [];
+                    if (humanAction) parts.push(humanAction);
+                    if (paramsPreview) parts.push(`参数：${paramsPreview}`);
+                    if (checkPreview) parts.push(`检查：${checkPreview}`);
+                    if (expectedText) parts.push(`期望：${expectedText}`);
+                    const summary = parts.filter(Boolean).join(' | ');
+                    onSuitePreStepsChange([...suitePreSteps, summary || humanAction]);
+                    setEditingStepIdForDialog(null);
+                    setStepDialogTarget('case');
+                    setStepDialogOpen(false);
+                    return;
+                  }
 
                   setStepsByCase((prev) => {
-                    const caseId = selectedCase.id
-                    const list = prev[caseId] || []
+                    if (!selectedCase) return prev;
+                    const caseId = selectedCase.id;
+                    const list = prev[caseId] || [];
 
                     if (editingStepIdForDialog) {
-                      const targetId = editingStepIdForDialog
+                      const targetId = editingStepIdForDialog;
                       const updated = list.map((s) =>
                         s.id === targetId
                           ? {
                               ...s,
-                              action: actionText,
-                              data: dataText,
+                              action: humanAction,
                               expected: expectedText,
                               binding: JSON.stringify(binding),
                             }
-                          : s
-                      )
-                      return { ...prev, [caseId]: updated }
+                          : s,
+                      );
+                      return { ...prev, [caseId]: updated };
                     }
 
                     const baseOrder =
-                      list.length > 0 ? Math.max(...list.map((s) => s.order)) + 1 : 1
+                      stepDialogOrder && Number.isFinite(stepDialogOrder)
+                        ? stepDialogOrder
+                        : list.length > 0
+                          ? Math.max(...list.map((s) => s.order)) + 1
+                          : 1;
+
                     const newStep: UserScenarioStep = {
                       id: `${caseId}-${Date.now()}`,
                       order: baseOrder,
-                      action: actionText,
-                      data: dataText,
+                      action: humanAction,
                       expected: expectedText,
                       binding: JSON.stringify(binding),
-                    }
-                    return { ...prev, [caseId]: [...list, newStep] }
-                  })
-                  setEditingStepIdForDialog(null)
-                  setStepDialogOpen(false)
+                    };
+                    return { ...prev, [caseId]: [...list, newStep] };
+                  });
+                  setEditingStepIdForDialog(null);
+                  setStepDialogTarget('case');
+                  setStepDialogOpen(false);
                 }}
               >
-                确定
+                保存
               </Button>
             </DialogFooter>
           </div>
@@ -3138,8 +3883,8 @@ export default function ScenariosPage() {
           <DialogHeader>
             <DialogTitle>新增用户场景</DialogTitle>
             <DialogDescription>
-              填写基本信息和验收标准，创建一条新的用户场景。编号应保持唯一，例如 LS001 /
-              US-0-host-1。
+              填写基本信息和验收标准，创建一条新的用户场景。编号应保持唯一，例如
+              LS001 / US-0-host-1。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -3150,13 +3895,18 @@ export default function ScenariosPage() {
                   id="nc-platform"
                   value={platform}
                   items={
-                    platforms.length ? platforms : [{ value: 'gettr-web', label: 'GETTR Web' }]
+                    platforms.length
+                      ? platforms
+                      : [{ value: 'gettr-web', label: 'GETTR Web' }]
                   }
                   placeholder="选择平台"
                   onSelect={(item) => {
-                    setPlatform(item.value)
+                    setPlatform(item.value);
                     try {
-                      localStorage.setItem('gtt:scenarios:platform', item.value)
+                      localStorage.setItem(
+                        'gtt:scenarios:platform',
+                        item.value,
+                      );
                     } catch {}
                   }}
                 />
@@ -3218,7 +3968,9 @@ export default function ScenariosPage() {
                   value={newCaseStatus}
                   items={statusItems}
                   placeholder="选择状态"
-                  onSelect={(item) => setNewCaseStatus(item.value as CaseStatus)}
+                  onSelect={(item) =>
+                    setNewCaseStatus(item.value as CaseStatus)
+                  }
                 />
               </div>
             </div>
@@ -3234,7 +3986,9 @@ export default function ScenariosPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="nc-acceptance">验收标准（Acceptance Criteria）</Label>
+                <Label htmlFor="nc-acceptance">
+                  验收标准（Acceptance Criteria）
+                </Label>
                 <Textarea
                   id="nc-acceptance"
                   rows={3}
@@ -3247,12 +4001,22 @@ export default function ScenariosPage() {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline" disabled={newCaseSubmitting}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={newCaseSubmitting}
+              >
                 取消
               </Button>
             </DialogClose>
-            <Button type="button" onClick={handleCreateCase} disabled={newCaseSubmitting}>
-              {newCaseSubmitting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+            <Button
+              type="button"
+              onClick={handleCreateCase}
+              disabled={newCaseSubmitting}
+            >
+              {newCaseSubmitting && (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              )}
               确定
             </Button>
           </DialogFooter>
@@ -3265,7 +4029,8 @@ export default function ScenariosPage() {
           <DialogHeader>
             <DialogTitle>说明文档解析提示（可选）</DialogTitle>
             <DialogDescription>
-              在上传说明文档/设计文档前，可在此补充给 AI 的解析说明，例如重点字段、命名规则或拆分粒度。不填写时将使用默认规则。
+              在上传说明文档/设计文档前，可在此补充给 AI
+              的解析说明，例如重点字段、命名规则或拆分粒度。不填写时将使用默认规则。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -3278,7 +4043,8 @@ export default function ScenariosPage() {
               placeholder="例如：请优先复用文档中的用例编号作为 caseCode；没有编号时按模块 + 序号生成稳定 ID；测试步骤与预期结果使用 1./2. 的编号形式。"
             />
             <p className="text-muted-foreground mt-1 text-[11px]">
-              提示仅影响本次上传，后续可在此调整；系统仍会自动应用 Livestream CSV 模板相关的默认规则。
+              提示仅影响本次上传，后续可在此调整；系统仍会自动应用 Livestream
+              CSV 模板相关的默认规则。
             </p>
           </div>
           <DialogFooter>
@@ -3291,13 +4057,18 @@ export default function ScenariosPage() {
               type="button"
               onClick={() => {
                 try {
-                  localStorage.setItem('gtt:scenarios:docAiHint', docAiPromptText || '')
+                  localStorage.setItem(
+                    'gtt:scenarios:docAiHint',
+                    docAiPromptText || '',
+                  );
                 } catch {
                   // ignore
                 }
-                setDocAiPromptOpen(false)
-                const input = document.getElementById('ls-upload-doc') as HTMLInputElement | null
-                input?.click()
+                setDocAiPromptOpen(false);
+                const input = document.getElementById(
+                  'ls-upload-doc',
+                ) as HTMLInputElement | null;
+                input?.click();
               }}
             >
               确定并选择文档
@@ -3306,5 +4077,5 @@ export default function ScenariosPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

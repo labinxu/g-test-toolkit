@@ -252,7 +252,6 @@ export default function FlutterPageObjectsToolPage() {
     if (isAuthenticated) {
       loadMetaFiles();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
   const handleGenerateFromBranch = async (sanitizedBranch: string) => {

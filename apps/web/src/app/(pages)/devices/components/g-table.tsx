@@ -1,4 +1,5 @@
 'use client';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
@@ -20,18 +21,25 @@ export function GTable({
   headers,
   dataRow,
   onSelectedRow,
+  actionHeader,
+  renderAction,
 }: {
   caption?: string;
   headers: string[];
   dataRow: string[][];
   onSelectedRow: (row: string[]) => void;
+  actionHeader?: ReactNode;
+  renderAction?: (row: string[], rowIndex: number) => ReactNode;
 }) {
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
 
   useEffect(() => {
     if (selectedRow === null) return;
     onSelectedRow && onSelectedRow(dataRow[selectedRow]);
-  }, [selectedRow]);
+  }, [selectedRow, dataRow, onSelectedRow]);
+
+  const extraColumns = 2 + (renderAction ? 1 : 0);
+  const totalColumns = headers.length + extraColumns;
 
   return (
       <TooltipProvider>
@@ -44,6 +52,7 @@ export function GTable({
           ))}
           <TableHead>Status</TableHead>
           <TableHead>Preview</TableHead>
+          {renderAction ? <TableHead>{actionHeader ?? 'Action'}</TableHead> : null}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -59,31 +68,41 @@ export function GTable({
             }}
             style={{ cursor: 'pointer' }}
           >
-            {row.map((item: string, i: number) => (
-              <TableCell key={`item-${rowIndex}-${i}`}>{item}</TableCell>
+            {headers.map((_, i: number) => (
+              <TableCell key={`item-${rowIndex}-${i}`}>{row[i] ?? ''}</TableCell>
             ))}
-             <TableCell>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="secondary" size="icon" className="size-8 cursor-pointer" tabIndex={-1}>
-                      {row[2] === 'Free' ? <LockKeyholeOpen /> : <LockKeyhole />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {row[2] === 'Free' ? 'Device Available' : 'Device Unavailable'}
-                  </TooltipContent>
-                </Tooltip>
-              </TableCell>
+            <TableCell>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="size-8 cursor-pointer"
+                    tabIndex={-1}
+                  >
+                    {(row[2] ?? 'Free') === 'Free' ? <LockKeyholeOpen /> : <LockKeyhole />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {(row[2] ?? 'Free') === 'Free'
+                    ? 'Device Available'
+                    : 'Device Unavailable'}
+                </TooltipContent>
+              </Tooltip>
+            </TableCell>
 
             <TableCell>
               <DeviceHoverCard deviceId={row[0]} />
             </TableCell>
+            {renderAction ? (
+              <TableCell>{renderAction(row, rowIndex)}</TableCell>
+            ) : null}
           </TableRow>
         ))}
       </TableBody>
       <TableFooter>
         <TableRow>
-          <TableCell colSpan={4}>Total</TableCell>
+          <TableCell colSpan={Math.max(1, totalColumns - 1)}>Total</TableCell>
           <TableCell className="text-right">{dataRow.length}</TableCell>
         </TableRow>
       </TableFooter>

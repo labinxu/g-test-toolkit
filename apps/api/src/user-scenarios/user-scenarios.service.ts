@@ -8,6 +8,7 @@ import {
   UserScenarioStatus,
 } from './entities/user-scenario.entity';
 import { UserScenarioStep } from './entities/user-scenario-step.entity';
+import { UserScenarioSuite } from './entities/user-scenario-suite.entity';
 import { UserScenarioSummaryDto } from './dto/user-scenario-summary.dto';
 import {
   UserScenarioStepInputDto,
@@ -25,8 +26,10 @@ export class UserScenariosService {
   constructor(
     @InjectRepository(UserScenario)
     readonly caseRepo: Repository<UserScenario>,
-    @InjectRepository(UserScenarioStep)
-    private readonly stepRepo: Repository<UserScenarioStep>,
+  @InjectRepository(UserScenarioStep)
+  private readonly stepRepo: Repository<UserScenarioStep>,
+  @InjectRepository(UserScenarioSuite)
+  private readonly suiteRepo: Repository<UserScenarioSuite>,
     @InjectRepository(UserScenarioOption)
     private readonly optionRepo: Repository<UserScenarioOption>,
     @InjectRepository(EnvTemplate)
@@ -51,6 +54,30 @@ export class UserScenariosService {
     // 仅保留字母和数字
     const cleaned = raw.replace(/[^A-Za-z0-9]+/g, '');
     return cleaned || 'livestream';
+  }
+
+  private parseSharedPreSteps(raw?: string | null): string[] {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((s) => (typeof s === 'string' ? s.trim() : ''))
+          .filter((s) => s.length > 0);
+      }
+    } catch {
+      // ignore parse errors
+    }
+    return [];
+  }
+
+  private serializeSharedPreSteps(items?: string[] | null): string | null {
+    if (!items || !items.length) return null;
+    const normalized = items
+      .map((s) => (s || '').toString().trim())
+      .filter((s) => s.length > 0);
+    if (!normalized.length) return null;
+    return JSON.stringify(normalized);
   }
 
   private async ensureOption(
@@ -110,6 +137,7 @@ export class UserScenariosService {
     const qb = this.caseRepo
       .createQueryBuilder('c')
       .leftJoin('c.steps', 's')
+      .leftJoinAndSelect('c.suite', 'suite')
       .loadRelationCountAndMap('c.stepsCount', 'c.steps');
 
     if (params?.status && params.status !== 'all') {
@@ -152,6 +180,8 @@ export class UserScenariosService {
       dto.description = c.description ?? null;
       dto.acceptanceCriteria = c.acceptanceCriteria ?? null;
       dto.generatedFilePath = c.generatedFilePath ?? null;
+      dto.suiteId = (c as any)?.suite?.id ?? null;
+      dto.suiteName = (c as any)?.suite?.name ?? null;
       return dto;
     });
   }
@@ -159,7 +189,7 @@ export class UserScenariosService {
   async findOneWithSteps(id: number): Promise<UserScenario> {
     const entity = await this.caseRepo.findOne({
       where: { id },
-      relations: ['steps'],
+      relations: ['steps', 'suite'],
       order: { steps: { order: 'ASC' as any } },
     });
     if (!entity) {
@@ -525,6 +555,104 @@ export class UserScenariosService {
 
     const total = await this.caseRepo.count();
     return { created, updated, total };
+  }
+
+  async listSuites(params?: { platform?: string | 'all' }) {
+    const qb = this.suiteRepo
+      .createQueryBuilder('suite')
+      .leftJoinAndSelect('suite.cases', 'c');
+    if (params?.platform && params.platform !== 'all') {
+      qb.andWhere('suite.platform = :platform', {
+        platform: this.normalizePlatform(params.platform),
+      });
+    }
+    qb.orderBy('suite.name', 'ASC');
+    const rows = await qb.getMany();
+    return rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description ?? null,
+      platform: s.platform,
+      module: s.module,
+      sharedPreSteps: this.parseSharedPreSteps(s.sharedPreStepsJson),
+      caseIds: (s.cases || []).map((c) => c.id),
+      caseCount: (s.cases || []).length,
+    }));
+  }
+
+  async getSuiteDetail(id: number) {
+    const suite = await this.suiteRepo.findOne({
+      where: { id },
+      relations: ['cases'],
+    });
+    if (!suite) {
+      throw new NotFoundException(`Suite ${id} not found`);
+    }
+    return {
+      id: suite.id,
+      name: suite.name,
+      description: suite.description ?? null,
+      platform: suite.platform,
+      module: suite.module,
+      sharedPreSteps: this.parseSharedPreSteps(suite.sharedPreStepsJson),
+      cases:
+        (suite.cases || []).map((c) => ({
+          id: c.id,
+          code: c.code,
+          title: c.title,
+        })) || [],
+      caseCount: (suite.cases || []).length,
+    };
+  }
+
+  async createSuite(dto: {
+    name: string;
+    description?: string | null;
+    platform?: string | null;
+    module?: string | null;
+    sharedPreSteps?: string[];
+  }) {
+    const suite = new UserScenarioSuite();
+    suite.name = (dto.name || 'Suite').toString().trim() || 'Suite';
+    suite.description = dto.description || null;
+    suite.platform = this.normalizePlatform(dto.platform);
+    suite.module = this.normalizeModule(dto.module);
+    suite.sharedPreStepsJson = this.serializeSharedPreSteps(dto.sharedPreSteps);
+    await this.suiteRepo.save(suite);
+    return await this.getSuiteDetail(suite.id);
+  }
+
+  async updateSuite(
+    id: number,
+    dto: {
+      name?: string;
+      description?: string | null;
+      platform?: string | null;
+      module?: string | null;
+      sharedPreSteps?: string[] | null;
+    },
+  ) {
+    const suite = await this.suiteRepo.findOne({ where: { id } });
+    if (!suite) {
+      throw new NotFoundException(`Suite ${id} not found`);
+    }
+    if (dto.name !== undefined) {
+      suite.name = (dto.name || 'Suite').toString().trim() || 'Suite';
+    }
+    if (dto.description !== undefined) {
+      suite.description = dto.description || null;
+    }
+    if (dto.platform !== undefined) {
+      suite.platform = this.normalizePlatform(dto.platform);
+    }
+    if (dto.module !== undefined) {
+      suite.module = this.normalizeModule(dto.module);
+    }
+    if (dto.sharedPreSteps !== undefined) {
+      suite.sharedPreStepsJson = this.serializeSharedPreSteps(dto.sharedPreSteps);
+    }
+    await this.suiteRepo.save(suite);
+    return await this.getSuiteDetail(id);
   }
 
   async createCase(dto: CreateUserScenarioDto): Promise<UserScenario> {
@@ -1330,6 +1458,536 @@ export class UserScenariosService {
     return { filePath: relPath };
   }
 
+  async generateCodeForSuite(
+    suiteId: number,
+    username: string,
+    envTemplateId?: number | null,
+  ) {
+    const suite = await this.suiteRepo.findOne({
+      where: { id: suiteId },
+      relations: ['cases', 'cases.steps'],
+    });
+    if (!suite) {
+      throw new NotFoundException(`Suite ${suiteId} not found`);
+    }
+    const cases = (suite.cases || [])
+      .slice()
+      .sort((a, b) => a.code.localeCompare(b.code));
+    if (!cases.length) {
+      throw new NotFoundException(`Suite ${suite.name} 尚未包含任何用例`);
+    }
+
+    const platform = this.normalizePlatform(
+      suite.platform || cases[0]?.platform || 'gettr-web',
+    );
+    const isApiPlatform = platform.includes('-api-');
+    const moduleName = this.sanitizeName(
+      suite.module || cases[0]?.module || 'live-stream',
+    );
+    const safeUser = this.sanitizeName(username || 'default');
+    const root = path.resolve(
+      process.cwd(),
+      'workspace',
+      'users',
+      safeUser,
+      'suites',
+      platform,
+      moduleName,
+    );
+    await fs.promises.mkdir(root, { recursive: true });
+
+    const safeSuiteName = this.sanitizeName(suite.name || `suite-${suiteId}`);
+    const filePath = path.join(root, `${safeSuiteName}.ts`);
+    const relPath = path.relative(process.cwd(), filePath);
+
+    const sharedPreSteps = this.parseSharedPreSteps(suite.sharedPreStepsJson);
+
+    const lines: string[] = [
+      '// Auto-generated live stream suite',
+      `// Suite: ${suite.name}`,
+      `// Generated at: ${new Date().toISOString()}`,
+      '',
+    ];
+
+    const catalog = await this.actionCatalog.getCatalog(platform);
+    type UsedPage = { className: string; varName: string; module?: string | null };
+    const usedPages = new Map<string, UsedPage>();
+    const stepLinesByCase = new Map<number, string[]>();
+    let hasBindings = false;
+
+    if (!isApiPlatform) {
+      for (const sc of cases) {
+        const steps = (sc.steps || []).slice().sort((a, b) => a.order - b.order);
+        const stepLines: string[] = [];
+        for (const s of steps) {
+          let binding: StepBindingV1 | null = null;
+          if (s.binding) {
+            try {
+              binding = JSON.parse(s.binding) as StepBindingV1;
+            } catch {
+              binding = null;
+            }
+          }
+          const resolved = binding
+            ? this.actionCatalog.resolveBindingWithCatalog(catalog, binding)
+            : null;
+          if (!resolved) {
+            stepLines.push(
+              `    // Step ${s.order}: ${s.action.replace(/\r?\n/g, ' ')}`,
+            );
+            if (s.data) {
+              stepLines.push(
+                `    //   Data / Precondition: ${s.data.replace(
+                  /\r?\n/g,
+                  ' ',
+                )}`,
+              );
+            }
+            stepLines.push(
+              `    //   Expected: ${s.expected.replace(/\r?\n/g, ' ')}`,
+            );
+            continue;
+          }
+          hasBindings = true;
+          const { page, action } = resolved;
+          const pageKey = page.key;
+          if (!usedPages.has(pageKey)) {
+            usedPages.set(pageKey, {
+              className: page.className,
+              varName: page.varName,
+              module: (page as any).module ?? null,
+            });
+          }
+          const args =
+            (binding?.args || [])
+              .map((a) => `${a.value}`)
+              .filter((v) => v.length > 0) || [];
+          const argsCode = args.map((v) => JSON.stringify(v)).join(', ');
+          const call =
+            argsCode.length > 0
+              ? `    await ${page.varName}.${action.method}(${argsCode});`
+              : `    await ${page.varName}.${action.method}();`;
+          stepLines.push(
+            `    // Step ${s.order}: ${s.action.replace(/\r?\n/g, ' ')}`,
+          );
+          if (s.data) {
+            stepLines.push(
+              `    //   Data / Precondition: ${s.data.replace(
+                /\r?\n/g,
+                ' ',
+              )}`,
+            );
+          }
+          stepLines.push(
+            `    //   Expected: ${s.expected.replace(/\r?\n/g, ' ')}`,
+          );
+          stepLines.push(call);
+          const rule: StepCheckRule | undefined =
+            binding && typeof (binding as any).checkRule === 'object'
+              ? ((binding as any).checkRule as StepCheckRule)
+              : undefined;
+          if (rule && rule.type) {
+            if (rule.type === 'element-visible' || rule.type === 'element-hidden') {
+              const fromRule = (rule.locator || '').toString().trim();
+              const fromAction = (action as any).locator
+                ? (action as any).locator.toString().trim()
+                : '';
+              const locator = fromRule || fromAction;
+              if (locator) {
+                const locatorLit = JSON.stringify(locator);
+                const expectedText = (s.expected || '').toString().trim();
+                const userMessage = expectedText
+                  ? expectedText.replace(/\r?\n/g, ' ')
+                  : '';
+                const defaultMessage =
+                  rule.type === 'element-visible'
+                    ? `元素应出现：${locator}`
+                    : `元素应消失：${locator}`;
+                const description = userMessage || defaultMessage;
+                stepLines.push('    {');
+                stepLines.push(`      const driver: any = (tc as any).page;`);
+                stepLines.push(`      let el: any = null;`);
+                stepLines.push('      try {');
+                stepLines.push(
+                  `        el = driver && typeof driver.$ === 'function' ? await driver.$(${locatorLit}) : null;`,
+                );
+                stepLines.push('      } catch (e) {');
+                stepLines.push('        el = null;');
+                stepLines.push('      }');
+                if (rule.type === 'element-visible') {
+                  stepLines.push(
+                    `      tc.assertNotNull(el, ${JSON.stringify(description)});`,
+                  );
+                } else {
+                  stepLines.push(
+                    `      if (el) { throw new Error(${JSON.stringify(
+                      description,
+                    )} + '（实际仍然存在）'); }`,
+                  );
+                }
+                stepLines.push('    }');
+              }
+            } else if (rule.type === 'url-contains' || rule.type === 'url-equals') {
+              const expectedUrl = (rule.expectedUrl || '').toString().trim();
+              if (expectedUrl) {
+                const expectedLit = JSON.stringify(expectedUrl);
+                const mode =
+                  rule.type === 'url-contains' ? '包含' : '等于';
+                stepLines.push('    {');
+                stepLines.push(`      const driver: any = (tc as any).page;`);
+                stepLines.push(
+                  `      const url = driver && typeof driver.getUrl === 'function' ? await driver.getUrl() :`,
+                );
+                stepLines.push(
+                  `        driver && typeof driver.url === 'function' ? await driver.url() : '';`,
+                );
+                stepLines.push(
+                  rule.type === 'url-contains'
+                    ? `      const ok = typeof url === 'string' && url.includes(${expectedLit});`
+                    : `      const ok = typeof url === 'string' && url === ${expectedLit};`,
+                );
+                stepLines.push(
+                  `      tc.assertEqual(true, ok, ${JSON.stringify(
+                    `URL 检查：期望${mode} ${expectedUrl}`,
+                  )});`,
+                );
+                stepLines.push('    }');
+              }
+            }
+          }
+        }
+        stepLinesByCase.set(sc.id, stepLines);
+      }
+    }
+
+    const importCore = isApiPlatform
+      ? "import { describe, it, expect, useTestCase } from 'core-lib';"
+      : "import { describe, it, useTestCase } from 'core-lib';";
+    lines.push(importCore);
+    if (!isApiPlatform && hasBindings && usedPages.size > 0) {
+      const byModule = new Map<string, Set<string>>();
+      for (const { className, module } of usedPages.values()) {
+        const mod =
+          (module && module.trim()) || this.getModuleNameForPlatform(platform);
+        if (!byModule.has(mod)) byModule.set(mod, new Set<string>());
+        byModule.get(mod)!.add(className);
+      }
+      for (const [mod, classSet] of byModule.entries()) {
+        const uniqueClassNames = Array.from(classSet.values());
+        lines.push(
+          `import { ${uniqueClassNames.join(', ')} } from '${mod}';`,
+        );
+      }
+    }
+    lines.push('');
+
+    const describeTitlePrefix =
+      platform === 'gettr-android'
+        ? '[android]'
+        : platform === 'gettr-mobile-web'
+        ? '[mobile-web]'
+        : `[${platform}]`;
+    const describeTitle = `${describeTitlePrefix} Suite: ${suite.name}`;
+    lines.push(`describe(${JSON.stringify(describeTitle)}, () => {`);
+
+    const envConfigLines: string[] = [];
+    const tplLines: string[] = [];
+    if (envTemplateId && Number.isFinite(envTemplateId)) {
+      const tpl = await this.envTemplateRepo.findOne({
+        where: { id: envTemplateId as number },
+      });
+      if (tpl && tpl.enabled) {
+        let parsed: any = {};
+        try {
+          parsed = JSON.parse(tpl.config || '{}');
+        } catch {
+          parsed = {};
+        }
+        const rawLines = JSON.stringify(parsed, null, 2).split('\n');
+        let innerLines: string[];
+        if (
+          rawLines.length >= 2 &&
+          rawLines[0].trim().startsWith('{') &&
+          rawLines[rawLines.length - 1].trim().startsWith('}')
+        ) {
+          innerLines = rawLines.slice(1, -1);
+        } else {
+          innerLines = rawLines;
+        }
+        const json = innerLines.map((ln) => (ln ? `      ${ln}` : ln));
+        tplLines.push(`  // Env template: ${tpl.name} (${tpl.key})`);
+        if (platform === 'gettr-android') {
+          envConfigLines.push(
+            `  const tc = useTestCase({`,
+            `    module: '${moduleName}',`,
+            `    android: {`,
+            ...json,
+            `    },`,
+            `    keepAppOpen: true,`,
+            `    shareSession: true,`,
+            `  });`,
+            '',
+          );
+        } else {
+          envConfigLines.push(
+            `  const tc = useTestCase({`,
+            `    module: '${moduleName}',`,
+            `    browser: {`,
+            ...json,
+            `    },`,
+            `  });`,
+            '',
+          );
+        }
+      }
+    }
+    if (!envConfigLines.length) {
+      if (platform === 'gettr-android') {
+        envConfigLines.push(
+          `  const tc = useTestCase({`,
+          `    module: '${moduleName}',`,
+          `    android: {`,
+          `      // TODO: 根据实际设备/环境配置以下参数：`,
+          `      // deviceName: 'my-device',`,
+          `      // udid: 'YOUR_DEVICE_UDID',`,
+          `      // appPackage: 'com.gettr.gettr',`,
+          `      // appActivity: '.MainActivity',`,
+          `    },`,
+          `    keepAppOpen: true,`,
+          `    shareSession: true,`,
+          `  });`,
+          '',
+        );
+      } else {
+        envConfigLines.push(
+          `  const tc = useTestCase({`,
+          `    module: '${moduleName}',`,
+          `    browser: {`,
+          `      headless: false,`,
+          `      debug: true,`,
+          `    },`,
+          `  });`,
+          '',
+        );
+      }
+    }
+    lines.push(...tplLines);
+    lines.push(...envConfigLines);
+
+    if (!isApiPlatform && hasBindings && usedPages.size > 0) {
+      for (const { className, varName } of usedPages.values()) {
+        lines.push(`  const ${varName} = new ${className}(tc as any);`);
+      }
+      lines.push('');
+    }
+
+    lines.push(
+      `  async function runSuitePreSteps() {`,
+      `    // 套件级前置步骤（在「用户场景」页面的套件中维护，仅需实现一次即可复用）：`,
+    );
+    if (sharedPreSteps.length) {
+      sharedPreSteps.forEach((txt, idx) => {
+        lines.push(`    // ${idx + 1}. ${txt}`);
+      });
+    } else {
+      lines.push(`    // （尚未填写，可在套件中补充前置步骤说明）`);
+    }
+    lines.push(
+      `    // TODO: 根据上面的描述实现实际前置操作，避免在各个用例中重复维护。`,
+      `  }`,
+      '',
+    );
+
+    if (isApiPlatform) {
+      lines.push(
+        '  type ApiTestConfig = {',
+        '    baseUrl: string;',
+        '    defaultHeaders?: Record<string, string>;',
+        '    sampleLivePostId?: string;',
+        '  };',
+        '',
+        '  function getApiTestConfig(): ApiTestConfig {',
+        '    const anyGlobal = globalThis as any;',
+        '    const baseCfg = (anyGlobal?.params?.apiTestConfig ?? {}) as Partial<ApiTestConfig>;',
+        '    const envCfgRaw = (anyGlobal?.params?.envConfig ?? null) as any;',
+        '    const envCfg =',
+        '      envCfgRaw && typeof envCfgRaw === "object"',
+        '        ? (envCfgRaw as Partial<ApiTestConfig>)',
+        '        : ({} as Partial<ApiTestConfig>);',
+        '    const merged: Partial<ApiTestConfig> = { ...baseCfg, ...envCfg };',
+        "    if (!merged.baseUrl) {",
+        "      throw new Error('apiTestConfig.baseUrl is not configured. 请在 Settings → Parameters → API Tests 中配置。');",
+        '    }',
+        '    return merged as ApiTestConfig;',
+        '  }',
+        '',
+        '  async function apiRequest(path: string, init: RequestInit = {}) {',
+        '    const { baseUrl, defaultHeaders } = getApiTestConfig();',
+        "    const url = `${baseUrl.replace(/\\/$/, '')}${path}`;",
+        '    const headers: Record<string, string> = {',
+        '      ...(defaultHeaders || {}),',
+        "      ...(init.headers as Record<string, string> | undefined || {}),",
+        '    };',
+        '    const res = await fetch(url, { ...init, headers });',
+        '    return res;',
+        '  }',
+        '',
+        '  async function apiPost(path: string, body?: any, init: RequestInit = {}) {',
+        "    const headers: Record<string, string> = { 'content-type': 'application/json', ...(init.headers as Record<string, string> | undefined || {}) };",
+        "    return apiRequest(path, { ...init, method: 'POST', headers, body: body == null ? undefined : JSON.stringify(body) });",
+        '  }',
+        '',
+      );
+    }
+
+    for (const sc of cases) {
+      const steps = (sc.steps || []).slice().sort((a, b) => a.order - b.order);
+      const caseTitle = `${sc.code} ${sc.title}`;
+      lines.push(`  it(${JSON.stringify(caseTitle)}, async () => {`);
+      lines.push('    await runSuitePreSteps();');
+      if (isApiPlatform) {
+        const parseApiStepData = (raw: string | null | undefined) => {
+          const result: { method: string; path: string; body: string } = {
+            method: 'GET',
+            path: '',
+            body: '',
+          };
+          const text = (raw || '').toString();
+          if (text.trim()) {
+            for (const part of text.split(',')) {
+              const seg = part.trim();
+              if (!seg) continue;
+              const eqIdx = seg.indexOf('=');
+              if (eqIdx <= 0) continue;
+              const key = seg
+                .slice(0, eqIdx)
+                .trim()
+                .toLowerCase();
+              const value = seg.slice(eqIdx + 1).trim();
+              if (key === 'method' && value) {
+                result.method = value.toUpperCase();
+              } else if (key === 'path') {
+                result.path = value;
+              } else if (key === 'body' || key === 'payload') {
+                result.body = value;
+              }
+            }
+          }
+          return result;
+        };
+
+        if (!steps.length) {
+          lines.push(
+            `    // TODO: 当前用例尚未定义具体步骤，请先在用例管理页面补充。`,
+          );
+        } else {
+          lines.push(
+            `    // 以下步骤由用例管理模块生成，请根据“数据”列中的 method/path/body 补充 API 调用与断言：`,
+          );
+          let apiStepIndex = 0;
+          for (const s of steps) {
+            const actionText = (s.action || '').replace(/\r?\n/g, ' ');
+            const expectedText = (s.expected || '').replace(/\r?\n/g, ' ');
+            const dataText = (s.data || '').replace(/\r?\n/g, ' ');
+            lines.push(`    // Step ${s.order}: ${actionText}`);
+            if (dataText) {
+              lines.push(`    //   Data / Precondition: ${dataText}`);
+            }
+            if (expectedText) {
+              lines.push(`    //   Expected: ${expectedText}`);
+            }
+
+            const parsed = parseApiStepData(s.data as any);
+            const method = (parsed.method || 'GET').toUpperCase();
+            const pathValue = parsed.path;
+            const bodyValue = parsed.body;
+
+            if (!pathValue) {
+              lines.push(
+                `    // TODO: 本步骤尚未配置 path=...，请在「步骤与检查点」中补充 API 路径后，在此处实现调用。`,
+                '',
+              );
+              continue;
+            }
+
+            apiStepIndex += 1;
+            const resVar = `res${apiStepIndex}`;
+            const methodLit = JSON.stringify(method);
+            const pathLit = JSON.stringify(pathValue);
+
+            if (method === 'GET' || method === 'DELETE') {
+              lines.push(
+                `    // AUTO-GEN: API 调用骨架（${method} ${pathValue}）`,
+                `    const ${resVar} = await apiRequest(${pathLit}, { method: ${methodLit} });`,
+                `    tc.assertEqual(200, ${resVar}.status, 'HTTP ${method} ${pathValue} 返回 200');`,
+                `    // TODO: 根据上面的“Expected”补充对 ${resVar} JSON 的断言（errcode / 字段值等）。`,
+                '',
+              );
+            } else if (method === 'POST') {
+              if (bodyValue) {
+                const bodyComment = bodyValue.replace(/\r?\n/g, ' ');
+                lines.push(
+                  `    // AUTO-GEN: API 调用骨架（POST ${pathValue}）`,
+                  `    //   Body: ${bodyComment}`,
+                  `    const ${resVar} = await apiPost(${pathLit}); // TODO: 将上面的 Body 填入 apiPost 第二个参数`,
+                  `    tc.assertEqual(200, ${resVar}.status, 'HTTP POST ${pathValue} 返回 200');`,
+                  `    // TODO: 根据上面的“Expected”补充对 ${resVar} JSON 的断言（errcode / 字段值等）。`,
+                  '',
+                );
+              } else {
+                lines.push(
+                  `    // AUTO-GEN: API 调用骨架（POST ${pathValue}）`,
+                  `    const ${resVar} = await apiPost(${pathLit}); // TODO: 传入请求 body（如有需要）`,
+                  `    tc.assertEqual(200, ${resVar}.status, 'HTTP POST ${pathValue} 返回 200');`,
+                  `    // TODO: 根据上面的“Expected”补充对 ${resVar} JSON 的断言（errcode / 字段值等）。`,
+                  '',
+                );
+              }
+            } else {
+              lines.push(
+                `    // AUTO-GEN: API 调用骨架（${method} ${pathValue}）`,
+                `    const ${resVar} = await apiRequest(${pathLit}, { method: ${methodLit} }); // TODO: 如有 Body，请补充 body 字段`,
+                `    tc.assertEqual(200, ${resVar}.status, 'HTTP ${method} ${pathValue} 返回 200');`,
+                `    // TODO: 根据上面的“Expected”补充对 ${resVar} JSON 的断言（errcode / 字段值等）。`,
+                '',
+              );
+            }
+          }
+        }
+      } else {
+        const stepLines = stepLinesByCase.get(sc.id) || [];
+        if (!stepLines.length) {
+          lines.push(
+            `    // TODO: 当前用例尚未定义具体步骤，请在用例管理页面补充后完善此处实现。`,
+          );
+        } else {
+          lines.push(
+            `    // 以下步骤由用例管理模块自动生成，已复用套件级前置步骤：`,
+          );
+          lines.push(...stepLines);
+        }
+      }
+      lines.push('  });');
+      lines.push('');
+    }
+
+    lines.push('});');
+    lines.push('');
+
+    await fs.promises.writeFile(filePath, lines.join('\n'), 'utf8');
+
+    // 标记套件内的用例已生成代码（指向同一个套件文件）
+    for (const sc of cases) {
+      sc.hasCode = true;
+      sc.generatedFilePath = relPath;
+      sc.generatedAt = new Date();
+      sc.status = 'code_generated';
+      await this.caseRepo.save(sc);
+    }
+
+    return { filePath: relPath };
+  }
+
   async findByGeneratedFilePath(pathRaw: string): Promise<UserScenario | null> {
     const trimmed = (pathRaw || '').trim();
     if (!trimmed) return null;
@@ -1373,6 +2031,21 @@ export class UserScenariosService {
     }
     if (dto.description !== undefined) {
       entity.description = dto.description || null;
+    }
+    if (dto.suiteId !== undefined) {
+      if (dto.suiteId === null) {
+        entity.suite = null;
+        entity.suiteId = null;
+      } else {
+        const suite = await this.suiteRepo.findOne({
+          where: { id: dto.suiteId },
+        });
+        if (!suite) {
+          throw new NotFoundException(`Suite ${dto.suiteId} not found`);
+        }
+        entity.suite = suite;
+        entity.suiteId = suite.id;
+      }
     }
     await this.caseRepo.save(entity);
     await this.ensureOption('module', entity.module);

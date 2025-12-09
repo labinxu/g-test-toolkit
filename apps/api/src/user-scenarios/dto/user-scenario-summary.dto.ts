@@ -16,4 +16,6 @@ export class UserScenarioSummaryDto {
   description?: string | null;
   acceptanceCriteria?: string | null;
   generatedFilePath?: string | null;
+  suiteId?: number | null;
+  suiteName?: string | null;
 }

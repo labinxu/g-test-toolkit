@@ -35,6 +35,7 @@ import { ApiTestsModule } from './api-tests/api-tests.module';
 import { CurlModule } from './curl/curl.module';
 import { FlutterModule } from './mobile/flutter/flutter.module';
 import { LiveModule } from './live/live.module';
+import { UserScenarioSuite } from './user-scenarios/entities/user-scenario-suite.entity';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -56,6 +57,7 @@ import { LiveModule } from './live/live.module';
         ActionPlatform,
         UserScenarioOption,
         EnvTemplate,
+        UserScenarioSuite,
       ],
       synchronize: true,
     }),

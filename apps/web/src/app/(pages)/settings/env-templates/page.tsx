@@ -112,7 +112,6 @@ export default function EnvTemplatesPage() {
 
   useEffect(() => {
     void loadTemplates()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platform, driver])
 
   const startCreate = () => {

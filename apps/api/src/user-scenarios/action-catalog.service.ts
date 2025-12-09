@@ -113,9 +113,7 @@ export class ActionCatalogService {
     const platform = (platformRaw || 'gettr-web').toLowerCase();
     const fromDb = await this.loadCatalogFromDb(platform);
     if (fromDb) return fromDb;
-    if (platform === 'gettr-web') {
-      return GETTR_WEB_ACTION_CATALOG;
-    }
+    // 若数据库没有记录，则返回空，不再从 shared-libs 或默认常量回退
     return { platform, pages: [] };
   }
 

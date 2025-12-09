@@ -9,7 +9,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
-import { FileNode } from '../files/types';
+import { type FileNode } from '@/components/files/directory-tree';
 export function RunAlertDialog({
   running,
   runTarget,

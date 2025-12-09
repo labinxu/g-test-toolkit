@@ -775,7 +775,8 @@ export class SettingsService {
         .map((item) => ({
           method:
             typeof item?.method === 'string' ? item.method.toUpperCase() : '',
-          category: typeof item?.category === 'string' ? item.category : '',
+          category:
+            typeof item?.category === 'string' ? item.category.trim() : '',
           url: typeof item?.url === 'string' ? item.url : '',
           headers: typeof item?.headers === 'string' ? item.headers : '',
           payload: typeof item?.payload === 'string' ? item.payload : '',
@@ -832,26 +833,56 @@ export class SettingsService {
         list = [];
       }
     }
-    const key = `${normalized.method}::${normalized.category}::${normalized.url}`;
     const next: typeof list = [];
-    let replaced = false;
     for (const item of list) {
-      const itemKey = `${(item.method || '').toUpperCase()}::${item.category || ''}::${item.url || ''}`;
-      if (!replaced && itemKey === key) {
-        next.push(normalized);
-        replaced = true;
-      } else {
-        next.push(item);
-      }
+      const sameCategory = (item.category || '').trim() === normalized.category;
+      if (sameCategory) continue;
+      next.push(item);
     }
-    if (!replaced) {
-      next.push(normalized);
-    }
+    next.push(normalized);
     await this.set(
       scopedKey('json'),
       JSON.stringify(next),
       { encrypt: false },
     );
     return normalized;
+  }
+
+  async deleteCurlPayload(
+    input: { method?: string; category: string; url?: string },
+    userId?: number,
+  ): Promise<{ removed: number; remaining: number }> {
+    const scopedKey = (suffix: string) =>
+      this.makeKey(`curlPayloads.${suffix}`, userId ?? null);
+    const method = (input.method || '').toUpperCase();
+    const category = (input.category || '').trim();
+    const url = (input.url || '').trim();
+    if (!category) {
+      throw new Error('category is required');
+    }
+
+    const list = await this.getCurlPayloads(userId);
+    const filtered: typeof list = [];
+    let removed = 0;
+    for (const item of list) {
+      const sameMethod = (item.method || '').toUpperCase() === method;
+      const sameCategory = (item.category || '').trim() === category;
+      const sameUrl = (item.url || '').trim() === url;
+      const methodMatch = !method || sameMethod;
+      const shouldRemove = methodMatch && sameCategory && (!url || sameUrl);
+      if (shouldRemove) {
+        removed += 1;
+      } else {
+        filtered.push(item);
+      }
+    }
+
+    if (removed > 0) {
+      await this.set(scopedKey('json'), JSON.stringify(filtered), {
+        encrypt: false,
+      });
+    }
+
+    return { removed, remaining: filtered.length };
   }
 }

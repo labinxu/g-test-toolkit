@@ -15,3 +15,11 @@ export async function PUT(req: NextRequest) {
   });
 }
 
+export async function DELETE(req: NextRequest) {
+  const body = await req.json().catch(() => ({}));
+  return proxyJsonWithReq(req, '/settings/curl-payloads', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+}

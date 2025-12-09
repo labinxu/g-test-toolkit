@@ -150,7 +150,6 @@ export default function StoreCommentsPage() {
       }
     } catch {}
     restoredKeyRef.current = currentLsKey
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLsKey])
 
   // Keep appendMode aligned with default on store change or default change

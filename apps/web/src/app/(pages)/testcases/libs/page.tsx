@@ -15,6 +15,8 @@ import {
   FileScan,
   ListRestart,
   MoreVertical,
+  Trash2,
+  Pencil,
 } from 'lucide-react'
 import { AppiumToggleButton } from '@/components/appium-toggle-button'
 import { SlidersHorizontal } from 'lucide-react'
@@ -38,7 +40,6 @@ import { PackagePlus } from 'lucide-react'
 import { OutputPanel } from '@/components/output-panel'
 import { useSocket } from '../socket-content'
 import NewFileOrFolder from '@/components/files/new-file-folder'
-import DirectoryTree from '../files/directory-tree'
 import { toast } from 'sonner'
 import AndroidInspectorEmbed from '@/components/android-inspector-embed'
 import type {
@@ -62,6 +63,8 @@ import { useLibsPageCache } from '../../page-cache'
 import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import { OptionsSelect } from '@/components/select/options-select'
 import { useRouter } from 'next/navigation'
+import DirectoryTree, { type FileNode, type DirectoryTreeAction } from '@/components/files/directory-tree'
+import { DeleteAlertDialog } from '../alert-dialog/delete-alert'
 
 export default function Page() {
   const router = useRouter()
@@ -85,6 +88,8 @@ export default function Page() {
     }
   })
   const [refreshKey, setRefreshKey] = useState(0)
+  const [deleteTarget, setDeleteTarget] = useState<FileNode | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [openLog, setOpenLog] = useState(false)
   const [showAndroidInspector, setShowAndroidInspector] = useState(false)
   const [deviceIds, setDeviceIds] = useState<string[]>([])
@@ -305,7 +310,6 @@ export default function Page() {
         } catch {}
       } catch {}
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Directory tree cache settings (global)
   const [dirCacheDisabled, setDirCacheDisabled] = useState<boolean>(() => {
@@ -586,7 +590,6 @@ export default function Page() {
         lastRef.current?.cachedInspectorState
       libsCache.save({ ...(lastRef.current || {}), cachedInspectorState: st })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Persist last opened file for cross-page restore
   useEffect(() => {
@@ -693,6 +696,96 @@ export default function Page() {
     }
   }, [])
 
+  const getParentDir = useCallback((path: string) => {
+    const idx = path.lastIndexOf('/')
+    return idx > 0 ? path.slice(0, idx) : ''
+  }, [])
+
+  const handleDeleteNode = useCallback(
+    async (node: FileNode) => {
+      setDeleteLoading(true)
+      try {
+        const res = await fetch('/api/files/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ path: node.path }),
+        })
+        if (!res.ok) {
+          const err = await normalizeResponseError(res)
+          throw new Error(err.message || 'Delete failed')
+        }
+        setRefreshKey((k) => k + 1)
+        if (currentFile === node.path) {
+          setCurrentFile('')
+        }
+        if (node.isDirectory) {
+          setCurrentDir((dir) => {
+            const parent = getParentDir(node.path)
+            return dir === node.path ? parent : dir
+          })
+        }
+        toast.success('Delete succeeded')
+      } catch (e: any) {
+        toast.error(e?.message || 'Delete failed')
+      } finally {
+        setDeleteLoading(false)
+        setDeleteTarget(null)
+      }
+    },
+    [currentFile, getParentDir]
+  )
+
+  const handleRenameNode = useCallback(
+    async (node: FileNode) => {
+      try {
+        const currentName = node.name || node.path.split('/').pop() || ''
+        const input = window.prompt('Rename to', currentName)
+        if (input == null) return
+        const newName = input.trim()
+        if (!newName || newName === currentName) return
+        const res = await fetch('/api/files/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ path: node.path, newName }),
+        })
+        if (!res.ok) {
+          const err = await normalizeResponseError(res)
+          throw new Error(err.message || 'Rename failed')
+        }
+        const data = await res.json().catch(() => ({} as any))
+        const newPath: string = data?.newPath || `${getParentDir(node.path)}/${newName}`
+        setRefreshKey((k) => k + 1)
+        setCurrentFile((prev) => (prev === node.path ? newPath : prev))
+        setCurrentDir((prev) => (prev === node.path ? newPath : prev))
+        toast.success('Rename succeeded')
+      } catch (e: any) {
+        toast.error(e?.message || 'Rename failed')
+      }
+    },
+    [getParentDir]
+  )
+
+  const nodeActions = useCallback(
+    (node: FileNode): DirectoryTreeAction[] => [
+      {
+        key: 'rename',
+        label: 'Rename',
+        icon: Pencil,
+        onSelect: () => handleRenameNode(node),
+      },
+      {
+        key: 'delete',
+        label: 'Delete',
+        icon: Trash2,
+        danger: true,
+        onSelect: () => setDeleteTarget(node),
+      },
+    ],
+    [handleRenameNode]
+  )
+
   // Appium status handled by shared AppiumToggleButton
   const renderLogs = () => {
     return logs.map((log, index) => {
@@ -734,7 +827,6 @@ export default function Page() {
             api={'/api/testcase/listcore?depth=4'}
             currentDir={currentDir}
             refreshKey={refreshKey}
-            setRefreshKey={setRefreshKey}
             onSelect={setCurrentFile}
             onDirSelect={setCurrentDir}
             selectedPath={currentFile}
@@ -742,6 +834,7 @@ export default function Page() {
             cacheTtlMs={dirCacheTtlMs}
             collapsible={false}
             filterText={dirFilterText}
+            nodeActions={nodeActions}
           />
         </DirectoryTreePanel>
       </div>
@@ -1499,6 +1592,12 @@ export default function Page() {
           <OutputPanel renderLogs={renderLogs} open={openLog} setOpen={setOpenLog} />
         </div>
       </div>
+      <DeleteAlertDialog
+        deleting={deleteLoading}
+        deleteTarget={deleteTarget}
+        setDeleteTarget={setDeleteTarget}
+        handleDelete={handleDeleteNode}
+      />
     </div>
   )
 }

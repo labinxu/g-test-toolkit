@@ -1,7 +1,7 @@
 // AUTO-GENERATED: ACTION-CATALOG
 import { IPage } from './interface/ipage';
 
-export class LoginPage extends IPage {
+export class SwitchAccountPage extends IPage {
   constructor(ins: any) {
     super(ins);
   }

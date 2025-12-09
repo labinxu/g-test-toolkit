@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import DirectoryTreePanel from '@/components/files/directory-tree-panel'
 import MonacoScriptEditor, { type MonacoScriptEditorHandle } from '@/components/files/monaco-script-editor'
@@ -14,9 +14,22 @@ export default function Page() {
   const [running, setRunning] = useState(false)
   const [scripts, setScripts] = useState<string>('')
   const editorRef = useRef<MonacoScriptEditorHandle | null>(null)
+
+  const run = useCallback(async () => {
+    if (!socket || scripts === '') {
+      setLogs(['ERROR: Socket not initialized!'])
+      return
+    }
+    setLogs(['RUN Script'])
+
+    socket.emit('run-script', scripts)
+  }, [scripts])
+
   useEffect(() => {
-    if (running) run()
-  }, [running])
+    if (running) {
+      void run()
+    }
+  }, [running, run])
   useEffect(() => {
     // 连接到 NestJS WebSocket Gateway
     socket = io('http://localhost:3001/log')
@@ -61,15 +74,6 @@ export default function Page() {
     }
   }, [])
 
-  const run = async () => {
-    if (!socket || scripts === '') {
-      setLogs(['ERROR: Socket not initialized!'])
-      return
-    }
-    setLogs(['RUN Script'])
-
-    socket.emit('run-script', scripts)
-  }
   const renderLogs = () => {
     return logs.map((log, index) => {
       let color = 'black'

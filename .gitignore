@@ -31,7 +31,7 @@ apps/api/workspace/videos
 docs/flutter-pages
 # Turbo
 .turbo
-
+.emigo_repomap
 # Vercel
 .vercel
 

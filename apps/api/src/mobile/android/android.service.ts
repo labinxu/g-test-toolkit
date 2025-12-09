@@ -46,8 +46,112 @@ export class AndroidService {
     this.logger = this.loggerService.createLogger('AndroidService');
   }
   async getDevices() {
-    const result = await this.commandService.runCommand('adb devices');
-    return { devices: result.stdout };
+    const errors: string[] = [];
+    type ParsedDevice = {
+      serial: string;
+      state: string;
+      product?: string;
+      model?: string;
+      device?: string;
+      transportId?: string;
+      usb?: string;
+    };
+
+    const parseDevices = (text: string): ParsedDevice[] => {
+      const rows: ParsedDevice[] = [];
+      text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(
+          (line) =>
+            line &&
+            !line.toLowerCase().startsWith('list of devices') &&
+            !line.toLowerCase().startsWith('* daemon not running'),
+        )
+        .forEach((line) => {
+          const cleaned = line.replace(/,+$/, ''); // tolerate trailing comma
+          const parts = cleaned.split(/\s+/).filter(Boolean);
+          const serial = parts.shift();
+          if (!serial) return;
+          const state = parts.shift() || 'unknown';
+          const info: ParsedDevice = { serial, state };
+          for (const part of parts) {
+            const [k, ...rest] = part.split(':');
+            const value = rest.join(':');
+            if (!k || !value) continue;
+            switch (k) {
+              case 'product':
+                info.product = value;
+                break;
+              case 'model':
+                info.model = value;
+                break;
+              case 'device':
+                info.device = value;
+                break;
+              case 'transport_id':
+              case 'transport-id':
+                info.transportId = value;
+                break;
+              case 'usb':
+                info.usb = value;
+                break;
+              default:
+                break;
+            }
+          }
+          rows.push(info);
+        });
+      return rows;
+    };
+
+    const tryStartLocalServer = async () => {
+      try {
+        await this.commandService.runCommand('adb start-server', 8000);
+      } catch (err) {
+        errors.push(
+          `start-server failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    };
+
+    const tryList = async (cmd: string, label: string) => {
+      try {
+        const result = await this.commandService.runCommand(cmd, 8000);
+        if (result?.stdout?.trim()) {
+          return result.stdout;
+        }
+        errors.push(`${label}: empty output`);
+      } catch (err) {
+        errors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return null;
+    };
+
+    await tryStartLocalServer();
+
+    // 1) Try local adb server first
+    const local = await tryList('adb devices -l', 'local');
+    if (local) {
+      return { devices: local, list: parseDevices(local) };
+    }
+
+    // 2) Fallback to remote/host adb server if provided (useful inside containers without USB perms)
+    const remoteHost = process.env.ANDROID_ADB_SERVER_HOST || process.env.ADB_SERVER_HOST;
+    const remotePort = process.env.ANDROID_ADB_SERVER_PORT || process.env.ADB_SERVER_PORT || '5037';
+    if (remoteHost) {
+      const remoteCmd = `adb -H ${remoteHost} -P ${remotePort} devices -l`;
+      const remote = await tryList(remoteCmd, `remote(${remoteHost}:${remotePort})`);
+      if (remote) {
+        return { devices: remote, list: parseDevices(remote) };
+      }
+    }
+
+    const msg =
+      errors.length > 0
+        ? `Failed to list devices: ${errors.join(' | ')}`
+        : 'Failed to list devices';
+    throw new Error(msg);
   }
   async getScreen(deviceId: string) {
     try {

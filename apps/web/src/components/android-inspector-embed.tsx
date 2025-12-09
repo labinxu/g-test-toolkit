@@ -252,16 +252,14 @@ const AndroidInspectorEmbed = forwardRef<AndroidInspectorEmbedHandle, Props>(
         } catch {}
         fetchSnapshot({ silent: false })
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [deviceId])
+      }, [deviceId])
 
     useEffect(() => {
       if (refreshKey !== undefined) {
         // avoid overlapping requests
         if (!inflightRef.current) fetchSnapshot({ fromAuto: true })
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [refreshKey])
+      }, [refreshKey])
 
     // External reset: zoom=1, pan={0,0}
     useEffect(() => {

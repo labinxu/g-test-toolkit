@@ -227,7 +227,6 @@ export default function TraceabilityPage() {
     if (user) {
       fetchTests()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   useEffect(() => {
@@ -251,7 +250,6 @@ export default function TraceabilityPage() {
         if (typeof cfg?.xr?.labels === 'string') setXrLabels(cfg.xr.labels)
       }
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUser?.username])
 
   useEffect(() => {
@@ -291,7 +289,6 @@ export default function TraceabilityPage() {
       } catch {}
     }
     run()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUser?.username])
 
   // Save export config to server when changed

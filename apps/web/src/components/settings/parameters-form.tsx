@@ -791,7 +791,7 @@ export const ParametersForm = forwardRef<ParametersFormHandle, ParametersFormPro
               <div className="space-y-3">
                 <div>
                   <p className="text-muted-foreground text-xs">
-                    JSON object: {'{'} "envName": {'{'} host, port, tls?, cluster? {'}'} {'}'}
+                    JSON object: {'{'} &quot;envName&quot;: {'{'} host, port, tls?, cluster? {'}'} {'}'}
                   </p>
                   <p className="text-muted-foreground text-xs">Example:</p>
                   <pre className="bg-muted max-h-40 overflow-auto rounded-md border p-2 text-xs">

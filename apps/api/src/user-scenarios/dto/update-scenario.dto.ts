@@ -1,5 +1,5 @@
 import { UserScenarioStatus } from '../entities/user-scenario.entity';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class UpdateUserScenarioDto {
   @IsOptional()
@@ -33,4 +33,8 @@ export class UpdateUserScenarioDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  suiteId?: number | null;
 }

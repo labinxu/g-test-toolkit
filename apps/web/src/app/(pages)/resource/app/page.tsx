@@ -42,6 +42,16 @@ type FileNode = {
   children?: FileNode[]
 }
 
+type AndroidDeviceInfo = {
+  serial?: string
+  state?: string
+}
+
+type AndroidDevicesResponse = {
+  devices?: string
+  list?: AndroidDeviceInfo[]
+}
+
 const APP_FILES_QUERY_KEY = ['app-files']
 const ANDROID_DEVICES_QUERY_KEY = ['android-device-list']
 
@@ -160,7 +170,7 @@ export default function AppTestCasesPage() {
     refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
   })
 
-  const androidDevicesQuery = useQuery({
+  const androidDevicesQuery = useQuery<AndroidDevicesResponse>({
     queryKey: ANDROID_DEVICES_QUERY_KEY,
     queryFn: async () => {
       const res = await fetch('/api/android/devices', {
@@ -176,7 +186,7 @@ export default function AppTestCasesPage() {
         }
         throw new Error(err.message || 'Failed to fetch Android devices')
       }
-      return res.json() as Promise<{ devices: string }>
+      return res.json() as Promise<AndroidDevicesResponse>
     },
     refetchOnWindowFocus: false,
     refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
@@ -253,13 +263,28 @@ export default function AppTestCasesPage() {
   )
 
   const availableDeviceSerials = useMemo(() => {
+    const serials = new Set<string>()
+
     const devicesOutput = androidDevicesQuery.data?.devices ?? ''
-    return devicesOutput
+    devicesOutput
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line && line.endsWith('device'))
-      .map((line) => line.split(/\s+/)[0])
-  }, [androidDevicesQuery.data?.devices])
+      .forEach((line) => {
+        const serial = line.split(/\s+/)[0]
+        if (serial) serials.add(serial)
+      })
+
+    androidDevicesQuery.data?.list?.forEach((device) => {
+      const serial = device.serial?.trim()
+      const state = device.state?.toLowerCase()
+      if (serial && state === 'device') {
+        serials.add(serial)
+      }
+    })
+
+    return Array.from(serials)
+  }, [androidDevicesQuery.data?.devices, androidDevicesQuery.data?.list])
 
   const formatCreatedAt = useCallback((value?: string | null) => {
     if (!value) return '-'

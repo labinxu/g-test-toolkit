@@ -27,6 +27,7 @@ import { File as FastifyMulterFile } from 'fastify-multer/lib/interfaces';
 import { AiService } from '../ai/ai.service';
 import { ActionCatalogService } from './action-catalog.service';
 import { CreateUserScenarioDto } from './dto/create-scenario.dto';
+import { UpsertSuiteDto } from './dto/upsert-suite.dto';
 
 @Controller('user-scenarios')
 export class UserScenariosController {
@@ -68,6 +69,57 @@ export class UserScenariosController {
     } catch (err) {
       throw new NotFoundException(
         (err && (err as Error).message) || 'Failed to list user scenarios',
+      );
+    }
+  }
+
+  @Get('suites')
+  @UseGuards(AuthGuard('jwt'))
+  async listSuites(@Query('platform') platform?: string | 'all') {
+    try {
+      return await this.service.listSuites({ platform: platform || 'all' });
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to list suites',
+      );
+    }
+  }
+
+  @Get('suites/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async getSuite(@Param('id', ParseIntPipe) id: number) {
+    try {
+      return await this.service.getSuiteDetail(id);
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || `Failed to fetch suite ${id}`,
+      );
+    }
+  }
+
+  @Post('suites')
+  @UseGuards(AuthGuard('jwt'))
+  async createSuite(@Body() body: UpsertSuiteDto) {
+    try {
+      return await this.service.createSuite(body);
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || 'Failed to create suite',
+      );
+    }
+  }
+
+  @Patch('suites/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async updateSuite(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpsertSuiteDto,
+  ) {
+    try {
+      return await this.service.updateSuite(id, body);
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || `Failed to update suite ${id}`,
       );
     }
   }
@@ -391,6 +443,38 @@ export class UserScenariosController {
       throw new NotFoundException(
         (err && (err as Error).message) ||
           `Failed to generate code for user scenario ${id}`,
+      );
+    }
+  }
+
+  @Post('suites/:id/generate-code')
+  @UseGuards(AuthGuard('jwt'))
+  async generateSuiteCode(
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: {
+      envTemplateId?: number | null
+    },
+    @Req() req: Request,
+  ) {
+    try {
+      const user = (req as any)?.user as any;
+      const usernameRaw = user?.username || user?.['username'] || 'default';
+      const username = checkPath(usernameRaw);
+      const { filePath } = await this.service.generateCodeForSuite(
+        id,
+        username,
+        body?.envTemplateId,
+      );
+      return {
+        result: 'ok',
+        filePath,
+        message: `Generated suite file: ${filePath}`,
+      };
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) ||
+          `Failed to generate code for suite ${id}`,
       );
     }
   }

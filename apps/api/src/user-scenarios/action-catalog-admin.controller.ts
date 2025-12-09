@@ -1030,14 +1030,6 @@ export class ActionCatalogAdminController {
   ) {
     await ensureAdminOrBootstrap(this.userRepo, req);
     const plat = this.normalizePlatform(platform);
-    // 确保平台列表已与 shared-libs 同步
-    try {
-      await this.syncPlatformsFromSharedLibs();
-    } catch {}
-    // 自动从对应 shared-libs/<platform>/src 扫描 Page 类并导入到数据库（已有的跳过）
-    try {
-      await this.syncPagesFromLib(plat);
-    } catch {}
     const rows = await this.pageRepo.find({
       where: { platform: plat } as any,
       relations: ['actions', 'elements'],

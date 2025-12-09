@@ -23,13 +23,15 @@ import {
   FileScan,
   ListRestart,
   Square,
+  Trash2,
+  Pencil,
 } from 'lucide-react'
 import { AppiumToggleButton } from '@/components/appium-toggle-button'
 // removed Switch in favor of icon toggle for Keep App Open
 import { OutputPanel } from '@/components/output-panel'
 import { useSocket } from './socket-content'
 import NewFileOrFolder from '@/components/files/new-file-folder'
-import DirectoryTree from './files/directory-tree'
+import DirectoryTree, { type FileNode, type DirectoryTreeAction } from '@/components/files/directory-tree'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import { OptionsSelect } from '@/components/select/options-select'
@@ -53,6 +55,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { DeleteAlertDialog } from './alert-dialog/delete-alert'
+import { RunAlertDialog } from './alert-dialog/run-alert'
 import { ParametersForm, type ParametersFormHandle } from '@/components/settings/parameters-form'
 import { useTestcasesPageCache } from '../page-cache'
 import {
@@ -85,6 +89,9 @@ export default function Page() {
     }
   })
   const [refreshKey, setRefreshKey] = useState(0)
+  const [deleteTarget, setDeleteTarget] = useState<FileNode | null>(null)
+  const [runTarget, setRunTarget] = useState<FileNode | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const editorRef = useRef<MonacoScriptEditorHandle | null>(null)
   const [typesOpen, setTypesOpen] = useState(false)
   const [typesGlobal, setTypesGlobal] = useState<string[]>([])
@@ -369,41 +376,154 @@ export default function Page() {
     }
   }, [currentFile])
   const runPath = useCallback(
-    async (envConfig?: any) => {
-    clearLogs()
-    // 1) fetch csrf token first (cookie must be present and credentials included)
-    const csrfResp = await fetch(`/api/csrf-token`, { credentials: 'include' })
-    const csrf = csrfResp.ok ? ((await csrfResp.json()) as { token: string }) : null
-    const csrfToken = csrf?.token
+    async (envConfig?: any, filePathOverride?: string) => {
+      const filePath = filePathOverride || currentFile
+      if (!filePath) {
+        toast.error('请选择用例文件')
+        return
+      }
+      clearLogs()
+      const csrfResp = await fetch(`/api/csrf-token`, { credentials: 'include' })
+      const csrf = csrfResp.ok ? ((await csrfResp.json()) as { token: string }) : null
+      const csrfToken = csrf?.token
 
-    // 2) then POST with X-CSRF-Token
-    fetch(`/api/testcase/runpath`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-      },
-      body: JSON.stringify({
-        filePath: currentFile,
-        clientId,
-        keepAppOpen,
-        shareSession: true,
-        sessionKey: selectedDeviceId || undefined,
-        envConfig,
-      }),
-    })
-      .then((resp) => {
-        if (resp.ok) {
-          toast.message('Start succefull...')
-          setRunning(true)
+      fetch(`/api/testcase/runpath`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        },
+        body: JSON.stringify({
+          filePath,
+          clientId,
+          keepAppOpen,
+          shareSession: true,
+          sessionKey: selectedDeviceId || undefined,
+          envConfig,
+        }),
+      })
+        .then((resp) => {
+          if (resp.ok) {
+            toast.message('Start succefull...')
+            setRunning(true)
+          }
+        })
+        .catch(() => {
+          setRunning(false)
+        })
+      setOpenLog(true)
+    },
+    [currentFile, clientId, keepAppOpen, selectedDeviceId, clearLogs]
+  )
+
+  const getParentDir = useCallback((path: string) => {
+    const idx = path.lastIndexOf('/')
+    return idx > 0 ? path.slice(0, idx) : ''
+  }, [])
+
+  const handleDeleteNode = useCallback(
+    async (node: FileNode) => {
+      setDeleteLoading(true)
+      try {
+        const res = await fetch('/api/files/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ path: node.path }),
+        })
+        if (!res.ok) {
+          const err = await normalizeResponseError(res)
+          throw new Error(err.message || 'Delete failed')
         }
-      })
-      .catch((err) => {
-        setRunning(false)
-      })
-    setOpenLog(true)
-  },
-  [currentFile, clientId, keepAppOpen, selectedDeviceId, clearLogs])
+        setRefreshKey((k) => k + 1)
+        if (currentFile === node.path) {
+          setCurrentFile('')
+        }
+        if (node.isDirectory) {
+          setCurrentDir((dir) => {
+            const parent = getParentDir(node.path)
+            return dir === node.path ? parent : dir
+          })
+        }
+        toast.success('Delete succeeded')
+      } catch (e: any) {
+        const msg = e?.message || 'Delete failed'
+        toast.error(msg)
+      } finally {
+        setDeleteLoading(false)
+        setDeleteTarget(null)
+      }
+    },
+    [currentFile, getParentDir]
+  )
+
+  const handleRenameNode = useCallback(
+    async (node: FileNode) => {
+      try {
+        const currentName = node.name || node.path.split('/').pop() || ''
+        const input = window.prompt('Rename to', currentName)
+        if (input == null) return
+        const newName = input.trim()
+        if (!newName || newName === currentName) return
+        const res = await fetch('/api/files/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ path: node.path, newName }),
+        })
+        if (!res.ok) {
+          const err = await normalizeResponseError(res)
+          throw new Error(err.message || 'Rename failed')
+        }
+        const data = await res.json().catch(() => ({} as any))
+        const newPath: string = data?.newPath || `${getParentDir(node.path)}/${newName}`
+        setRefreshKey((k) => k + 1)
+        setCurrentFile((prev) => (prev === node.path ? newPath : prev))
+        setCurrentDir((prev) => (prev === node.path ? newPath : prev))
+        toast.success('Rename succeeded')
+      } catch (e: any) {
+        const msg = e?.message || 'Rename failed'
+        toast.error(msg)
+      }
+    },
+    [getParentDir]
+  )
+
+  const handleRunConfirm = useCallback(
+    async (node: FileNode) => {
+      if (!node?.path) return
+      setCurrentFile(node.path)
+      await runPath(undefined, node.path)
+      setRunTarget(null)
+    },
+    [runPath]
+  )
+
+  const nodeActions = useCallback(
+    (node: FileNode): DirectoryTreeAction[] => [
+      {
+        key: 'rename',
+        label: 'Rename',
+        icon: Pencil,
+        onSelect: () => handleRenameNode(node),
+      },
+      {
+        key: 'run',
+        label: 'Run',
+        icon: Play,
+        disabled: node.isDirectory,
+        onSelect: () => setRunTarget(node),
+      },
+      {
+        key: 'delete',
+        label: 'Delete',
+        icon: Trash2,
+        danger: true,
+        onSelect: () => setDeleteTarget(node),
+      },
+    ],
+    [handleRenameNode]
+  )
 
   // Resolve current testcase file back to UserScenario (if generated from scenarios)
   useEffect(() => {
@@ -645,7 +765,6 @@ export default function Page() {
         } catch {}
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Keep latest state in a ref and save on unmount
   const lastRef = useRef<any>(null)
@@ -656,7 +775,6 @@ export default function Page() {
     return () => {
       tcCache.save(lastRef.current || {})
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // Persist last opened file for cross-page restore
   useEffect(() => {
@@ -667,30 +785,29 @@ export default function Page() {
   return (
     <div className="flex w-full flex-1 gap-0 rounded-lg">
       <div className="flex h-full flex-col" style={{ minWidth: 0 }}>
-        <DirectoryTreePanel>
-          <NewFileOrFolder
-            key={currentDir}
-            parentDir={currentDir}
-            onCreated={() => setRefreshKey((k) => k + 1)}
-            filterText={dirFilterText}
-            onFilterChange={setDirFilterText}
-          />
-          <DirectoryTree
-            api={'/api/testcase/listcases?&depth=3'}
-            currentDir={currentDir}
-            refreshKey={refreshKey}
-            setRefreshKey={setRefreshKey}
-            onSelect={setCurrentFile}
-            onDirSelect={setCurrentDir}
-            selectedPath={currentFile}
-            cacheEnabled={!dirCacheDisabled}
-            cacheTtlMs={dirCacheTtlMs}
-            collapsible={false}
-            filterText={dirFilterText}
-            run={runPath}
-          />
-        </DirectoryTreePanel>
-      </div>
+          <DirectoryTreePanel>
+            <NewFileOrFolder
+              key={currentDir}
+              parentDir={currentDir}
+              onCreated={() => setRefreshKey((k) => k + 1)}
+              filterText={dirFilterText}
+              onFilterChange={setDirFilterText}
+            />
+            <DirectoryTree
+              api="/api/testcase/listcases?&depth=3"
+              currentDir={currentDir}
+              refreshKey={refreshKey}
+              onSelect={setCurrentFile}
+              onDirSelect={setCurrentDir}
+              selectedPath={currentFile}
+              cacheEnabled={!dirCacheDisabled}
+              cacheTtlMs={dirCacheTtlMs}
+              collapsible={false}
+              filterText={dirFilterText}
+              nodeActions={nodeActions}
+            />
+          </DirectoryTreePanel>
+        </div>
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pl-4 transition-all duration-300">
         {currentFile && linkedScenario && (
           <div className="mb-1 flex items-center justify-between rounded-md border bg-muted/40 px-2 py-1 text-[11px]">
@@ -1220,6 +1337,18 @@ export default function Page() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <DeleteAlertDialog
+        deleting={deleteLoading}
+        deleteTarget={deleteTarget}
+        setDeleteTarget={setDeleteTarget}
+        handleDelete={handleDeleteNode}
+      />
+      <RunAlertDialog
+        running={running}
+        runTarget={runTarget}
+        setRunTarget={setRunTarget}
+        handleRun={handleRunConfirm}
+      />
     </div>
   )
 }

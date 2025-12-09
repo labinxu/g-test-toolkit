@@ -250,7 +250,6 @@ function useSnapshot(deviceId?: string | null) {
       }
     } catch {}
     fetchSnapshot()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceId])
 
   return { loading, data, error, refresh: fetchSnapshot, warmCached }

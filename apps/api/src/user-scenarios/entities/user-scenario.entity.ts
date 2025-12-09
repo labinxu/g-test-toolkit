@@ -2,11 +2,13 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserScenarioStep } from './user-scenario-step.entity';
+  import { UserScenarioStep } from './user-scenario-step.entity';
+import { UserScenarioSuite } from './user-scenario-suite.entity';
 
 export type UserScenarioStatus = 'draft' | 'in_progress' | 'ready' | 'code_generated';
 
@@ -86,6 +88,15 @@ export class UserScenario {
 
   @Column({ nullable: true, length: 128 })
   lastUpdatedBy?: string | null;
+
+  @ManyToOne(() => UserScenarioSuite, (suite) => suite.cases, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  suite?: UserScenarioSuite | null;
+
+  @Column({ nullable: true })
+  suiteId?: number | null;
 
   @CreateDateColumn({ type: 'datetime' })
   createdAt: Date;

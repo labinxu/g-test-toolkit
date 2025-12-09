@@ -1,6 +1,5 @@
 'use client'
 import { Button } from '@/components/ui/button'
-import { FileNode } from './files/types'
 import { Loader2Icon } from 'lucide-react'
 export function Control({
   currentFile,
@@ -16,7 +15,7 @@ export function Control({
   running: boolean
   connected: boolean
   setRunning?: (run: boolean) => void
-  run?: (path?: FileNode) => Promise<void>
+  run?: (envConfig?: any) => Promise<void>
   buildCoreLib?: () => Promise<void>
   buildCommonLib?: () => Promise<void>
   buildLibs?: () => Promise<void>

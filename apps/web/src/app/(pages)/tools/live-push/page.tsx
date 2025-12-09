@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Cast, Loader2, RefreshCcw, Square } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import { useSession } from '@/app/context/session-context'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { OptionsSelect, type OptionsSelectItem } from '@/components/select/options-select'
+import { ensureResponseOk } from '@/lib/error'
 
 type LiveStatus = {
   running: boolean
@@ -32,6 +34,17 @@ type FileNode = {
 
 export default function LivePushToolPage() {
   const { isAuthenticated } = useSession()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const searchParamsString = searchParams?.toString() ?? ''
+  const redirectToSignin = useCallback(() => {
+    const currentPath = pathname || '/'
+    const fullPath = searchParamsString ? `${currentPath}?${searchParamsString}` : currentPath
+    const safePath = fullPath && !fullPath.startsWith('/signin') ? fullPath : '/'
+    const query = safePath ? `?redirect=${encodeURIComponent(safePath)}` : ''
+    router.push(`/signin${query}`)
+  }, [pathname, router, searchParamsString])
   const [rtmpServer, setRtmpServer] = useState('rtmp://global-live.gettr.com:5222/app')
   const [streamKey, setStreamKey] = useState('')
   const [videoBitrate, setVideoBitrate] = useState(800)
@@ -55,8 +68,12 @@ export default function LivePushToolPage() {
     setLoadingStatus(true)
     try {
       const res = await fetch('/api/live/status', { cache: 'no-store' })
+      await ensureResponseOk(res, {
+        defaultMessage: '获取推流状态失败',
+        onUnauthorized: redirectToSignin,
+      })
       const data = (await res.json()) as LiveStatus | { error?: string }
-      if (!res.ok || (data as any)?.error) {
+      if ((data as any)?.error) {
         throw new Error((data as any)?.error || '获取推流状态失败')
       }
       setStatus(data as LiveStatus)
@@ -65,7 +82,7 @@ export default function LivePushToolPage() {
     } finally {
       setLoadingStatus(false)
     }
-  }, [])
+  }, [redirectToSignin])
 
   useEffect(() => {
     fetchStatus().catch(() => {})
@@ -76,9 +93,10 @@ export default function LivePushToolPage() {
       const res = await fetch('/api/files/videos?depth=1', {
         credentials: 'include',
       })
-      if (!res.ok) {
-        throw new Error(res.statusText || '获取视频列表失败')
-      }
+      await ensureResponseOk(res, {
+        defaultMessage: '获取视频列表失败',
+        onUnauthorized: redirectToSignin,
+      })
       const data = (await res.json()) as FileNode[] | { data?: FileNode[] }
       const list: FileNode[] = Array.isArray(data)
         ? data
@@ -108,7 +126,7 @@ export default function LivePushToolPage() {
     } catch (e) {
       console.error(e)
     }
-  }, [selectedVideo])
+  }, [redirectToSignin, selectedVideo])
 
   useEffect(() => {
     loadVideos().catch(() => {})
@@ -164,8 +182,12 @@ export default function LivePushToolPage() {
         },
         body: JSON.stringify(body),
       })
+      await ensureResponseOk(res, {
+        defaultMessage: '启动推流失败',
+        onUnauthorized: redirectToSignin,
+      })
       const data = (await res.json()) as LiveStatus | { message?: string; error?: string }
-      if (!res.ok || (data as any)?.error) {
+      if ((data as any)?.error) {
         throw new Error((data as any)?.error || (data as any)?.message || '启动推流失败')
       }
       setStatus(data as LiveStatus)
@@ -181,12 +203,16 @@ export default function LivePushToolPage() {
     setLoadingStop(true)
     try {
       const res = await fetch('/api/live/stop', { method: 'POST' })
+      await ensureResponseOk(res, {
+        defaultMessage: '停止推流失败',
+        onUnauthorized: redirectToSignin,
+      })
       const data = (await res.json()) as {
         stopped?: boolean
         status?: LiveStatus
         error?: string
       }
-      if (!res.ok || data.error) {
+      if (data.error) {
         throw new Error(data.error || '停止推流失败')
       }
       if (data.status) {

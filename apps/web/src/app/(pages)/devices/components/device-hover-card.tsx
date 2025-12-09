@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Loader2Icon } from 'lucide-react';
 import {
@@ -31,7 +32,14 @@ export const DeviceHoverCard = React.memo(
         <HoverCardContent className="w-80">
           <div className="flex justify-between gap-2">
             {imgUrl ? (
-              <img src={imgUrl} alt="screenshot" />
+              <Image
+                src={imgUrl}
+                alt="screenshot"
+                width={320}
+                height={640}
+                unoptimized
+                className="h-auto w-full rounded"
+              />
             ) : (
               <Button size="sm" disabled>
                 <Loader2Icon className="animate-spin" />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -25,6 +25,7 @@ type FormData = {
 };
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [error, setError] = useState('');
   const { login } = useSession();
 
@@ -42,7 +43,9 @@ export function LoginForm() {
     const { email, password } = data;
     try {
       await login(email, password);
-      router.push('/devices');
+      const redirectParam = searchParams.get('redirect');
+      const target = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/devices';
+      router.replace(target);
     } catch (err) {
       console.error('Login error:', err);
       const e = err as any

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -165,19 +165,22 @@ export default function ActionCatalogSettingsPage() {
     [pages, selectedPageId]
   )
 
-  const getLibFilePathForPage = (pageLike: { platform: string; key: string; className: string }) => {
-    const plat = (pageLike.platform || platform || 'gettr-web').toLowerCase()
-    const platRec = platforms.find((p) => p.key === plat)
-    const dirName = (platRec?.libDir || platRec?.key || '').trim()
-    if (!dirName) return null
-    const baseRaw =
-      (pageLike.className || '').replace(/Page$/, '') || pageLike.key || 'page'
-    const fileBase = baseRaw.toLowerCase()
-    const fileName = `${fileBase}-page.ts`
-    return `workspace/shared-libs/${dirName}/src/${fileName}`
-  }
+  const getLibFilePathForPage = useCallback(
+    (pageLike: { platform: string; key: string; className: string }) => {
+      const plat = (pageLike.platform || platform || 'gettr-web').toLowerCase()
+      const platRec = platforms.find((p) => p.key === plat)
+      const dirName = (platRec?.libDir || platRec?.key || '').trim()
+      if (!dirName) return null
+      const baseRaw =
+        (pageLike.className || '').replace(/Page$/, '') || pageLike.key || 'page'
+      const fileBase = baseRaw.toLowerCase()
+      const fileName = `${fileBase}-page.ts`
+      return `workspace/shared-libs/${dirName}/src/${fileName}`
+    },
+    [platform, platforms]
+  )
 
-  const loadPages = async (plat: string) => {
+  const loadPages = async (plat: string, preferSelectId?: number | null) => {
     try {
       setLoadingPages(true)
       const res = await fetch(`/api/action-catalog/pages?platform=${encodeURIComponent(plat)}`, {
@@ -189,12 +192,36 @@ export default function ActionCatalogSettingsPage() {
       }
       const data = await res.json()
       const items = Array.isArray(data?.items) ? (data.items as PageSummary[]) : []
-      setPages(items)
+      // 仅展示数据库中的页面，忽略扫描 shared-libs 返回的 .ts 文件占位项
+      const filtered = items.filter((p: any) => {
+        const filePath = (p?.filePath || p?.path || '') as string
+        if (typeof filePath === 'string' && filePath.includes('shared-libs')) {
+          return false
+        }
+        if (typeof filePath === 'string' && filePath.trim().endsWith('.ts')) {
+          return false
+        }
+        const looksLikeTs =
+          (typeof p?.key === 'string' && p.key.includes('.ts')) ||
+          (typeof p?.label === 'string' && p.label.includes('.ts'))
+        return !looksLikeTs
+      })
+      // 去重：同 key 只保留第一条（数据库项优先）
+      const uniqByKey: PageSummary[] = []
+      const seen = new Set<string>()
+      for (const p of filtered) {
+        if (seen.has(p.key)) continue
+        seen.add(p.key)
+        uniqByKey.push(p)
+      }
+      setPages(uniqByKey)
       setSelectedPageIds((prev) =>
-        prev.filter((id) => items.some((p) => p.id === id))
+        prev.filter((id) => uniqByKey.some((p) => p.id === id))
       )
-      if (!selectedPageId && items.length) {
-        setSelectedPageId(items[0].id)
+      if (preferSelectId && uniqByKey.some((p) => p.id === preferSelectId)) {
+        setSelectedPageId(preferSelectId)
+      } else if (!selectedPageId && uniqByKey.length) {
+        setSelectedPageId(uniqByKey[0].id)
       }
     } catch (e: any) {
       if (isUnauthorizedError(e)) {
@@ -267,7 +294,6 @@ export default function ActionCatalogSettingsPage() {
         // elements 仅用于前端辅助选择 locator，不随页面保存回写
         ...(Array.isArray((data as any).elements)
           ? {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               elements: (data as any).elements.map((el: any) => ({
                 id: el.id,
                 elementId: el.elementId || '',
@@ -343,19 +369,16 @@ export default function ActionCatalogSettingsPage() {
 
   useEffect(() => {
     void loadPlatforms()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     void loadPages(platform)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platform])
 
   useEffect(() => {
     if (selectedPageId != null) {
       void loadPageDetail(selectedPageId)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPageId])
 
   const handleCreatePage = () => {
@@ -437,11 +460,8 @@ export default function ActionCatalogSettingsPage() {
         throw new Error(err.message || '保存页面失败')
       }
       const data = (await res.json()) as AdminPage
-      // 刷新左侧列表
-      await loadPages(platform)
-      if (data.id) {
-        setSelectedPageId(data.id)
-      }
+      // 刷新左侧列表并选中当前保存的页面（过滤掉 .ts 占位项）
+      await loadPages(platform, data.id ?? null)
       const libPath = getLibFilePathForPage({
         platform: data.platform || platform,
         key: data.key,
@@ -462,7 +482,8 @@ export default function ActionCatalogSettingsPage() {
                 variant="outline"
                 className="h-6 px-2 text-[11px]"
                 onClick={() => {
-                  router.push('/testcases/libs')
+                  const query = libPath ? `?file=${encodeURIComponent(libPath)}` : ''
+                  router.push(`/testcases/libs${query}`)
                 }}
               >
                 在「Libs」页面中打开
@@ -606,7 +627,7 @@ export default function ActionCatalogSettingsPage() {
     }
   }
 
-  const handleViewPage = async (pageId: number) => {
+  const handleViewPage = useCallback(async (pageId: number) => {
     setViewPageDialogOpen(true)
     setViewPageLoading(true)
     setViewPageDetail(null)
@@ -632,7 +653,7 @@ export default function ActionCatalogSettingsPage() {
     } finally {
       setViewPageLoading(false)
     }
-  }
+  }, [router])
 
   const handleUpdateAction = (index: number, patch: Partial<AdminAction>) => {
     if (!draft) return
@@ -968,7 +989,7 @@ export default function ActionCatalogSettingsPage() {
           </div>,
         ]
       }),
-    [pagedPages, router, selectedPageIds]
+    [getLibFilePathForPage, handleDeletePage, handleViewPage, pagedPages, router, selectedPageIds]
   )
 
   const handleAddParam = (actionIndex: number) => {
@@ -1023,7 +1044,7 @@ export default function ActionCatalogSettingsPage() {
     setDraft({ ...draft, actions: nextActions })
   }
 
-  const handleDeletePage = async (page: PageSummary) => {
+  async function handleDeletePage(page: PageSummary) {
     const confirmed = window.confirm(
       `确认删除页面 ${page.key}？将同时删除其所有动作。`
     )
@@ -1879,7 +1900,7 @@ export default function ActionCatalogSettingsPage() {
                             <p className="mb-1 text-[11px] text-muted-foreground">
                               按顺序调用当前 Page 上的多个方法；参数可以填写当前函数的参数名（例如
                               <span className="mx-0.5 font-mono text-[10px]">username</span>）或字面量（例如
-                              <span className="mx-0.5 font-mono text-[10px]">'qa_lb'</span>）。
+                              <span className="mx-0.5 font-mono text-[10px]">&apos;qa_lb&apos;</span>）。
                             </p>
                             <div className="space-y-1">
                               {(a.callSteps || []).map((step, sIndex) => {

@@ -16,6 +16,7 @@ import { ActionCatalogAdminController } from './action-catalog-admin.controller'
 import { User } from '../auth/entities/user.entity';
 import { EnvTemplate } from './entities/env-template.entity';
 import { EnvTemplatesController } from './env-templates.controller';
+import { UserScenarioSuite } from './entities/user-scenario-suite.entity';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { EnvTemplatesController } from './env-templates.controller';
       UserScenarioOption,
       User,
       EnvTemplate,
+      UserScenarioSuite,
     ]),
     AiModule,
   ],

@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -36,7 +37,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   // Fetch CSRF token
-  const fetchCsrfToken = async () => {
+  const fetchCsrfToken = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/csrf-token', {
         method: 'GET',
@@ -54,10 +55,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       console.error('Error fetching CSRF token:', error);
       return null;
     }
-  };
+  }, []);
 
   // Check authentication status
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const response = await fetch('/api/auth/profile', {
         method: 'GET',
@@ -84,7 +85,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [pathname, router]);
 
   // Initial auth and CSRF token fetch
   useEffect(() => {
@@ -93,7 +94,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       await checkAuth();
     };
     initialize();
-  }, [router, pathname]);
+  }, [checkAuth, fetchCsrfToken, pathname, router]);
 
   // Login function
   const login = async (email: string, password: string) => {
@@ -114,7 +115,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         await checkAuth(); // Refresh auth state after login
-        router.push('/scenarios');
       } else {
         const err = await normalizeResponseError(response);
         toast.error(err.message || 'Login failed');
