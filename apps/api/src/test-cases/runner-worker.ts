@@ -16,6 +16,7 @@ type RunMessage = {
     apiTestsConfig?: { baseUrl: string; defaultHeaders: Record<string, string> }
     workspace?: string
     envConfig?: any
+    reportMeta?: { platform?: string; module?: string; caseName?: string }
   }
 }
 
@@ -187,21 +188,22 @@ async function runInWorker(message: RunMessage) {
       },
       module: { exports: {} },
       exports: {},
-      params: {
-        workspace,
-        clientId,
-        apiTestConfig: options?.apiTestsConfig ?? undefined,
-        loggerService,
-        browserHelper: new BrowserHelper(),
-        options: {
-          keepAppOpen: options?.keepAppOpen,
-          shareSession: options?.shareSession,
-          sessionKey: options?.sessionKey,
-          userDir: options?.userDir,
-        },
-        userDir: options?.userDir,
-        envConfig: options?.envConfig,
-      },
+  params: {
+    workspace,
+    clientId,
+    apiTestConfig: options?.apiTestsConfig ?? undefined,
+    loggerService,
+    browserHelper: new BrowserHelper(),
+    options: {
+      keepAppOpen: options?.keepAppOpen,
+      shareSession: options?.shareSession,
+      sessionKey: options?.sessionKey,
+      userDir: options?.userDir,
+      reportMeta: options?.reportMeta,
+    },
+    userDir: options?.userDir,
+    envConfig: options?.envConfig,
+  },
       console,
       coreMain: coreLib.main,
       describe: coreLib.describe,
@@ -224,7 +226,7 @@ async function runInWorker(message: RunMessage) {
     const corePromise = (context as any).__gttCorePromise
     const coreResult =
       corePromise && typeof corePromise.then === 'function' ? await corePromise : undefined
-    sendMessage({ type: 'complete', clientId, coreResult })
+    sendMessage({ type: 'complete', clientId, coreResult, reportMeta: options?.reportMeta })
     logger.info('Runner worker completed')
   } catch (err: any) {
     const msg = err?.message || String(err)

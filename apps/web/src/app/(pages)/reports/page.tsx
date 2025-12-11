@@ -34,6 +34,14 @@ export default function Page() {
   const [deleting, setDeleting] = useState(false)
   const [selectedPaths, setSelectedPaths] = useState<string[]>([])
   const [treeFilePaths, setTreeFilePaths] = useState<string[]>([])
+  const [platformFilter, setPlatformFilter] = useState<string>('all')
+  const [moduleFilter, setModuleFilter] = useState<string>('all')
+  const [platformOptions, setPlatformOptions] = useState<OptionsSelectItem<string>[]>([
+    { value: 'all', label: '全部平台' },
+  ])
+  const [moduleOptions, setModuleOptions] = useState<OptionsSelectItem<string>[]>([
+    { value: 'all', label: '全部模块' },
+  ])
 
   const { isAuthenticated, user } = useSession()
 
@@ -47,6 +55,11 @@ export default function Page() {
     () => (username ? `gtt:reports:lastFile:${username}` : 'gtt:reports:lastFile'),
     [username]
   )
+  const rootType = useMemo<'user' | 'shared'>(() => {
+    if (selectedRoot === 'reports') return 'shared'
+    if (selectedRoot === userReportsDir) return 'user'
+    return selectedRoot?.includes('/reports') && !selectedRoot.includes(username) ? 'shared' : 'user'
+  }, [selectedRoot, userReportsDir, username])
   const rootOptions = useMemo<OptionsSelectItem<string>[]>(() => {
     const list: OptionsSelectItem<string>[] = []
     const add = (value: string, label: string) => {
@@ -80,11 +93,14 @@ export default function Page() {
 
   const refreshKey = useMemo(() => (hasCache ? cachedRefreshKey : 0), [hasCache, cachedRefreshKey])
 
-  useEffect(() => {
-    if (currentDir && currentDir !== selectedRoot) {
-      setSelectedRoot(currentDir)
-    }
-  }, [currentDir, selectedRoot])
+  const treeApi = useMemo(() => {
+    const qs = new URLSearchParams()
+    qs.set('root', rootType)
+    if (platformFilter && platformFilter !== 'all') qs.set('platform', platformFilter)
+    if (moduleFilter && moduleFilter !== 'all') qs.set('module', moduleFilter)
+    qs.set('depth', '5')
+    return `/api/testcase/report-tree?${qs.toString()}`
+  }, [platformFilter, moduleFilter, rootType])
 
   const lastUserRef = useRef<string | null>(null)
   useEffect(() => {
@@ -305,6 +321,9 @@ export default function Page() {
   const handleRootChange = useCallback(
     (value: string) => {
       setSelectedRoot(value)
+      setPlatformFilter('all')
+      setModuleFilter('all')
+      setModuleOptions([{ value: 'all', label: '全部模块' }])
       setSelectedPaths([])
       setTreeFilePaths([])
       saveCache({ currentDir: value, currentFile: '', refreshKey: (refreshKey || 0) + 1, fileCache: {} })
@@ -338,7 +357,7 @@ export default function Page() {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const res = await fetch('/api/files/delete', {
+      const res = await fetch('/api/testcase/report', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -388,6 +407,78 @@ export default function Page() {
     return paths
   }, [])
 
+  const extractDirNames = useCallback((nodes: FileNode[] = []): string[] => {
+    const names: string[] = []
+    nodes.forEach((n) => {
+      if (n.isDirectory) {
+        names.push(n.name || n.path.split('/').filter(Boolean).pop() || '')
+      }
+    })
+    return names.filter(Boolean)
+  }, [])
+
+  const fetchPlatformOptions = useCallback(async () => {
+    try {
+      const qs = new URLSearchParams()
+      qs.set('root', rootType)
+      qs.set('depth', '2')
+      const res = await fetch(`/api/testcase/report-tree?${qs.toString()}`, { cache: 'no-store' })
+      if (!res.ok) return
+      const data = await res.json()
+      const platforms = extractDirNames(Array.isArray(data) ? data : [])
+      const opts: OptionsSelectItem<string>[] = [{ value: 'all', label: '全部平台' }].concat(
+        platforms.map((p) => ({ value: p, label: p }))
+      )
+      setPlatformOptions(opts)
+    } catch {
+      // ignore
+    }
+  }, [extractDirNames, rootType])
+
+  const fetchModuleOptions = useCallback(
+    async (platformValue: string) => {
+      if (!platformValue || platformValue === 'all') {
+        setModuleOptions([{ value: 'all', label: '全部模块' }])
+        setModuleFilter('all')
+        return
+      }
+      try {
+        const qs = new URLSearchParams()
+        qs.set('root', rootType)
+        qs.set('platform', platformValue)
+        qs.set('depth', '2')
+        const res = await fetch(`/api/testcase/report-tree?${qs.toString()}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        const modules = extractDirNames(Array.isArray(data) ? data : [])
+        const opts: OptionsSelectItem<string>[] = [{ value: 'all', label: '全部模块' }].concat(
+          modules.map((m) => ({ value: m, label: m }))
+        )
+        setModuleOptions(opts)
+        if (modules.length === 0) setModuleFilter('all')
+      } catch {
+        // ignore
+      }
+    },
+    [extractDirNames, rootType]
+  )
+
+  useEffect(() => {
+    if (currentDir && currentDir !== selectedRoot) {
+      setSelectedRoot(currentDir)
+    }
+  }, [currentDir, selectedRoot])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    void fetchPlatformOptions()
+  }, [fetchPlatformOptions, isAuthenticated, rootType])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    void fetchModuleOptions(platformFilter)
+  }, [fetchModuleOptions, isAuthenticated, platformFilter])
+
   const handleTreeData = useCallback(
     (nodes: FileNode[]) => {
       const files = flattenFiles(nodes)
@@ -415,7 +506,7 @@ export default function Page() {
     try {
       let success = 0
       for (const path of targets) {
-        const res = await fetch('/api/files/delete', {
+        const res = await fetch('/api/testcase/report', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -467,6 +558,25 @@ export default function Page() {
               items={rootOptions}
               className="w-48"
             />
+            <OptionsSelectSearch
+              size="sm"
+              placeholder="平台"
+              value={platformFilter}
+              onChange={(val) => {
+                setPlatformFilter(val)
+                setModuleFilter('all')
+              }}
+              items={platformOptions}
+              className="w-40"
+            />
+            <OptionsSelectSearch
+              size="sm"
+              placeholder="模块"
+              value={moduleFilter}
+              onChange={setModuleFilter}
+              items={moduleOptions}
+              className="w-40"
+            />
             <div className="flex items-center gap-2">
               <Checkbox
                 id="reports-select-all"
@@ -490,6 +600,7 @@ export default function Page() {
             </Button>
           </div>
           <DirectoryTree
+            api={treeApi}
             currentDir={currentDir}
             refreshKey={refreshKey}
             onSelect={handleSelectFile}

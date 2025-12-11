@@ -98,6 +98,7 @@ export type EnvTemplateSummary = {
   key: string
   name: string
   description?: string | null
+  config?: any
 }
 
 export type UserScenarioSuiteSummary = {

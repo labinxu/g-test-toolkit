@@ -2,13 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { StepBindingV1, StepCheckRule } from '../action-catalog';
 import { ActionCatalogService } from '../action-catalog.service';
 import { UserScenario } from '../entities/user-scenario.entity';
 import { UserScenarioSuite } from '../entities/user-scenario-suite.entity';
 import { EnvTemplate } from '../entities/env-template.entity';
 import { buildApiStepLines } from './api-generator';
-import { type UsedPage } from './ui-helpers';
+import { appendUiStepLines } from './ui-generator';
+import { normalizeStepInput, type StepInput, type UsedPage } from './ui-helpers';
 import { getModuleNameForPlatform, normalizePlatform, parseSharedPreSteps, sanitizeName } from '../utils/normalize';
 
 export class UserScenarioCodeGenerator {
@@ -116,180 +116,33 @@ export class UserScenarioCodeGenerator {
     const stepCallLines: string[] = [];
     const catalog = await this.actionCatalog.getCatalog(platform);
     const returnedPageKeys = new Set<string>();
-    const declaredVars = new Set<string>();
-    const hasBindings = steps.some((s) => {
-      if (!s.binding) return false;
-      try {
-        const parsed = JSON.parse(s.binding) as StepBindingV1;
-        const resolved = this.actionCatalog.resolveBindingWithCatalog(
-          catalog,
-          parsed,
-        );
-        return !!resolved;
-      } catch {
-        return false;
-      }
-    });
+    let hasBindings = false;
 
-    if (hasBindings) {
-      for (const s of steps) {
-        let binding: StepBindingV1 | null = null;
-        if (s.binding) {
-          try {
-            binding = JSON.parse(s.binding) as StepBindingV1;
-          } catch {
-            binding = null;
-          }
-        }
-        const resolved = binding
-          ? this.actionCatalog.resolveBindingWithCatalog(catalog, binding)
-          : null;
-        if (!resolved) {
-          // Fallback：对未绑定步骤保留注释
-          stepCallLines.push(
-            `    // Step ${s.order}: ${s.action.replace(/\r?\n/g, ' ')}`,
-          );
-          if (s.data) {
-            stepCallLines.push(
-              `    //   Data / Precondition: ${s.data.replace(/\r?\n/g, ' ')}`,
-            );
-          }
-          stepCallLines.push(
-            `    //   Expected: ${s.expected.replace(/\r?\n/g, ' ')}`,
-          );
-          continue;
-        }
-        const { page, action } = resolved;
-        const pageKey = page.key;
-        if (!usedPages.has(pageKey)) {
-          usedPages.set(pageKey, {
-            className: page.className,
-            varName: page.varName,
-            module: (page as any).module ?? null,
-          });
-        }
-        // 标记为已声明，避免后续 returnTarget 再用 let 重复声明（初始化会在文件头或前置步骤完成）
-        declaredVars.add(page.varName);
-        const rawReturnTarget = (action as any)?.returnTarget
-          ? String((action as any).returnTarget).trim()
-          : '';
-        const returnTargetPage =
-          rawReturnTarget &&
-          catalog.pages.find(
-            (p) =>
-              p.className === rawReturnTarget ||
-              p.key === rawReturnTarget ||
-              p.varName === rawReturnTarget,
-          );
-        if (returnTargetPage) {
-          returnedPageKeys.add(returnTargetPage.key);
-        }
-        const args =
-          (binding?.args || [])
-            .map((a) => `${a.value}`)
-            .filter((v) => v.length > 0) || [];
-        const argsCode = args.map((v) => JSON.stringify(v)).join(', ');
-        const callExpr =
-          argsCode.length > 0
-            ? `${page.varName}.${action.method}(${argsCode})`
-            : `${page.varName}.${action.method}()`;
-        // 保留一行注释 + 一行真实调用，便于阅读
-        stepCallLines.push(
-          `    // Step ${s.order}: ${s.action.replace(/\r?\n/g, ' ')}`,
-        );
-        if (s.data) {
-          stepCallLines.push(
-            `    //   Data / Precondition: ${s.data.replace(/\r?\n/g, ' ')}`,
-          );
-        }
-        stepCallLines.push(
-          `    //   Expected: ${s.expected.replace(/\r?\n/g, ' ')}`,
-        );
-        if (returnTargetPage) {
-          const targetVar = returnTargetPage.varName;
-          const assign = declaredVars.has(targetVar)
-            ? `    ${targetVar} = await ${callExpr};`
-            : `    let ${targetVar} = await ${callExpr};`;
-          declaredVars.add(targetVar);
-          stepCallLines.push(assign);
-        } else {
-          stepCallLines.push(`    await ${callExpr};`);
-        }
-        const rule: StepCheckRule | undefined =
-          binding && typeof (binding as any).checkRule === 'object'
-            ? ((binding as any).checkRule as StepCheckRule)
-            : undefined;
-        if (rule && rule.type) {
-          const type = rule.type;
-          if (type === 'element-visible' || type === 'element-hidden') {
-            const fromRule = (rule.locator || '').toString().trim();
-            const fromAction = (action as any).locator
-              ? (action as any).locator.toString().trim()
-              : '';
-            const locator = fromRule || fromAction;
-            if (locator) {
-              const locatorLit = JSON.stringify(locator);
-              const expectedText = (s.expected || '').toString().trim();
-              const userMessage = expectedText
-                ? expectedText.replace(/\r?\n/g, ' ')
-                : '';
-              const defaultMessage =
-                type === 'element-visible'
-                  ? `元素应出现：${locator}`
-                  : `元素应消失：${locator}`;
-              const description = userMessage || defaultMessage;
-              stepCallLines.push('    {');
-              stepCallLines.push(`      const driver: any = (tc as any).page;`);
-              stepCallLines.push(`      let el: any = null;`);
-              stepCallLines.push('      try {');
-              stepCallLines.push(
-                `        el = driver && typeof driver.$ === 'function' ? await driver.$(${locatorLit}) : null;`,
-              );
-              stepCallLines.push('      } catch (e) {');
-              stepCallLines.push('        el = null;');
-              stepCallLines.push('      }');
-              if (type === 'element-visible') {
-                stepCallLines.push(
-                  `      tc.assertNotNull(el, ${JSON.stringify(description)});`,
-                );
-              } else {
-                stepCallLines.push(
-                  `      if (el) { throw new Error(${JSON.stringify(
-                    description,
-                  )} + '（实际仍然存在）'); }`,
-                );
-              }
-              stepCallLines.push('    }');
-            }
-          } else if (type === 'url-contains' || type === 'url-equals') {
-            const expectedUrl = (rule.expectedUrl || '').toString().trim();
-            if (expectedUrl) {
-              const expectedLit = JSON.stringify(expectedUrl);
-              const mode = type === 'url-contains' ? '包含' : '等于';
-              stepCallLines.push('    {');
-              stepCallLines.push(`      const driver: any = (tc as any).page;`);
-              stepCallLines.push(
-                `      const url = driver && typeof driver.getUrl === 'function' ? await driver.getUrl() :`,
-              );
-              stepCallLines.push(
-                `        driver && typeof driver.url === 'function' ? await driver.url() : '';`,
-              );
-              stepCallLines.push(
-                type === 'url-contains'
-                  ? `      const ok = typeof url === 'string' && url.includes(${expectedLit});`
-                  : `      const ok = typeof url === 'string' && url === ${expectedLit};`,
-              );
-              stepCallLines.push(
-                `      tc.assertEqual(true, ok, ${JSON.stringify(
-                  `URL 检查：期望${mode} ${expectedUrl}`,
-                )});`,
-              );
-              stepCallLines.push('    }');
-            }
-          }
-        }
-      }
+    if (steps.length) {
+      const declaredVars = new Set<string>();
+      steps.forEach((s, idx) => {
+        appendUiStepLines({
+          step: {
+            order: s.order ?? idx + 1,
+            action: s.action,
+            expected: s.expected,
+            data: s.data,
+            binding: s.binding,
+          },
+          dest: stepCallLines,
+          indent: '    ',
+          platform,
+          catalog,
+          usedPages,
+          declaredVars,
+          returnedPageKeys,
+          setHasBindings: () => {
+            hasBindings = true;
+          },
+        });
+      });
     }
+
 
     // Imports
     const importCore = isApiPlatform
@@ -478,15 +331,61 @@ export class UserScenarioCodeGenerator {
       }
       lines.push(...envConfigLines);
       if (usedPages.size > 0) {
-        for (const { className, varName } of usedPages.values()) {
-          lines.push(
-            `  const ${varName} = new ${className}(tc as any);`,
-          );
+        const firstUsedPageKey = usedPages.keys().next().value as string | undefined;
+        const instantiations = Array.from(usedPages.values()).filter((p) => {
+          const key = p.key || '';
+          const returned = returnedPageKeys.has(key);
+          return !p.fromReturnOnly && (!returned || key === firstUsedPageKey);
+        });
+        for (const { className, varName } of instantiations) {
+          lines.push(`  let ${varName} = new ${className}(tc as any);`);
         }
-        lines.push('');
+        if (instantiations.length) {
+          lines.push('');
+        }
+      }
+      if (hasBindings) {
+        lines.push(
+          `  async function captureScreenshotIfFailed(title: string) {`,
+          `    try {`,
+          `      const page: any = (tc as any)?.page;`,
+          `      if (!page || page.isClosed?.()) return;`,
+          `      if (typeof page.screenshot !== 'function') return;`,
+          `      const ts = Date.now();`,
+          `      const safeTitle = (title || ${JSON.stringify(entity.code)}).toString().replace(/\\s+/g, '_');`,
+          `      const name = ${JSON.stringify(platform)} + '-' + ${JSON.stringify(moduleName)} + '-' + safeTitle + '-' + ts + '.png';`,
+          `      const base64 = await page.screenshot({ encoding: 'base64', fullPage: true });`,
+          `      const fetchFn = typeof fetch === 'function' ? fetch : (await import('node-fetch')).default as any;`,
+          `      const apiBase = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';`,
+          `      const resp = await fetchFn(\`\${apiBase.replace(/\\/$/, '')}/api/testcase/screenshot\`, {`,
+          `        method: 'POST',`,
+          `        headers: { 'Content-Type': 'application/json' },`,
+          `        body: JSON.stringify({`,
+          `          data: base64,`,
+          `          platform: ${JSON.stringify(platform)},`,
+          `          module: ${JSON.stringify(moduleName)},`,
+          `          caseName: safeTitle,`,
+          `          filename: name,`,
+          `          root: 'user',`,
+          `        }),`,
+          `      });`,
+          `      if (resp.ok) {`,
+          `        const result = await resp.json();`,
+          `        (tc as any).meta = { ...(tc as any).meta, lastScreenshot: result?.path };`,
+          `        console.log('[screenshot]', result?.path);`,
+          `      } else {`,
+          `        console.warn('upload screenshot failed', resp.status);`,
+          `      }`,
+          `    } catch (err) {`,
+          `      console.warn('screenshot failed:', err);`,
+          `    }`,
+          `  }`,
+          ``,
+        );
       }
       lines.push(
         `  it('should satisfy all defined steps', async () => {`,
+        `    try {`,
       );
       if (stepCallLines.length === 0) {
         lines.push(
@@ -499,7 +398,13 @@ export class UserScenarioCodeGenerator {
         );
         lines.push(...stepCallLines);
       }
-      lines.push('  });');
+      lines.push(
+        `    } catch (err) {`,
+        `      await captureScreenshotIfFailed(${JSON.stringify(entity.code)});`,
+        `      throw err;`,
+        `    }`,
+        `  });`,
+      );
     } else {
       lines.push(
         `  it('should satisfy all defined steps', async () => {`,
@@ -605,159 +510,88 @@ export class UserScenarioCodeGenerator {
     ];
 
     const catalog = await this.actionCatalog.getCatalog(platform);
-    type UsedPage = { className: string; varName: string; module?: string | null };
     const usedPages = new Map<string, UsedPage>();
     const stepLinesByCase = new Map<number, string[]>();
+    const returnedPageKeys = new Set<string>();
     let hasBindings = false;
+
+    const suitePreStepLines: string[] = [];
+    const suitePreStepsNormalized: StepInput[] = sharedPreSteps.map((raw, idx) =>
+      normalizeStepInput(raw, idx),
+    );
+    if (suitePreStepsNormalized.length) {
+      const declaredVars = new Set<string>();
+      suitePreStepsNormalized
+        .sort((a, b) => a.order - b.order)
+        .forEach((step) => {
+          appendUiStepLines({
+            step,
+            dest: suitePreStepLines,
+            indent: '    ',
+            platform,
+            catalog,
+            usedPages,
+            declaredVars,
+            returnedPageKeys,
+            setHasBindings: () => {
+              hasBindings = true;
+            },
+          });
+        });
+    }
 
     if (!isApiPlatform) {
       for (const sc of cases) {
         const steps = (sc.steps || []).slice().sort((a, b) => a.order - b.order);
         const stepLines: string[] = [];
+        const declaredVars = new Set<string>(
+          Array.from(usedPages.values())
+            .filter((p) => !p.fromReturnOnly)
+            .map((p) => p.varName),
+        );
         for (const s of steps) {
-          let binding: StepBindingV1 | null = null;
-          if (s.binding) {
-            try {
-              binding = JSON.parse(s.binding) as StepBindingV1;
-            } catch {
-              binding = null;
-            }
-          }
-          const resolved = binding
-            ? this.actionCatalog.resolveBindingWithCatalog(catalog, binding)
-            : null;
-          if (!resolved) {
-            stepLines.push(
-              `    // Step ${s.order}: ${s.action.replace(/\r?\n/g, ' ')}`,
-            );
-            if (s.data) {
-              stepLines.push(
-                `    //   Data / Precondition: ${s.data.replace(
-                  /\r?\n/g,
-                  ' ',
-                )}`,
-              );
-            }
-            stepLines.push(
-              `    //   Expected: ${s.expected.replace(/\r?\n/g, ' ')}`,
-            );
-            continue;
-          }
-          hasBindings = true;
-          const { page, action } = resolved;
-          const pageKey = page.key;
-          if (!usedPages.has(pageKey)) {
-            usedPages.set(pageKey, {
-              className: page.className,
-              varName: page.varName,
-              module: (page as any).module ?? null,
-            });
-          }
-          const args =
-            (binding?.args || [])
-              .map((a) => `${a.value}`)
-              .filter((v) => v.length > 0) || [];
-          const argsCode = args.map((v) => JSON.stringify(v)).join(', ');
-          const call =
-            argsCode.length > 0
-              ? `    await ${page.varName}.${action.method}(${argsCode});`
-              : `    await ${page.varName}.${action.method}();`;
-          stepLines.push(
-            `    // Step ${s.order}: ${s.action.replace(/\r?\n/g, ' ')}`,
-          );
-          if (s.data) {
-            stepLines.push(
-              `    //   Data / Precondition: ${s.data.replace(
-                /\r?\n/g,
-                ' ',
-              )}`,
-            );
-          }
-          stepLines.push(
-            `    //   Expected: ${s.expected.replace(/\r?\n/g, ' ')}`,
-          );
-          stepLines.push(call);
-          const rule: StepCheckRule | undefined =
-            binding && typeof (binding as any).checkRule === 'object'
-              ? ((binding as any).checkRule as StepCheckRule)
-              : undefined;
-          if (rule && rule.type) {
-            if (rule.type === 'element-visible' || rule.type === 'element-hidden') {
-              const fromRule = (rule.locator || '').toString().trim();
-              const fromAction = (action as any).locator
-                ? (action as any).locator.toString().trim()
-                : '';
-              const locator = fromRule || fromAction;
-              if (locator) {
-                const locatorLit = JSON.stringify(locator);
-                const expectedText = (s.expected || '').toString().trim();
-                const userMessage = expectedText
-                  ? expectedText.replace(/\r?\n/g, ' ')
-                  : '';
-                const defaultMessage =
-                  rule.type === 'element-visible'
-                    ? `元素应出现：${locator}`
-                    : `元素应消失：${locator}`;
-                const description = userMessage || defaultMessage;
-                stepLines.push('    {');
-                stepLines.push(`      const driver: any = (tc as any).page;`);
-                stepLines.push(`      let el: any = null;`);
-                stepLines.push('      try {');
-                stepLines.push(
-                  `        el = driver && typeof driver.$ === 'function' ? await driver.$(${locatorLit}) : null;`,
-                );
-                stepLines.push('      } catch (e) {');
-                stepLines.push('        el = null;');
-                stepLines.push('      }');
-                if (rule.type === 'element-visible') {
-                  stepLines.push(
-                    `      tc.assertNotNull(el, ${JSON.stringify(description)});`,
-                  );
-                } else {
-                  stepLines.push(
-                    `      if (el) { throw new Error(${JSON.stringify(
-                      description,
-                    )} + '（实际仍然存在）'); }`,
-                  );
-                }
-                stepLines.push('    }');
-              }
-            } else if (rule.type === 'url-contains' || rule.type === 'url-equals') {
-              const expectedUrl = (rule.expectedUrl || '').toString().trim();
-              if (expectedUrl) {
-                const expectedLit = JSON.stringify(expectedUrl);
-                const mode =
-                  rule.type === 'url-contains' ? '包含' : '等于';
-                stepLines.push('    {');
-                stepLines.push(`      const driver: any = (tc as any).page;`);
-                stepLines.push(
-                  `      const url = driver && typeof driver.getUrl === 'function' ? await driver.getUrl() :`,
-                );
-                stepLines.push(
-                  `        driver && typeof driver.url === 'function' ? await driver.url() : '';`,
-                );
-                stepLines.push(
-                  rule.type === 'url-contains'
-                    ? `      const ok = typeof url === 'string' && url.includes(${expectedLit});`
-                    : `      const ok = typeof url === 'string' && url === ${expectedLit};`,
-                );
-                stepLines.push(
-                  `      tc.assertEqual(true, ok, ${JSON.stringify(
-                    `URL 检查：期望${mode} ${expectedUrl}`,
-                  )});`,
-                );
-                stepLines.push('    }');
-              }
-            }
-          }
+          appendUiStepLines({
+            step: {
+              order: s.order,
+              action: s.action,
+              expected: s.expected,
+              data: s.data,
+              binding: s.binding,
+            },
+            dest: stepLines,
+            indent: '    ',
+            platform,
+            catalog,
+            usedPages,
+            declaredVars,
+            returnedPageKeys,
+            setHasBindings: () => {
+              hasBindings = true;
+            },
+          });
         }
         stepLinesByCase.set(sc.id, stepLines);
       }
     }
 
-    const importCore = isApiPlatform
-      ? "import { describe, it, expect, useTestCase } from 'core-lib';"
-      : "import { describe, it, useTestCase } from 'core-lib';";
+    const extraImports: string[] = [];
+    if (!isApiPlatform && hasBindings) {
+      extraImports.push("import * as fs from 'fs';", "import * as path from 'path';");
+    }
+    const coreImports = new Set<string>(['describe', 'it']);
+    if (isApiPlatform) {
+      coreImports.add('expect');
+      coreImports.add('useTestCase');
+      if (suitePreStepLines.length) coreImports.add('beforeAll');
+    } else if (hasBindings) {
+      coreImports.add('useTestCase');
+      if (suitePreStepLines.length) coreImports.add('beforeAll');
+    } else {
+      coreImports.add('useTestCase');
+      if (suitePreStepLines.length) coreImports.add('beforeAll');
+    }
+    const importCore = `import { ${Array.from(coreImports).join(', ')} } from 'core-lib';`;
+    lines.push(...extraImports);
     lines.push(importCore);
     if (!isApiPlatform && hasBindings && usedPages.size > 0) {
       const byModule = new Map<string, Set<string>>();
@@ -870,28 +704,79 @@ export class UserScenarioCodeGenerator {
     lines.push(...envConfigLines);
 
     if (!isApiPlatform && hasBindings && usedPages.size > 0) {
-      for (const { className, varName } of usedPages.values()) {
-        lines.push(`  const ${varName} = new ${className}(tc as any);`);
+      const firstUsedPageKey = usedPages.keys().next().value as string | undefined;
+      const instantiations = Array.from(usedPages.values()).filter((p) => {
+        const key = p.key || '';
+        const returned = returnedPageKeys.has(key);
+        return !p.fromReturnOnly && (!returned || key === firstUsedPageKey);
+      });
+      for (const { className, varName } of instantiations) {
+        lines.push(`  let ${varName} = new ${className}(tc as any);`);
       }
-      lines.push('');
+      if (instantiations.length) {
+        lines.push('');
+      }
     }
 
-    lines.push(
-      `  async function runSuitePreSteps() {`,
-      `    // 套件级前置步骤（在「用户场景」页面的套件中维护，仅需实现一次即可复用）：`,
-    );
-    if (sharedPreSteps.length) {
-      sharedPreSteps.forEach((txt, idx) => {
-        lines.push(`    // ${idx + 1}. ${txt}`);
-      });
-    } else {
-      lines.push(`    // （尚未填写，可在套件中补充前置步骤说明）`);
+    if (!isApiPlatform && hasBindings) {
+      lines.push(
+        `  afterEach(async function () {`,
+        `    try {`,
+        `      const current: any = this as any;`,
+        `      const failed =`,
+        `        (current?.currentTest?.state && current.currentTest.state !== 'passed') || !!current?.currentTest?.err;`,
+        `      if (!failed) return;`,
+        `      const page: any = (tc as any)?.page;`,
+        `      if (!page || page.isClosed?.()) return;`,
+        `      if (typeof page.screenshot !== 'function') return;`,
+        `      const ts = Date.now();`,
+        `      const title = (current?.currentTest?.title || 'case').toString().replace(/\\s+/g, '_');`,
+        `      const name = ${JSON.stringify(platform)} + '-' + ${JSON.stringify(moduleName)} + '-' + title + '-' + ts + '.png';`,
+        `      const base64 = await page.screenshot({ encoding: 'base64', fullPage: true });`,
+        `      const fetchFn = typeof fetch === 'function' ? fetch : (await import('node-fetch')).default as any;`,
+        `      const apiBase = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';`,
+        `      const resp = await fetchFn(\`\${apiBase.replace(/\\/$/, '')}/api/testcase/screenshot\`, {`,
+        `        method: 'POST',`,
+        `        headers: { 'Content-Type': 'application/json' },`,
+        `        body: JSON.stringify({`,
+        `          data: base64,`,
+        `          platform: ${JSON.stringify(platform)},`,
+        `          module: ${JSON.stringify(moduleName)},`,
+        `          caseName: title,`,
+        `          filename: name,`,
+        `          root: 'user',`,
+        `        }),`,
+        `      });`,
+        `      if (resp.ok) {`,
+        `        const result = await resp.json();`,
+        `        (tc as any).meta = { ...(tc as any).meta, lastScreenshot: result?.path };`,
+        `        console.log('[screenshot]', result?.path);`,
+        `      } else {`,
+        `        console.warn('upload screenshot failed', resp.status);`,
+        `      }`,
+        `    } catch (err) {`,
+        `      console.warn('screenshot failed:', err);`,
+        `    }`,
+        `  });`,
+        ``,
+      );
     }
-    lines.push(
-      `    // TODO: 根据上面的描述实现实际前置操作，避免在各个用例中重复维护。`,
-      `  }`,
-      '',
-    );
+
+    lines.push(`  async function runSuitePreSteps() {`);
+    if (suitePreStepLines.length) {
+      lines.push(`    // 套件级前置步骤（在「用户场景」页面的套件中维护，仅需实现一次即可复用）：`);
+      lines.push(...suitePreStepLines);
+    } else {
+      lines.push(`    // 套件级前置步骤：尚未填写，可在套件中补充前置步骤说明并重新生成。`);
+    }
+    lines.push(`  }`, '');
+
+    if (suitePreStepLines.length) {
+      lines.push('  beforeAll(async () => {');
+      lines.push('    await runSuitePreSteps();');
+      lines.push('  });');
+      lines.push('');
+    }
 
     if (isApiPlatform) {
       lines.push(
@@ -939,7 +824,6 @@ export class UserScenarioCodeGenerator {
       const steps = (sc.steps || []).slice().sort((a, b) => a.order - b.order);
       const caseTitle = `${sc.code} ${sc.title}`;
       lines.push(`  it(${JSON.stringify(caseTitle)}, async () => {`);
-      lines.push('    await runSuitePreSteps();');
       if (isApiPlatform) {
         if (!steps.length) {
           lines.push(

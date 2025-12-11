@@ -3,6 +3,7 @@ import {
   Post,
   Body,
   Get,
+  Delete,
   Res,
   Req,
   NotFoundException,
@@ -19,7 +20,7 @@ import { LoggerGateway } from 'src/logger/logger.gateway'
 import { FilesService } from 'src/files/files.service'
 import * as fs from 'fs'
 import { FastifyRequest as Request } from 'fastify'
-import { checkPath, getErrorMessage } from 'src/common/utils'
+import { checkPath, getErrorMessage, sanitizeUsername } from 'src/common/utils'
 import { RunTestCaseFileDto } from './dto/run-testcase-dto'
 import { InstallAppDto } from './dto/install-app.dto'
 import { remote } from 'webdriverio'
@@ -241,6 +242,134 @@ export class TestCasesController {
     return { result: 'ok', message: 'building...' }
   }
 
+  @Get('report-tree')
+  @UseGuards(AuthGuard('jwt'))
+  async getReportTree(
+    @Req() req: Request,
+    @Query('platform') platform?: string,
+    @Query('module') moduleName?: string,
+    @Query('root') root?: 'user' | 'shared',
+    @Query('depth') depth?: number
+  ) {
+    const username =
+      typeof req?.user === 'object' && (req.user as any)?.username
+        ? sanitizeUsername((req.user as any)?.username)
+        : 'default'
+    const rootType = root === 'shared' ? 'shared' : 'user'
+    const base =
+      rootType === 'shared'
+        ? path.join(process.env.WORKSPACE, 'reports')
+        : path.join(process.env.WORKSPACE, 'users', username, 'reports')
+    const safePlatform = (platform || '')
+      .toString()
+      .trim()
+      .replace(/[<>:"/\\|?*]+/g, '')
+    const safeModule = (moduleName || '')
+      .toString()
+      .trim()
+      .replace(/[<>:"/\\|?*]+/g, '')
+    const targetDir = path.join(base, safePlatform || '', safeModule || '')
+    if (!fs.existsSync(targetDir)) {
+      await fs.promises.mkdir(targetDir, { recursive: true })
+    }
+    const depthVal = depth && Number.isFinite(depth) ? Number(depth) : 4
+    return await this.filesService.getTree(targetDir, depthVal)
+  }
+
+  @Delete('report')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteReport(@Body() body: { path: string }) {
+    const relPath = (body?.path || '').toString().trim()
+    if (!relPath) {
+      throw new BadRequestException('path is required')
+    }
+    const absPath = path.resolve(process.cwd(), relPath)
+    if (!absPath.startsWith(path.resolve(process.cwd(), 'workspace'))) {
+      throw new BadRequestException('invalid path')
+    }
+    if (!fs.existsSync(absPath)) {
+      throw new NotFoundException(`file not found: ${relPath}`)
+    }
+    const stat = fs.statSync(absPath)
+    if (stat.isDirectory()) {
+      await fs.promises.rm(absPath, { recursive: true, force: true })
+      return { success: true, deleted: relPath }
+    }
+
+    const dir = path.dirname(absPath)
+    const base = path.basename(absPath, path.extname(absPath))
+    const entries = await fs.promises.readdir(dir)
+    for (const name of entries) {
+      if (name.startsWith(base)) {
+        const target = path.join(dir, name)
+        try {
+          await fs.promises.rm(target, { recursive: true, force: true })
+        } catch {
+          // ignore single-file errors
+        }
+      }
+    }
+    try {
+      const remaining = await fs.promises.readdir(dir)
+      if (remaining.length === 0) {
+        await fs.promises.rmdir(dir)
+      }
+    } catch {
+      // ignore
+    }
+    return { success: true, deleted: relPath }
+  }
+
+  @Post('screenshot')
+  async uploadScreenshot(
+    @Req() req: Request,
+    @Body()
+    body: {
+      data: string
+      platform?: string
+      module?: string
+      caseName?: string
+      filename?: string
+      root?: 'user' | 'shared'
+    }
+  ) {
+    const raw = (body?.data || '').trim()
+    if (!raw) {
+      throw new BadRequestException('data (base64) is required')
+    }
+    const username =
+      typeof req?.user === 'object' && (req.user as any)?.username
+        ? sanitizeUsername((req.user as any)?.username)
+        : 'default'
+    const rootType = body?.root === 'shared' ? 'shared' : 'user'
+    const safePlatform = (body?.platform || '').toString().replace(/[<>:"/\\|?*]+/g, '')
+    const safeModule = (body?.module || '').toString().replace(/[<>:"/\\|?*]+/g, '')
+    const safeCase = (body?.caseName || 'case').toString().replace(/[<>:"/\\|?*]+/g, '')
+    const ts = Date.now()
+    const safeFile =
+      (body?.filename || `${safePlatform || 'web'}-${safeModule || 'module'}-${safeCase}-${ts}.png`).replace(
+        /[<>:"/\\|?*]+/g,
+        '_'
+      )
+
+    const baseDir =
+      rootType === 'shared'
+        ? path.join(process.env.WORKSPACE, 'reports')
+        : path.join(process.env.WORKSPACE, 'users', username, 'reports')
+    const targetDir = path.join(baseDir, safePlatform || '', safeModule || '', safeCase || '', 'screenshots')
+    await fs.promises.mkdir(targetDir, { recursive: true })
+
+    const base64 = raw.startsWith('data:image') ? raw.split(',').pop() || '' : raw
+    if (!base64) {
+      throw new BadRequestException('invalid base64 payload')
+    }
+    const buf = Buffer.from(base64, 'base64')
+    const absPath = path.join(targetDir, safeFile)
+    await fs.promises.writeFile(absPath, buf)
+    const relPath = path.relative(process.cwd(), absPath)
+    return { path: relPath }
+  }
+
   // Provide a bundle of .d.ts files for editor intellisense
   @Get('typings')
   async typings() {
@@ -276,7 +405,18 @@ export class TestCasesController {
       runTestCaseFileDto.keepAppOpen === undefined ? undefined : !!runTestCaseFileDto.keepAppOpen
     const shareSessionOption =
       runTestCaseFileDto.shareSession === undefined ? undefined : !!runTestCaseFileDto.shareSession
-    console.log(`==== ${JSON.stringify((runTestCaseFileDto as any).envConfig)}`)
+    const parseMetaFromPath = (p: string) => {
+      const safe = path.normalize(p || '').split(path.sep).filter(Boolean)
+      const idxCases = safe.lastIndexOf('cases')
+      const idxSuites = safe.lastIndexOf('suites')
+      const idx = idxCases >= 0 ? idxCases : idxSuites
+      const platform = idx >= 0 && safe[idx + 1] ? safe[idx + 1] : undefined
+      const moduleName = idx >= 0 && safe[idx + 2] ? safe[idx + 2] : undefined
+      const fileName = safe[safe.length - 1] || ''
+      const caseName = fileName.replace(/\.[^.]+$/, '')
+      return { platform, module: moduleName, caseName }
+    }
+    const reportMeta = parseMetaFromPath(runTestCaseFileDto.filePath || '')
     try {
       void this.testCasesService.runInChildProcess(
         code.toString('utf-8'),
@@ -287,6 +427,7 @@ export class TestCasesController {
           sessionKey: runTestCaseFileDto.sessionKey,
           userDir: reportUserDir,
           envConfig: (runTestCaseFileDto as any).envConfig,
+          reportMeta,
         }
       )
     } catch (err) {

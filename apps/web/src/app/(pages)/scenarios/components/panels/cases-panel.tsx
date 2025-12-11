@@ -14,6 +14,8 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Play,
+  Radio,
   RefreshCw,
   Trash2,
 } from 'lucide-react';
@@ -50,6 +52,9 @@ export type CasesPanelProps = {
   submenuLabelMap: Record<string, string>;
   priorityLabelMap: Record<'P0' | 'P1' | 'P2', string>;
   statusLabelMap: Record<string, string>;
+  runEnvItems: OptionsSelectItem<string>[];
+  runEnvSelected: string;
+  onSelectRunEnv: (val: string) => void;
   tableSelectedKeys: Set<string>;
   onSelectionChange: (keys: Set<string>, ids: number[]) => void;
   deletingId: number | null;
@@ -58,6 +63,9 @@ export type CasesPanelProps = {
   onOpenSteps: (id: number) => void;
   onGenerateCode: (id: number, platform?: string | null) => void;
   onOpenTestcases: (filePath?: string | null) => void;
+  onRunCase: (id: number) => void;
+  onRunSelected: () => void;
+  onOpenRunLogs: () => void;
 };
 
 export function CasesPanel({
@@ -89,6 +97,9 @@ export function CasesPanel({
   submenuLabelMap,
   priorityLabelMap,
   statusLabelMap,
+  runEnvItems,
+  runEnvSelected,
+  onSelectRunEnv,
   tableSelectedKeys,
   onSelectionChange,
   onRowCountChange,
@@ -98,6 +109,9 @@ export function CasesPanel({
   onOpenSteps,
   onGenerateCode,
   onOpenTestcases,
+  onRunCase,
+  onRunSelected,
+  onOpenRunLogs,
 }: CasesPanelProps) {
   return (
     <Card className="flex min-h-0 flex-1 flex-col">
@@ -202,6 +216,19 @@ export function CasesPanel({
               size="sm"
               triggerClassName="min-w-[140px]"
             />
+            <OptionsSelect
+              id="ls-run-env"
+              value={runEnvSelected}
+              items={
+                runEnvItems.length
+                  ? runEnvItems
+                  : [{ value: 'none', label: '默认环境（无模板）' }]
+              }
+              placeholder="运行环境模板"
+              onSelect={(item) => onSelectRunEnv(item.value)}
+              size="sm"
+              triggerClassName="min-w-[200px]"
+            />
           </div>
           {ingestingDoc && (
             <p className="text-muted-foreground max-w-xl text-[11px]">
@@ -238,21 +265,6 @@ export function CasesPanel({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant="destructive"
-                      size="icon"
-                      className="h-8 w-8 rounded-full"
-                      disabled={!selectedIds.length || deletingBulk}
-                      onClick={onDeleteSelected}
-                      type="button"
-                    >
-                      {deletingBulk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent sideOffset={6}>删除所选</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
                       variant="outline"
                       size="icon"
                       className="h-8 w-8 rounded-full"
@@ -266,6 +278,50 @@ export function CasesPanel({
                   <TooltipContent sideOffset={6}>
                     导出{selectedIds.length ? '所选' : '全部'}用例
                   </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      disabled={!selectedIds.length}
+                      onClick={onRunSelected}
+                      type="button"
+                    >
+                      <Play className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>顺序运行所选用例</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      type="button"
+                      onClick={onOpenRunLogs}
+                    >
+                      <Radio className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>查看运行日志</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      disabled={!selectedIds.length || deletingBulk}
+                      onClick={onDeleteSelected}
+                      type="button"
+                    >
+                      {deletingBulk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>删除所选</TooltipContent>
                 </Tooltip>
               </>
             }
@@ -347,8 +403,8 @@ export function CasesPanel({
                 {
                   key: 'actions',
                   header: '',
-                  width: 156,
-                  minWidth: 132,
+                  width: 188,
+                  minWidth: 168,
                   render: (row: UserScenarioSummary) => (
                     <div className="flex items-center justify-end gap-1">
                       <Tooltip>
@@ -401,6 +457,21 @@ export function CasesPanel({
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent sideOffset={6}>为该用例生成代码</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => onRunCase(row.id)}
+                            aria-label="运行用例"
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>运行用例（未生成则先生成）</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>

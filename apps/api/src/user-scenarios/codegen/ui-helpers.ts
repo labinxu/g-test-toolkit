@@ -12,6 +12,8 @@ export type UsedPage = {
   className: string;
   varName: string;
   module?: string | null;
+  key?: string;
+  fromReturnOnly?: boolean;
 };
 
 export function normalizeStepInput(raw: any, idx: number): StepInput {

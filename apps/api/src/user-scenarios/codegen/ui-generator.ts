@@ -82,7 +82,14 @@ export function appendUiStepLines({
       className: page.className,
       varName: page.varName,
       module: (page as any).module ?? null,
+      key: pageKey,
+      fromReturnOnly: false,
     });
+  } else {
+    const existing = usedPages.get(pageKey)!;
+    if (existing.fromReturnOnly) {
+      usedPages.set(pageKey, { ...existing, fromReturnOnly: false });
+    }
   }
   // 任何在步骤中出现的页面对象都会在文件头被实例化或通过前置步骤返回，提前标记为“已声明”，避免后续 returnTarget 再用 let 重新声明。
   declaredVars.add(page.varName);
@@ -93,6 +100,15 @@ export function appendUiStepLines({
       (p) => p.className === rawReturnTarget || p.key === rawReturnTarget || p.varName === rawReturnTarget
     );
   if (returnTargetPage) {
+    if (!usedPages.has(returnTargetPage.key)) {
+      usedPages.set(returnTargetPage.key, {
+        className: returnTargetPage.className,
+        varName: returnTargetPage.varName,
+        module: (returnTargetPage as any).module ?? null,
+        key: returnTargetPage.key,
+        fromReturnOnly: true,
+      });
+    }
     returnedPageKeys.add(returnTargetPage.key);
   }
   const args = (binding?.args || []).map((a) => `${a.value}`).filter((v) => v.length > 0) || [];
@@ -108,7 +124,10 @@ export function appendUiStepLines({
   }
   if (returnTargetPage) {
     const targetVar = returnTargetPage.varName;
-    const assign = declaredVars.has(targetVar)
+    const targetInfo = usedPages.get(returnTargetPage.key);
+    const alreadyDeclared =
+      declaredVars.has(targetVar) || (targetInfo && targetInfo.fromReturnOnly === false);
+    const assign = alreadyDeclared
       ? makeLine(`${targetVar} = await ${callExpr};`)
       : makeLine(`let ${targetVar} = await ${callExpr};`);
     declaredVars.add(targetVar);

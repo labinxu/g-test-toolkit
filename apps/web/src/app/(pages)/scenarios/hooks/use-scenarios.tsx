@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSocket } from '../../testcases/socket-content';
 import { Button } from '@/components/ui/button';
 import { type OptionsSelectItem } from '@/components/select/options-select';
 import type {
@@ -43,11 +44,39 @@ const SUBMENU_LABEL: Record<string, string> = {
   interaction: '互动',
 };
 
+type RunTaskStatus = 'pending' | 'running' | 'success' | 'failed';
+type RunTask = {
+  id: number;
+  title: string;
+  status: RunTaskStatus;
+  filePath?: string | null;
+  error?: string | null;
+};
+
 const getEnvTemplateStorageKey = (platform: string, driver: string): string =>
   `gtt:envTemplate:${platform || 'default'}:${driver || 'browser'}`;
+const getRunEnvStorageKey = (platform: string, driver: string): string =>
+  `gtt:scenarios:runEnv:${platform || 'default'}:${driver || 'browser'}`;
+
+const inferDriverFromPlatform = (
+  platform: string | null | undefined,
+): 'browser' | 'android' | 'ios' | 'other' => {
+  if (!platform) return 'browser';
+  if (platform.includes('android')) return 'android';
+  if (platform.includes('-api-')) return 'other';
+  return 'browser';
+};
 
 export function useScenariosModel() {
   const router = useRouter();
+  const {
+    logs: socketLogs,
+    clearLogs,
+    clientId,
+    connected: socketConnected,
+    running: socketRunning,
+    setRunning: setSocketRunning,
+  } = useSocket();
   const [cases, setCases] = useState<UserScenarioSummary[]>([]);
   const [loadingCases, setLoadingCases] = useState(false);
   const [stepsByCase, setStepsByCase] = useState<
@@ -72,6 +101,15 @@ export function useScenariosModel() {
     null,
   );
   const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [runQueue, setRunQueue] = useState<RunTask[]>([]);
+  const [logPanelOpen, setLogPanelOpen] = useState(false);
+  const [runningCaseId, setRunningCaseId] = useState<number | null>(null);
+  const [runEnvTemplates, setRunEnvTemplates] = useState<EnvTemplateSummary[]>(
+    [],
+  );
+  const [runEnvSelectedId, setRunEnvSelectedId] = useState<
+    string | 'none'
+  >('none');
   const [stepDialogOpen, setStepDialogOpen] = useState(false);
   const [stepDialogPageKey, setStepDialogPageKey] = useState<
     string | undefined
@@ -1827,7 +1865,8 @@ const handleSaveSteps = async () => {
   const generateCodeForCase = async (
     caseId: number,
     envTemplateId?: number | null,
-  ) => {
+    opts?: { silent?: boolean },
+  ): Promise<string | null> => {
     try {
       const res = await fetch(`${apiPrefix}/${caseId}/generate-code`, {
         method: 'POST',
@@ -1848,27 +1887,29 @@ const handleSaveSteps = async () => {
       }
       const data = await res.json();
       const filePath = (data?.filePath as string) || '';
-      if (filePath) {
-        toast.success(
-          <div className="flex flex-col gap-1">
-            <div className="break-all text-xs">已生成代码：{filePath}</div>
-            <div>
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                className="h-6 px-2 text-[11px]"
-                onClick={() => {
-                  router.push('/testcases');
-                }}
-              >
-                在「用例库」中打开
-              </Button>
-            </div>
-          </div>,
-        );
-      } else {
-        toast.success(data?.message || '已触发代码生成');
+      if (!opts?.silent) {
+        if (filePath) {
+          toast.success(
+            <div className="flex flex-col gap-1">
+              <div className="break-all text-xs">已生成代码：{filePath}</div>
+              <div>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  className="h-6 px-2 text-[11px]"
+                  onClick={() => {
+                    router.push('/testcases');
+                  }}
+                >
+                  在「用例库」中打开
+                </Button>
+              </div>
+            </div>,
+          );
+        } else {
+          toast.success(data?.message || '已触发代码生成');
+        }
       }
       try {
         if (filePath) {
@@ -1877,10 +1918,12 @@ const handleSaveSteps = async () => {
         }
       } catch {}
       await refreshCases();
+      return filePath || null;
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
         toast.error(e?.message || '生成代码失败');
       }
+      return null;
     }
   };
 
@@ -1903,6 +1946,175 @@ const handleSaveSteps = async () => {
       selectedCase.platform || platform,
     );
   };
+
+  const enqueueRunTasks = useCallback(
+    (ids: number[]) => {
+      if (!ids.length) {
+        toast.error('请选择需要运行的用例');
+        return;
+      }
+      const tasks: RunTask[] = ids.map((id) => {
+        const found = cases.find((c) => c.id === id);
+        return {
+          id,
+          title: found ? `${found.code} ${found.title}` : `用例 #${id}`,
+          status: 'pending',
+          filePath: found?.generatedFilePath ?? null,
+        };
+      });
+      setRunQueue((prev) => {
+        const existingIds = new Set(prev.map((t) => t.id));
+        const filtered = prev.filter((t) => !ids.includes(t.id) || t.status === 'running');
+        const next = [...filtered];
+        tasks.forEach((t) => {
+          if (existingIds.has(t.id)) {
+            next.push({ ...t });
+          } else {
+            next.push(t);
+          }
+        });
+        return next;
+      });
+      setLogPanelOpen(true);
+    },
+    [cases],
+  );
+
+  const startRunTask = useCallback(
+    async (caseId: number) => {
+      const target = cases.find((c) => c.id === caseId);
+      if (!target) {
+        setRunQueue((prev) =>
+          prev.map((t) =>
+            t.id === caseId ? { ...t, status: 'failed', error: '用例不存在' } : t,
+          ),
+        );
+        setRunningCaseId(null);
+        return;
+      }
+      setRunningCaseId(caseId);
+      setSocketRunning(true);
+      clearLogs();
+      setLogPanelOpen(true);
+      setRunQueue((prev) =>
+        prev.map((t) => (t.id === caseId ? { ...t, status: 'running', error: null } : t)),
+      );
+
+      try {
+        let filePath = (target.generatedFilePath || '').trim();
+        if (!filePath || target.status !== 'code_generated') {
+          filePath =
+            (await generateCodeForCase(caseId, undefined, { silent: true })) || '';
+        }
+        if (!filePath) {
+          throw new Error('未能生成用例代码');
+        }
+
+        setRunQueue((prev) =>
+          prev.map((t) => (t.id === caseId ? { ...t, filePath } : t)),
+        );
+
+        let envConfig: any = undefined;
+        if (runEnvSelectedId && runEnvSelectedId !== 'none' && runEnvTemplates.length) {
+          const tpl = runEnvTemplates.find((t) => String(t.id) === String(runEnvSelectedId));
+          if (tpl && tpl.config && typeof tpl.config === 'object') {
+            const driverForTpl =
+              tpl.driver ||
+              inferDriverFromPlatform((target.platform || platform || 'gettr-web') as string);
+            if (driverForTpl === 'android') {
+              envConfig = { android: tpl.config };
+            } else if (driverForTpl === 'ios') {
+              envConfig = { ios: tpl.config };
+            } else {
+              envConfig = { browser: tpl.config };
+            }
+          }
+        }
+
+        const csrfResp = await fetch(`/api/csrf-token`, { credentials: 'include' });
+        const csrf = csrfResp.ok ? ((await csrfResp.json()) as { token: string }) : null;
+        const csrfToken = csrf?.token;
+        const resp = await fetch(`/api/testcase/runpath`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+          },
+          body: JSON.stringify({
+            filePath,
+            clientId,
+            keepAppOpen: true,
+            shareSession: true,
+            envConfig,
+          }),
+        });
+        if (!resp.ok) {
+          const err = await normalizeResponseError(resp as any);
+          throw new Error(err?.message || '触发运行失败');
+        }
+        toast.message(`已开始运行：${target.code}`);
+      } catch (err: any) {
+        setRunQueue((prev) =>
+          prev.map((t) =>
+            t.id === caseId
+              ? { ...t, status: 'failed', error: err?.message || '运行失败' }
+              : t,
+          ),
+        );
+        setRunningCaseId(null);
+        setSocketRunning(false);
+      }
+    },
+    [cases, clearLogs, clientId, generateCodeForCase, runEnvSelectedId, runEnvTemplates, platform, setSocketRunning],
+  );
+
+  useEffect(() => {
+    if (runningCaseId !== null) return;
+    const next = runQueue.find((t) => t.status === 'pending');
+    if (!next) return;
+    void startRunTask(next.id);
+  }, [runQueue, runningCaseId, startRunTask]);
+
+  useEffect(() => {
+    if (runningCaseId === null) return;
+    if (socketRunning) return;
+    setRunQueue((prev) =>
+      prev.map((t) =>
+        t.id === runningCaseId && t.status === 'running'
+          ? { ...t, status: 'success' }
+          : t,
+      ),
+    );
+    setRunningCaseId(null);
+  }, [socketRunning, runningCaseId]);
+
+  const handleRunCase = useCallback(
+    (id: number) => {
+      enqueueRunTasks([id]);
+    },
+    [enqueueRunTasks],
+  );
+
+  const handleRunSelected = useCallback(() => {
+    if (!selectedIds.length) {
+      toast.error('请先勾选需要运行的用例');
+      return;
+    }
+    enqueueRunTasks(selectedIds);
+  }, [enqueueRunTasks, selectedIds]);
+
+  const handleSelectRunEnv = useCallback(
+    (val: string) => {
+      setRunEnvSelectedId(val);
+      const driver = inferDriverFromPlatform(platform);
+      try {
+        localStorage.setItem(getRunEnvStorageKey(platform, driver), val);
+      } catch {
+        // ignore
+      }
+    },
+    [platform],
+  );
 
   const fetchActionCatalog = async () => {
     try {
@@ -2100,6 +2312,66 @@ const handleSaveSteps = async () => {
   useEffect(() => {
     void loadPlatforms();
   }, []);
+
+  useEffect(() => {
+    const loadRunTemplates = async () => {
+      const driver = inferDriverFromPlatform(platform);
+      setRunEnvTemplates([]);
+      setRunEnvSelectedId('none');
+      try {
+        const qs = new URLSearchParams();
+        if (platform) qs.set('platform', platform);
+        qs.set('driver', driver);
+        const res = await fetch(`/api/env-templates?${qs.toString()}`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          setRunEnvTemplates([]);
+          return;
+        }
+        const data = await res.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const mapped: EnvTemplateSummary[] = items.map((it: any) => {
+          let cfg: any = {};
+          try {
+            cfg =
+              it.config && typeof it.config === 'string'
+                ? JSON.parse(it.config)
+                : it.config || {};
+          } catch {
+            cfg = {};
+          }
+          return {
+            id: Number(it.id),
+            platform: String(it.platform || platform || 'gettr-web'),
+            driver: (it.driver || driver) as any,
+            key: String(it.key || ''),
+            name: String(it.name || it.key || ''),
+            description: (it.description as string | null | undefined) ?? null,
+            config: cfg,
+          };
+        });
+        setRunEnvTemplates(mapped);
+        if (mapped.length === 1) {
+          setRunEnvSelectedId(String(mapped[0]!.id));
+        } else if (mapped.length > 1) {
+          try {
+            const raw = localStorage.getItem(getRunEnvStorageKey(platform, driver));
+            if (raw) {
+              if (mapped.some((tpl) => String(tpl.id) === raw)) {
+                setRunEnvSelectedId(raw);
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        setRunEnvTemplates([]);
+      }
+    };
+    void loadRunTemplates();
+  }, [platform]);
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -2495,9 +2767,23 @@ const handleSaveSteps = async () => {
     openEnvTemplateDialogForCase,
     handleGenerateCode,
     generateCodeForCase,
+    handleRunCase,
+    handleRunSelected,
+    runQueue,
+    logPanelOpen,
+    setLogPanelOpen,
+    runningCaseId,
+    runLogs: socketLogs,
+    runConnected: socketConnected,
+    clearLogs,
+    runEnvTemplates,
+    runEnvSelectedId,
+    setRunEnvSelectedId,
+    handleSelectRunEnv,
     apiPrefix,
     router,
   };
 }
 
+export type { RunTask };
 export { STATUS_LABEL, PRIORITY_LABEL, SUBMENU_LABEL };

@@ -1,5 +1,6 @@
 'use client';
 
+import { SocketProvider } from '../testcases/socket-content';
 import { CasesPanel } from './components/panels/cases-panel';
 import { StepsEditorSheet } from './components/panels/steps-editor-sheet';
 import { CaseMetaDialog } from './components/dialogs/case-meta-dialog';
@@ -8,6 +9,7 @@ import { StepDialog } from './components/dialogs/step-dialog';
 import { NewCaseDialog } from './components/dialogs/new-case-dialog';
 import { DocAiPromptDialog } from './components/dialogs/doc-ai-prompt-dialog';
 import { NewSuiteDialog } from './components/dialogs/new-suite-dialog';
+import { RunLogDrawer } from './components/run-log-drawer';
 import {
   SUBMENU_LABEL,
   PRIORITY_LABEL,
@@ -16,6 +18,14 @@ import {
 } from './hooks/use-scenarios';
 
 export default function ScenariosPage() {
+  return (
+    <SocketProvider>
+      <ScenariosPageContent />
+    </SocketProvider>
+  );
+}
+
+function ScenariosPageContent() {
   const vm = useScenariosModel();
 
   return (
@@ -76,6 +86,15 @@ export default function ScenariosPage() {
           submenuLabelMap={SUBMENU_LABEL}
           priorityLabelMap={PRIORITY_LABEL}
           statusLabelMap={STATUS_LABEL}
+          runEnvItems={[
+            { value: 'none', label: '默认环境（无模板）' },
+            ...vm.runEnvTemplates.map((tpl) => ({
+              value: `${tpl.id}`,
+              label: tpl.name || tpl.key || `模板 #${tpl.id}`,
+            })),
+          ]}
+          runEnvSelected={vm.runEnvSelectedId ?? 'none'}
+          onSelectRunEnv={vm.handleSelectRunEnv}
           tableSelectedKeys={vm.tableSelectedKeys}
           onSelectionChange={(keys, ids) => {
             vm.setTableSelectedKeys(keys);
@@ -103,6 +122,8 @@ export default function ScenariosPage() {
             }
             vm.router.push('/testcases');
           }}
+          onRunCase={vm.handleRunCase}
+          onRunSelected={vm.handleRunSelected}
         />
       </div>
 
@@ -266,6 +287,16 @@ export default function ScenariosPage() {
         onOpenChange={vm.setDocAiPromptOpen}
         onPromptChange={vm.setDocAiPromptText}
         onConfirm={vm.handleDocAiConfirm}
+      />
+
+      <RunLogDrawer
+        open={vm.logPanelOpen}
+        onOpenChange={vm.setLogPanelOpen}
+        tasks={vm.runQueue}
+        runningCaseId={vm.runningCaseId}
+        logs={vm.runLogs}
+        onClearLogs={vm.clearLogs}
+        connected={vm.runConnected}
       />
     </div>
   );

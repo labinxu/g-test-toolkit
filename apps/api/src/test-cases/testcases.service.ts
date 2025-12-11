@@ -102,6 +102,7 @@ export class TestCasesService {
       sessionKey?: string
       userDir?: string
       envConfig?: any
+      reportMeta?: { platform?: string; module?: string; caseName?: string }
     }
   ) {
     if (!clientId) {
@@ -165,7 +166,11 @@ export class TestCasesService {
     child.on('message', async (msg: any) => {
       try {
         if (msg?.type === 'complete') {
-          await this.generateReportsFromCoreResult(msg.coreResult, process.env.WORKSPACE)
+          await this.generateReportsFromCoreResult(
+            msg.coreResult,
+            process.env.WORKSPACE,
+            msg.reportMeta,
+          )
           this.logger.complete(clientId, 'exit')
         } else if (msg?.type === 'error') {
           this.logger.error(
@@ -199,6 +204,7 @@ export class TestCasesService {
         apiTestsConfig: apiTestsConfig ?? undefined,
         workspace: process.env.WORKSPACE,
         envConfig: options?.envConfig,
+        reportMeta: options?.reportMeta,
       },
     })
   }
@@ -249,6 +255,7 @@ export class TestCasesService {
       sessionKey?: string
       userDir?: string
       envConfig?: any
+      reportMeta?: { platform?: string; module?: string; caseName?: string }
     }
   ): Promise<any> {
     let transformedCode = ''
@@ -325,6 +332,7 @@ export class TestCasesService {
           shareSession: options?.shareSession,
           sessionKey: options?.sessionKey,
           userDir: options?.userDir,
+          reportMeta: options?.reportMeta,
           shouldStop: () => stopRef.requested,
         },
         userDir: options?.userDir,
@@ -356,7 +364,11 @@ export class TestCasesService {
       const coreResult =
         corePromise && typeof corePromise.then === 'function' ? await corePromise : undefined
 
-      await this.generateReportsFromCoreResult(coreResult, sandbox.params.workspace)
+      await this.generateReportsFromCoreResult(
+        coreResult,
+        sandbox.params.workspace,
+        options?.reportMeta,
+      )
 
       return coreResult
     } catch (error) {
@@ -372,7 +384,11 @@ export class TestCasesService {
       }
     }
   }
-  private async generateReportsFromCoreResult(coreResult: any, workspaceValue?: string) {
+  private async generateReportsFromCoreResult(
+    coreResult: any,
+    workspaceValue?: string,
+    meta?: { platform?: string; module?: string; caseName?: string },
+  ) {
     if (!coreResult || !Array.isArray(coreResult.results)) return
     const rawWorkspace = workspaceValue || process.env.WORKSPACE || 'workspace'
     const workspaceRoot = path.isAbsolute(rawWorkspace)
@@ -389,18 +405,42 @@ export class TestCasesService {
       return cleaned || undefined
     }
 
+    const sanitize = (value?: string | null) => {
+      if (!value) return undefined
+      return value.toString().trim().replace(/[<>:"/\\|?*]+/g, '_')
+    }
+
     for (const entry of coreResult.results) {
       if (!entry?.report) continue
       const testName = entry.report?.caseName || entry.className || 'TestCase'
       try {
         const normalizedUserDir = normalizeUserDir(entry.report?.metadata?.userDir)
-        const reportWorkspace = normalizedUserDir
+        const reportWorkspaceBase = normalizedUserDir
           ? path.join(workspaceRoot, normalizedUserDir, 'reports')
           : path.join(workspaceRoot, 'reports')
+
+        const platform = sanitize(
+          entry.report?.metadata?.platform ?? meta?.platform ?? entry.report?.metadata?.workspacePlatform,
+        )
+        const moduleName = sanitize(
+          entry.report?.metadata?.module ?? meta?.module ?? entry.report?.metadata?.workspaceModule,
+        )
+        const caseName = sanitize(
+          entry.report?.metadata?.caseName ?? meta?.caseName ?? testName,
+        )
+        const reportWorkspace =
+          platform && moduleName
+            ? path.join(reportWorkspaceBase, platform, moduleName, caseName || 'case')
+            : caseName
+              ? path.join(reportWorkspaceBase, caseName)
+              : reportWorkspaceBase
 
         entry.report.metadata = {
           ...(entry.report.metadata ?? {}),
           userDir: normalizedUserDir ?? undefined,
+          platform: platform ?? entry.report?.metadata?.platform,
+          module: moduleName ?? entry.report?.metadata?.module,
+          caseName: caseName ?? testName,
         }
 
         await this.reportService.generate(reportWorkspace, testName, entry.report)
