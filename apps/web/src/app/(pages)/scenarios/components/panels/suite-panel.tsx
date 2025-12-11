@@ -1,11 +1,14 @@
- 'use client';
+'use client';
 
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { OptionsSelectSearch } from '@/components/select/options-select-search';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Save } from 'lucide-react';
+import { ScenarioStepsTable } from '../shared/steps-table';
+import type { UserScenarioStep } from '../../types';
 
 type SuiteSummary = {
   id: number;
@@ -20,15 +23,20 @@ type SuitePanelProps = {
   selectedSuiteId: number | null;
   suiteLoading: boolean;
   suiteGenerating: boolean;
+  suiteNameDraft: string;
   suiteSaving?: boolean;
+  suiteDeleting?: boolean;
   suiteDescDraft: string;
   suitePreSteps: string[];
   suitePreStepDraft: string;
   onSuiteDescChange: (val: string) => void;
+  onSuiteNameChange: (val: string) => void;
   onSuitePreStepsChange: (steps: string[]) => void;
   onSuitePreStepDraftChange: (val: string) => void;
   onAssignSuite: (suiteId: number | null) => void;
+  onEditSuiteStep: (id: string) => void;
   onSaveSuitePreSteps: () => void;
+  onDeleteSuite: () => void;
   onOpenCreateSuite: () => void;
   onGenerateSuiteCode: () => void;
   onOpenSuiteStepDialog: () => void;
@@ -39,19 +47,47 @@ export function SuitePanel({
   selectedSuiteId,
   suiteLoading,
   suiteGenerating,
+  suiteNameDraft,
   suiteDescDraft,
   suitePreSteps,
   suitePreStepDraft,
   onSuiteDescChange,
+  onSuiteNameChange,
   onSuitePreStepsChange,
   onSuitePreStepDraftChange,
   onAssignSuite,
+  onEditSuiteStep,
   onSaveSuitePreSteps,
+  onDeleteSuite,
   onOpenCreateSuite,
   onGenerateSuiteCode,
   onOpenSuiteStepDialog,
   suiteSaving = false,
+  suiteDeleting = false,
 }: SuitePanelProps) {
+  const suiteStepsParsed: UserScenarioStep[] = useMemo(() => {
+    return suitePreSteps.map((raw, idx) => {
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = null;
+      }
+      const order = idx + 1;
+      const action =
+        (parsed?.action ?? (typeof raw === 'string' ? raw : '') ?? '').toString();
+      const expected = (parsed?.expected ?? '').toString();
+      const data = (parsed?.data ?? '').toString();
+      return {
+        id: `suite-${idx}`,
+        order,
+        action,
+        expected,
+        data,
+      };
+    });
+  }, [suitePreSteps]);
+
   const suiteSelectValue =
     selectedSuiteId != null ? String(selectedSuiteId) : 'none';
 
@@ -96,11 +132,20 @@ export function SuitePanel({
             )}
             生成套件代码
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={!selectedSuiteId || suiteDeleting}
+            onClick={onDeleteSuite}
+          >
+            删除套件
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-1">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="space-y-1 md:col-span-2">
           <Label className="text-xs">所属套件</Label>
           <OptionsSelectSearch
             key={`suite-select-${suiteSelectValue}-${suites.length}`}
@@ -133,6 +178,15 @@ export function SuitePanel({
           />
         </div>
         <div className="space-y-1">
+          <Label className="text-xs">套件名称</Label>
+          <Input
+            value={suiteNameDraft}
+            onChange={(e) => onSuiteNameChange(e.target.value)}
+            placeholder="输入或修改套件名称"
+            disabled={!selectedSuiteId}
+          />
+        </div>
+        <div className="space-y-1 md:col-span-3">
           <Label className="text-xs">套件描述（可选）</Label>
           <Input
             value={suiteDescDraft}
@@ -141,9 +195,9 @@ export function SuitePanel({
             disabled={!selectedSuiteId}
           />
         </div>
-    </div>
+      </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
             <Label className="text-xs">套件级前置步骤</Label>
@@ -151,96 +205,51 @@ export function SuitePanel({
               这些前置步骤会在套件代码中统一执行，不需要在每个用例里重复。
             </p>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={onOpenSuiteStepDialog}
-            disabled={!selectedSuiteId || suiteLoading}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            使用对话框添加
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onOpenSuiteStepDialog}
+              disabled={!selectedSuiteId || suiteLoading}
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              使用对话框添加
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={onSaveSuitePreSteps}
+              disabled={!selectedSuiteId || suiteSaving}
+            >
+              {suiteSaving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              保存套件
+            </Button>
+          </div>
         </div>
-        <div className="space-y-2">
-          {suitePreSteps.length === 0 && (
-            <p className="text-muted-foreground text-[11px]">
-              暂无前置步骤，可在下方添加。
-            </p>
-          )}
-          {suitePreSteps.map((step, idx) => (
-            <div key={`${idx}-${step}`} className="flex items-center gap-2">
-              <Input
-                value={step}
-                onChange={(e) =>
-                  onSuitePreStepsChange(
-                    suitePreSteps.map((s, i) =>
-                      i === idx ? e.target.value : s,
-                    ),
-                  )
-                }
-                disabled={!selectedSuiteId}
-                placeholder={`前置步骤 ${idx + 1}`}
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="outline"
-                className="h-8 w-8"
-                disabled={!selectedSuiteId}
-                onClick={() =>
-                  onSuitePreStepsChange(
-                    suitePreSteps.filter((_, i) => i !== idx),
-                  )
-                }
-                aria-label="删除套件前置步骤"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <Textarea
-            value={suitePreStepDraft}
-            onChange={(e) => onSuitePreStepDraftChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                addSuitePreSteps();
-              }
-            }}
-            placeholder="按行输入多个前置步骤，Enter 快速添加，Shift+Enter 换行"
-            rows={3}
-            disabled={!selectedSuiteId}
-            className="min-h-[72px]"
-          />
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="h-9 w-9"
-            disabled={!selectedSuiteId || !suitePreStepDraft.trim()}
-            onClick={addSuitePreSteps}
-            aria-label="添加套件前置步骤"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            onClick={onSaveSuitePreSteps}
-            disabled={!selectedSuiteId || suiteSaving}
-          >
-            {suiteSaving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-            保存套件前置
-          </Button>
-          <p className="text-muted-foreground text-[11px]">
-            套件前置步骤将一次维护，在生成的套件代码中统一调用。
-          </p>
-        </div>
+        <ScenarioStepsTable
+          steps={suiteStepsParsed}
+          mode="editable"
+          showRowNumber
+          onEditStep={(id) => onEditSuiteStep(id)}
+          onDeleteStep={(id) => {
+            const idx = suiteStepsParsed.findIndex((s) => s.id === id);
+            if (idx < 0) return;
+            onSuitePreStepsChange(suitePreSteps.filter((_, i) => i !== idx));
+          }}
+          onMoveStep={(id, dir) => {
+            const idx = suiteStepsParsed.findIndex((s) => s.id === id);
+            if (idx < 0) return;
+            if (dir === 'up' && idx === 0) return;
+            if (dir === 'down' && idx === suiteStepsParsed.length - 1) return;
+            const target = dir === 'up' ? idx - 1 : idx + 1;
+            const next = [...suitePreSteps];
+            const tmp = next[idx];
+            next[idx] = next[target];
+            next[target] = tmp;
+            onSuitePreStepsChange(next);
+          }}
+        />
       </div>
     </div>
   );

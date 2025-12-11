@@ -12,7 +12,6 @@ export class AllureAdapter {
   constructor(private resultsDir: string, private logger?: { debug?: Function; info?: Function; warn?: Function; error?: Function }) {
     try {
       // Attempt to load allure runtime from any available installation
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const commons = require('allure-js-commons')
       const AllureRuntime = commons.AllureRuntime || commons.default?.AllureRuntime
       if (!AllureRuntime) {
@@ -33,7 +32,7 @@ export class AllureAdapter {
       fs.mkdirSync(resultsDir, { recursive: true })
       this.runtime = new AllureRuntime({ resultsDir })
       this.logger?.info?.(`Allure enabled. resultsDir: ${resultsDir}`)
-    } catch (e) {
+    } catch (_e) {
       // No allure-js-commons installed or unavailable – act as no-op
       this.runtime = null
       this.logger?.warn?.('Allure not active (allure-js-commons not installed). Skipping allure output.')
@@ -147,4 +146,3 @@ export function tryGenerateAllure(resultsRoot: string, testName: string, data: A
     return false
   }
 }
-

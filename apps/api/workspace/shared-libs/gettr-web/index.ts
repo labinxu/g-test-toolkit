@@ -1,6 +1,6 @@
 // Auto-generated index.ts for lib
 export { HomePage } from './src/home-page';
-export { HomeDemoPage } from './src/homedemo-page';
-export { LiveStreamPage } from './src/livestream-page';
+export { LivePage } from './src/live-page';
+export { LivePagePage } from './src/livepage-page';
 export { LoginPage } from './src/login-page';
-export { ProfilePage } from './src/profile-page';
+export { SwitchAccountPage } from './src/switchaccount-page';

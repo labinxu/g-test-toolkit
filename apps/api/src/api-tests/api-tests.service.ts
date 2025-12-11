@@ -523,7 +523,6 @@ export class ApiTestsService {
       results = [];
       for (const c of cases) {
         // sequential execution
-        // eslint-disable-next-line no-await-in-loop
         const r = await runOne(c);
         results.push(r);
       }

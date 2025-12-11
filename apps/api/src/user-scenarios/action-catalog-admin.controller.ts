@@ -262,32 +262,48 @@ export class ActionCatalogAdminController {
           const isAssert = (act.kind as any) === 'assert';
           const locatorRaw = (act.locator || '').trim();
           const locatorLit = locatorRaw ? JSON.stringify(locatorRaw) : null;
-          const params = (act.params || []).map((p) => {
+          const paramInfos = (act.params || []).map((p) => {
             const name = this.sanitizeIdentifier(p.name, 'arg');
             const t = (p.type || '').toLowerCase();
             const type =
               t === 'string' || t === 'number' || t === 'boolean'
                 ? t
                 : 'any';
-            return `${name}: ${type}`;
+            return { name, type };
           });
+          const params = paramInfos.map((p) => `${p.name}: ${p.type}`);
+          const firstParamName = paramInfos[0]?.name;
           const rawTarget = (act.returnTarget || '').trim();
+          const actionType: 'click' | 'input' | 'drag' | undefined =
+            (act.kind as any) === 'action'
+              ? (act as any).actionType === 'input'
+                ? 'input'
+                : (act as any).actionType === 'drag'
+                  ? 'drag'
+                  : 'click'
+              : undefined;
           const callSteps = (() => {
             const raw = (act as any).callStepsJson as string | null | undefined;
             if (!raw) return [];
             try {
               const parsed = JSON.parse(raw);
               if (!Array.isArray(parsed)) return [];
-              return parsed
-                .map((s: any) => {
+              const normalized = parsed
+                .map((s: any, idx: number) => {
                   const targetActionKey = String(s?.targetActionKey || '').trim();
                   if (!targetActionKey) return null;
                   const args = Array.isArray(s?.args)
                     ? s.args.map((v: any) => String(v))
                     : [];
-                  return { targetActionKey, args };
+                  const sortOrder =
+                    typeof s?.sortOrder === 'number' && Number.isFinite(s.sortOrder)
+                      ? Math.floor(s.sortOrder)
+                      : idx;
+                  return { targetActionKey, args, sortOrder };
                 })
-                .filter(Boolean) as { targetActionKey: string; args: string[] }[];
+                .filter(Boolean) as { targetActionKey: string; args: string[]; sortOrder: number }[];
+              normalized.sort((a, b) => a.sortOrder - b.sortOrder);
+              return normalized;
             } catch {
               return [];
             }
@@ -308,8 +324,11 @@ export class ActionCatalogAdminController {
             `    this.logger.debug('${className}.${methodSafe} called');`,
           );
           if ((act.kind as any) === 'call' && callSteps.length > 0) {
-            lines.push('    await this.delay();');
-            for (const step of callSteps) {
+            for (let i = 0; i < callSteps.length; i++) {
+              const step = callSteps[i]!;
+              if (i > 0) {
+                lines.push('    await this.delay();');
+              }
               const targetMethodSafe =
                 methodNameByKey.get(step.targetActionKey) ||
                 this.sanitizeIdentifier(step.targetActionKey, step.targetActionKey);
@@ -323,6 +342,12 @@ export class ActionCatalogAdminController {
                   : `    await this.${targetMethodSafe}();`;
               lines.push(callLine);
             }
+            lines.push('    await this.delay();');
+            if (rawTarget === 'this') {
+              lines.push('    return this;');
+            } else if (rawTarget) {
+              lines.push(`    return new ${rawTarget}(this.testcase);`);
+            }
           } else {
             if (locatorLit) {
               if (isAssert) {
@@ -331,8 +356,12 @@ export class ActionCatalogAdminController {
                   `    this.testcase.assertNotNull(el, '${className}.${methodSafe} element');`,
                 );
               } else {
-                lines.push(`    const el = await this.page.$(${locatorLit});`);
-                lines.push(`    await el?.click();`);
+                if (actionType === 'input' && firstParamName) {
+                  lines.push(`    await this.page.type(${locatorLit}, ${firstParamName});`);
+                } else {
+                  lines.push(`    const el = await this.page.$(${locatorLit});`);
+                  lines.push(`    await el?.click();`);
+                }
               }
             }
             lines.push('    await this.delay();');
@@ -607,26 +636,32 @@ export class ActionCatalogAdminController {
           const params = paramInfos.map((p) => `${p.name}: ${p.type}`);
           const firstParamName = paramInfos[0]?.name;
           const rawTarget = (act.returnTarget || '').trim();
-          const callSteps = (() => {
-            const raw = (act as any).callStepsJson as string | null | undefined;
-            if (!raw) return [];
-            try {
-              const parsed = JSON.parse(raw);
-              if (!Array.isArray(parsed)) return [];
-              return parsed
-                .map((s: any) => {
-                  const targetActionKey = String(s?.targetActionKey || '').trim();
-                  if (!targetActionKey) return null;
-                  const args = Array.isArray(s?.args)
-                    ? s.args.map((v: any) => String(v))
-                    : [];
-                  return { targetActionKey, args };
-                })
-                .filter(Boolean) as { targetActionKey: string; args: string[] }[];
-            } catch {
-              return [];
-            }
-          })();
+        const callSteps = (() => {
+          const raw = (act as any).callStepsJson as string | null | undefined;
+          if (!raw) return [];
+          try {
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+            const normalized = parsed
+              .map((s: any, idx: number) => {
+                const targetActionKey = String(s?.targetActionKey || '').trim();
+                if (!targetActionKey) return null;
+                const args = Array.isArray(s?.args)
+                  ? s.args.map((v: any) => String(v))
+                  : [];
+                const sortOrder =
+                  typeof s?.sortOrder === 'number' && Number.isFinite(s.sortOrder)
+                    ? Math.floor(s.sortOrder)
+                    : idx;
+                return { targetActionKey, args, sortOrder };
+              })
+              .filter(Boolean) as { targetActionKey: string; args: string[]; sortOrder: number }[];
+            normalized.sort((a, b) => a.sortOrder - b.sortOrder);
+            return normalized;
+          } catch {
+            return [];
+          }
+        })();
           lines.push('');
           if (act.label) {
             lines.push(`  /** ${act.label} */`);
@@ -639,12 +674,16 @@ export class ActionCatalogAdminController {
           lines.push(
             `    // AUTO-GENERATED-ANDROID: ${className}.${methodSafe}`,
           );
-          lines.push(
-            `    this.logger.debug('${className}.${methodSafe} called');`,
-          );
-          lines.push(`    await this.delay();`);
-          if ((act.kind as any) === 'call' && callSteps.length > 0) {
-            for (const step of callSteps) {
+        lines.push(
+          `    this.logger.debug('${className}.${methodSafe} called');`,
+        );
+        lines.push(`    await this.delay();`);
+        if ((act.kind as any) === 'call' && callSteps.length > 0) {
+          for (let i = 0; i < callSteps.length; i++) {
+            const step = callSteps[i]!;
+            if (i > 0) {
+              lines.push('    await this.delay();');
+            }
               const targetMethodSafe =
                 methodNameByKey.get(step.targetActionKey) ||
                 this.sanitizeIdentifier(step.targetActionKey, step.targetActionKey);
@@ -657,12 +696,18 @@ export class ActionCatalogAdminController {
                   ? `    await this.${targetMethodSafe}(${argsCode});`
                   : `    await this.${targetMethodSafe}();`;
               lines.push(callLine);
-            }
-          } else if (selectorLit) {
-            if (isAssert) {
-              lines.push(`    const el = await this.page.$(${selectorLit});`);
-              lines.push(
-                `    this.testcase.assertNotNull(el, '${className}.${methodSafe} element');`,
+          }
+          lines.push('    await this.delay();');
+          if (rawTarget === 'this') {
+            lines.push('    return this;');
+          } else if (rawTarget) {
+            lines.push(`    return new ${rawTarget}(this.testcase);`);
+          }
+        } else if (selectorLit) {
+          if (isAssert) {
+            lines.push(`    const el = await this.page.$(${selectorLit});`);
+            lines.push(
+              `    this.testcase.assertNotNull(el, '${className}.${methodSafe} element');`,
               );
             } else if (firstParamName) {
               // 输入框场景：先点击再清空并输入第一个参数
@@ -960,16 +1005,24 @@ export class ActionCatalogAdminController {
         description: el.description ?? null,
         defaultLocator: el.defaultLocator ?? null,
       })),
-      actions: (p.actions || []).map((a) => ({
-        id: a.id,
-        key: a.key,
-        label: a.label,
-        method: a.method,
-        kind:
-          (a.kind as any) === 'assert'
-            ? 'assert'
-            : (a.kind as any) === 'call'
-              ? 'call'
+        actions: (p.actions || []).map((a) => ({
+          id: a.id,
+          key: a.key,
+          label: a.label,
+          method: a.method,
+          actionType:
+            (a.kind as any) === 'action'
+              ? (a as any).actionType === 'input'
+                ? 'input'
+                : (a as any).actionType === 'drag'
+                  ? 'drag'
+                  : 'click'
+              : undefined,
+          kind:
+            (a.kind as any) === 'assert'
+              ? 'assert'
+              : (a.kind as any) === 'call'
+                ? 'call'
               : 'action',
         defaultExpected: a.defaultExpected ?? null,
         description: a.description ?? null,
@@ -1225,38 +1278,6 @@ export class ActionCatalogAdminController {
     if (!srcDir) return { created: 0, skipped: 0 };
     let created = 0;
     let skipped = 0;
-    const walk = (dir: string) => {
-      let entries: fs.Dirent[];
-      try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const ent of entries) {
-        const full = path.join(dir, ent.name);
-        if (ent.isDirectory()) {
-          walk(full);
-        } else if (ent.isFile() && ent.name.endsWith('.ts') && !ent.name.endsWith('.d.ts')) {
-          try {
-            const raw = fs.readFileSync(full, 'utf8');
-            const m = raw.match(/export\s+class\s+(\w+)\s+extends\s+IPage\b/);
-            if (!m) continue;
-            const className = m[1];
-            const key = this.derivePageKeyFromClassName(className);
-            if (!key) continue;
-            // Skip if page already exists for this platform + key
-            // Ensure unique by (platform, key)
-            const exists = this.pageRepo.findOne({
-              where: { platform: plat, key } as any,
-            });
-            // need sync/await per file
-            // We'll push tasks and await later to keep code simple
-          } catch {
-            continue;
-          }
-        }
-      }
-    };
 
     const tasks: Array<Promise<void>> = [];
     const processFile = async (filePath: string, raw: string) => {
@@ -1598,6 +1619,7 @@ export class ActionCatalogAdminController {
           act.label = name;
           act.method = name;
           act.kind = 'action';
+          act.actionType = 'click';
           act.defaultExpected = null;
           act.description = null;
           act.locator = null;
@@ -1801,6 +1823,18 @@ export class ActionCatalogAdminController {
           : (a?.kind as any) === 'call'
           ? 'call'
           : 'action';
+      const rawActionType =
+        typeof a?.actionType === 'string' && a.actionType.trim()
+          ? a.actionType.trim()
+          : '';
+      act.actionType =
+        act.kind === 'action'
+          ? rawActionType === 'input'
+            ? 'input'
+            : rawActionType === 'drag'
+              ? 'drag'
+              : 'click'
+          : null;
       act.defaultExpected =
         typeof a?.defaultExpected === 'string'
           ? a.defaultExpected
@@ -1965,6 +1999,18 @@ export class ActionCatalogAdminController {
           : (a?.kind as any) === 'call'
           ? 'call'
           : 'action';
+      const rawActionType =
+        typeof a?.actionType === 'string' && a.actionType.trim()
+          ? a.actionType.trim()
+          : '';
+      act.actionType =
+        act.kind === 'action'
+          ? rawActionType === 'input'
+            ? 'input'
+            : rawActionType === 'drag'
+              ? 'drag'
+              : 'click'
+          : null;
       act.defaultExpected =
         typeof a?.defaultExpected === 'string'
           ? a.defaultExpected
@@ -2057,6 +2103,95 @@ export class ActionCatalogAdminController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post('pages/:id/actions')
+  async createAction(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) pageId: number,
+    @Body() body: AnyRec,
+  ) {
+    await ensureAdminOrBootstrap(this.userRepo, req);
+    const page = await this.pageRepo.findOne({
+      where: { id: pageId },
+      relations: ['actions', 'actions.params'],
+      order: { actions: { sortOrder: 'ASC', id: 'ASC' } as any },
+    });
+    if (!page) {
+      throw new NotFoundException(`ActionPage ${pageId} not found`);
+    }
+    const key = String(body?.key || '').trim();
+    if (!key) throw new BadRequestException('key cannot be empty');
+    if ((page.actions || []).some((a) => a.key === key)) {
+      throw new BadRequestException(`Action key ${key} already exists on page`);
+    }
+    const action = this.buildActionFromBody(new ActionPageAction(), body, (page.actions || []).length);
+    action.page = page;
+    await this.actionRepo.save(action);
+    const full = await this.pageRepo.findOne({
+      where: { id: pageId },
+      relations: ['actions', 'actions.params'],
+      order: {
+        actions: {
+          sortOrder: 'ASC',
+          id: 'ASC',
+          params: { sortOrder: 'ASC', id: 'ASC' } as any,
+        } as any,
+      } as any,
+    });
+    await this.ensureLibTsFileForPage(full || page);
+    return this.mapPageDetail(full || page);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Put('pages/:id/actions/:actionId')
+  async updateAction(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) pageId: number,
+    @Param('actionId', ParseIntPipe) actionId: number,
+    @Body() body: AnyRec,
+  ) {
+    await ensureAdminOrBootstrap(this.userRepo, req);
+    const action = await this.actionRepo.findOne({
+      where: { id: actionId, page: { id: pageId } as any },
+      relations: ['page', 'params'],
+    });
+    if (!action) {
+      throw new NotFoundException(`Action ${actionId} not found on page ${pageId}`);
+    }
+    const page = action.page;
+    if (!page) {
+      throw new NotFoundException(`Page ${pageId} not found`);
+    }
+    const key = String(body?.key || '').trim();
+    if (!key) throw new BadRequestException('key cannot be empty');
+    const dup = await this.actionRepo.findOne({
+      where: { page: { id: pageId } as any, key },
+    });
+    if (dup && dup.id !== actionId) {
+      throw new BadRequestException(`Action key ${key} already exists on page`);
+    }
+
+    this.buildActionFromBody(action, body, action.sortOrder ?? 0);
+    // replace params
+    await this.actionRepo.manager.delete(ActionParam, { action: { id: action.id } as any });
+    action.params = this.buildParamsFromBody(body?.params, action);
+
+    await this.actionRepo.save(action);
+    const full = await this.pageRepo.findOne({
+      where: { id: pageId },
+      relations: ['actions', 'actions.params'],
+      order: {
+        actions: {
+          sortOrder: 'ASC',
+          id: 'ASC',
+          params: { sortOrder: 'ASC', id: 'ASC' } as any,
+        } as any,
+      } as any,
+    });
+    await this.ensureLibTsFileForPage(full || page);
+    return this.mapPageDetail(full || page);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Delete('pages/:id')
   async deletePage(
     @Req() req: any,
@@ -2069,5 +2204,109 @@ export class ActionCatalogAdminController {
     }
     await this.pageRepo.delete(id);
     return { result: 'ok' };
+  }
+
+  private buildCallStepsJson(raw: AnyRec[] | undefined, defaultStart: number) {
+    const callStepsRaw: AnyRec[] = Array.isArray(raw) ? raw : [];
+    const callStepsNorm = callStepsRaw
+      .map((s: AnyRec, sIndex: number) => {
+        const targetActionKey = String(s?.targetActionKey || '').trim();
+        if (!targetActionKey) return null;
+        const args = Array.isArray(s?.args)
+          ? s.args.map((v: any) => String(v))
+          : [];
+        const soRaw = Number(s?.sortOrder);
+        const sortOrder = Number.isFinite(soRaw)
+          ? Math.floor(soRaw)
+          : defaultStart + sIndex;
+        return {
+          targetActionKey,
+          args,
+          sortOrder,
+        };
+      })
+      .filter(Boolean);
+    return callStepsNorm.length > 0 ? JSON.stringify(callStepsNorm) : null;
+  }
+
+  private buildParamsFromBody(params: AnyRec[] | undefined, action: ActionPageAction) {
+    const paramsRaw: AnyRec[] = Array.isArray(params) ? params : [];
+    return paramsRaw.map((p: AnyRec, pIndex: number) => {
+      const param = new ActionParam();
+      param.action = action;
+      param.name = String(p?.name || '').trim() || `arg${pIndex + 1}`;
+      param.type =
+        typeof p?.type === 'string' && p.type.trim()
+          ? p.type.trim()
+          : null;
+      param.required = p?.required === true;
+      param.placeholder =
+        typeof p?.placeholder === 'string'
+          ? p.placeholder
+          : null;
+      param.defaultValue =
+        typeof p?.defaultValue === 'string'
+          ? p.defaultValue
+          : null;
+      const soRaw = Number(p?.sortOrder);
+      param.sortOrder = Number.isFinite(soRaw)
+        ? Math.floor(soRaw)
+        : pIndex;
+      return param;
+    });
+  }
+
+  private buildActionFromBody(
+    action: ActionPageAction,
+    raw: AnyRec,
+    defaultSortOrder: number,
+  ) {
+    action.key = String(raw?.key || '').trim() || action.key || `action_${defaultSortOrder + 1}`;
+    action.label =
+      String(raw?.label || '').trim() ||
+      action.key;
+    action.method =
+      String(raw?.method || '').trim() ||
+      action.key;
+    action.kind =
+      (raw?.kind as any) === 'assert'
+        ? 'assert'
+        : (raw?.kind as any) === 'call'
+          ? 'call'
+          : 'action';
+    const rawActionType =
+      typeof raw?.actionType === 'string' && raw.actionType.trim()
+        ? raw.actionType.trim()
+        : '';
+    action.actionType =
+      action.kind === 'action'
+        ? rawActionType === 'input'
+          ? 'input'
+          : rawActionType === 'drag'
+            ? 'drag'
+            : 'click'
+        : null;
+    action.defaultExpected =
+      typeof raw?.defaultExpected === 'string'
+        ? raw.defaultExpected
+        : null;
+    action.description =
+      typeof raw?.description === 'string' ? raw.description : null;
+    action.locator =
+      typeof raw?.locator === 'string' && raw.locator.trim()
+        ? raw.locator.trim()
+        : null;
+    action.returnTarget =
+      typeof raw?.returnTarget === 'string' && raw.returnTarget.trim()
+        ? raw.returnTarget.trim()
+        : null;
+    action.enabled = raw?.enabled !== false;
+    action.sortOrder =
+      typeof raw?.sortOrder === 'number'
+        ? Math.floor(raw.sortOrder)
+        : defaultSortOrder;
+    action.callStepsJson = this.buildCallStepsJson(raw?.callSteps, 0);
+    action.params = this.buildParamsFromBody(raw?.params, action);
+    return action;
   }
 }

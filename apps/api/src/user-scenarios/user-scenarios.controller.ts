@@ -124,6 +124,18 @@ export class UserScenariosController {
     }
   }
 
+  @Delete('suites/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteSuite(@Param('id', ParseIntPipe) id: number) {
+    try {
+      return await this.service.deleteSuite(id);
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) || `Failed to delete suite ${id}`,
+      );
+    }
+  }
+
   @Post()
   @UseGuards(AuthGuard('jwt'))
   async createCase(@Body() body: CreateUserScenarioDto) {

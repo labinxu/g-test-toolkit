@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Resend } from 'resend';
 import axios from 'axios';
 import { CustomLogger } from 'src/logger/logger.custom';
 import { LoggerService } from 'src/logger/logger.service';

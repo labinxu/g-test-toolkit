@@ -157,7 +157,6 @@ export class TraceabilityService {
     }
     // Use Node require for .js; for .mjs use dynamic import via require('node:module')? Simpler: prefer CJS path
     // Our core dist ships both index.js and index.mjs; choose js when present
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require(js)
     return mod?.default || mod
   }

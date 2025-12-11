@@ -29,6 +29,7 @@ export type PageActionDef = {
   label: string;
   method: string;
   kind: 'action' | 'assert' | 'call';
+  actionType?: 'click' | 'input' | 'drag';
   params?: ActionParamDef[];
   defaultExpected?: string;
   locator?: string;

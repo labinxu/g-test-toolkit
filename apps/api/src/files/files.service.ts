@@ -4,19 +4,8 @@ import { LoggerService } from 'src/logger/logger.service';
 import * as path from 'path';
 import { readFileSync, existsSync } from 'fs';
 import * as fs from 'fs/promises';
-import {
-  Project,
-  SyntaxKind,
-  FunctionDeclaration,
-  ModuleKind,
-  ScriptTarget,
-  ModuleResolutionKind,
-} from 'ts-morph';
-import {
-  checkPath,
-  combineDtsFiles,
-  findFilesByExtname,
-} from 'src/common/utils';
+import { Project, SyntaxKind, FunctionDeclaration } from 'ts-morph';
+import { checkPath } from 'src/common/utils';
 import { getErrorMessage } from 'src/common/utils';
 
 // 匹配函数声明（不包含 constructor）
@@ -154,7 +143,6 @@ export class FilesService {
   }
 
   async getTree(currentPath: string, depthLeft: number) {
-    this.logger.debug(`get dir: ${currentPath}`);
     if (depthLeft < 0) return [];
     const files = await fs.readdir(currentPath, { withFileTypes: true });
     const result = [];

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { FastifyRequest, FastifyInstance } from 'fastify';
 import { Session } from '@fastify/session';
 declare module 'fastify' {

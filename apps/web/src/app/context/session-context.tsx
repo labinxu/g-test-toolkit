@@ -48,7 +48,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setCsrfToken(data.csrfToken);
         return data.csrfToken;
       } else {
-        console.error('Failed to fetch CSRF token:', response.status);
+        console.debug('Failed to fetch CSRF token:', response.status);
         return null;
       }
     } catch (error) {
@@ -68,7 +68,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         setIsAuthenticated(true);
-        setUser({ username: data.user.username, email: data.user.email, isAdmin: !!data.user.isAdmin });
+        setUser({
+          username: data.user.username,
+          email: data.user.email,
+          isAdmin: !!data.user.isAdmin,
+        });
       } else {
         setIsAuthenticated(false);
         setUser(null);
@@ -118,11 +122,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       } else {
         const err = await normalizeResponseError(response);
         toast.error(err.message || 'Login failed');
-        const e: any = new Error(err.message || 'Login failed')
-        if (err.fieldErrors) e.fieldErrors = err.fieldErrors
-        if (err.status) e.status = err.status
-        if (err.code) e.code = err.code
-        throw e
+        const e: any = new Error(err.message || 'Login failed');
+        if (err.fieldErrors) e.fieldErrors = err.fieldErrors;
+        if (err.status) e.status = err.status;
+        if (err.code) e.code = err.code;
+        throw e;
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -157,11 +161,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       } else {
         const err = await normalizeResponseError(response);
         toast.error(err.message || 'Registration failed');
-        const e: any = new Error(err.message || 'Registration failed')
-        if (err.fieldErrors) e.fieldErrors = err.fieldErrors
-        if (err.status) e.status = err.status
-        if (err.code) e.code = err.code
-        throw e
+        const e: any = new Error(err.message || 'Registration failed');
+        if (err.fieldErrors) e.fieldErrors = err.fieldErrors;
+        if (err.status) e.status = err.status;
+        if (err.code) e.code = err.code;
+        throw e;
       }
     } catch (error) {
       console.error('Registration error:', error);

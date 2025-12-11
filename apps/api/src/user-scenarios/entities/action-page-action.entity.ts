@@ -32,6 +32,9 @@ export class ActionPageAction {
   @Column({ type: 'text', default: 'action' })
   kind: 'action' | 'assert' | 'call';
 
+  @Column({ name: 'action_type', type: 'text', nullable: true, default: 'click' })
+  actionType?: 'click' | 'input' | 'drag' | null;
+
   @Column({ name: 'call_steps', type: 'text', nullable: true })
   callStepsJson?: string | null;
 

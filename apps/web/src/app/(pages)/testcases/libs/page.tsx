@@ -62,7 +62,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useLibsPageCache } from '../../page-cache'
 import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
 import { OptionsSelect } from '@/components/select/options-select'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import DirectoryTree, { type FileNode, type DirectoryTreeAction } from '@/components/files/directory-tree'
 import { DeleteAlertDialog } from '../alert-dialog/delete-alert'
 
@@ -136,6 +136,24 @@ export default function Page() {
     className: string
   } | null>(null)
   const [linkingPage, setLinkingPage] = useState(false)
+  const searchParams = useSearchParams()
+  const initialQueryAppliedRef = useRef(false)
+
+  // Accept ?file=<path> to open specific libs文件（来自 action-catalog 提示）
+  useEffect(() => {
+    const fileParam = searchParams?.get('file')
+    if (!fileParam) return
+    if (initialQueryAppliedRef.current) return
+    initialQueryAppliedRef.current = true
+    const normalized = fileParam.replace(/\\/g, '/')
+    setCurrentFile(normalized)
+    const idx = normalized.lastIndexOf('/')
+    const dir = idx > 0 ? normalized.slice(0, idx) : ''
+    setCurrentDir(dir)
+    try {
+      localStorage.setItem('gtt:libs:lastFile', normalized)
+    } catch {}
+  }, [searchParams])
 
   const updateTypesStatus = useCallback(() => {
     try {
@@ -856,8 +874,11 @@ export default function Page() {
               variant="outline"
               className="ml-2 h-6 px-2 text-[11px]"
               onClick={() => {
-                // 跳转到 Action Catalog，并预先选择对应平台，页面可再在那边选中
-                router.push('/scenarios/action-catalog')
+                // 跳转到 Action Catalog，并预选中对应页面，便于定位
+                const params = new URLSearchParams()
+                if (linkedPage.platform) params.set('platform', linkedPage.platform)
+                if (linkedPage.id) params.set('pageId', String(linkedPage.id))
+                router.push(`/scenarios/action-catalog${params.toString() ? `?${params}` : ''}`)
               }}
             >
               在页面映射中查看

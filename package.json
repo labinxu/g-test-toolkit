@@ -25,6 +25,7 @@
   "devDependencies": {
     "@repo/eslint-config": "*",
     "@repo/typescript-config": "*",
+    "baseline-browser-mapping": "^2.9.6",
     "prettier": "^3.5.3",
     "turbo": "^2.5.4"
   },

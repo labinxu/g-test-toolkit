@@ -57,8 +57,7 @@ export async function DELETE(
     return NextResponse.json(
       {
         error: 'forbidden',
-        message:
-          'web-fe 为 legacy 配置，来源于仓库根目录的 web-fe-routes.json，不支持通过接口删除，请手工管理该文件。',
+        message: 'web-fe 为 legacy 配置，请手工管理仓库根目录的 web-fe-routes.json。',
       },
       { status: 403 }
     )

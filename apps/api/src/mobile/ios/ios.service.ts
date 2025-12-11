@@ -279,7 +279,7 @@ export class IosService {
       throw new Error(`No available iOS Simulator found${hint}.`);
     }
 
-    let target =
+    const target =
       candidates.find((c) => c.dev.state === 'Booted') || candidates[0];
     const targetUdid = target.dev.udid as string;
     const selMsg = `Using Simulator: ${target.dev.name} | ${target.runtimeKey} | ${target.dev.state} | UDID=${targetUdid}`;

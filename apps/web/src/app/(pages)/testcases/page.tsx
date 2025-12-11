@@ -7,26 +7,7 @@ import MonacoScriptEditor, {
   preloadMonacoEditorAssets,
 } from '@/components/files/monaco-script-editor'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import {
-  RefreshCw,
-  Play,
-  PackagePlus,
-  SlidersHorizontal,
-  Activity,
-  RouteOff,
-  Unplug,
-  Server,
-  ServerOff,
-  Smartphone,
-  Check,
-  FileScan,
-  ListRestart,
-  Square,
-  Trash2,
-  Pencil,
-} from 'lucide-react'
-import { AppiumToggleButton } from '@/components/appium-toggle-button'
+import { Play, Trash2, Pencil } from 'lucide-react'
 // removed Switch in favor of icon toggle for Keep App Open
 import { OutputPanel } from '@/components/output-panel'
 import { useSocket } from './socket-content'
@@ -57,15 +38,12 @@ import {
 } from '@/components/ui/alert-dialog'
 import { DeleteAlertDialog } from './alert-dialog/delete-alert'
 import { RunAlertDialog } from './alert-dialog/run-alert'
-import { ParametersForm, type ParametersFormHandle } from '@/components/settings/parameters-form'
+import type { ParametersFormHandle } from '@/components/settings/parameters-form'
 import { useTestcasesPageCache } from '../page-cache'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { normalizeResponseError, isUnauthorizedError } from '@/lib/error'
+import { LinkedScenarioBanner } from './components/linked-scenario-banner'
+import { EditorToolbar } from './components/editor-toolbar'
+import { type DevicePollState } from './components/device-controls'
 
 export default function Page() {
   const router = useRouter()
@@ -132,6 +110,8 @@ export default function Page() {
   const [envRunDriver, setEnvRunDriver] = useState<'browser' | 'android' | 'ios' | 'other'>(
     'browser'
   )
+  const [devicePollEnabled, setDevicePollEnabled] = useState(false)
+  const [devicePollState, setDevicePollState] = useState<DevicePollState>('idle')
   const [appiumAutoRefresh, setAppiumAutoRefresh] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     try {
@@ -194,7 +174,7 @@ export default function Page() {
     }
   }, [])
   const [dirFilterText, setDirFilterText] = useState('')
-  // Poll device list when auto refresh is enabled
+  // Poll device list when enabled
   useEffect(() => {
     let id: any
     const fetchDevices = async () => {
@@ -213,12 +193,29 @@ export default function Page() {
         setDeviceIds(ids)
         if (ids.length && !ids.includes(selectedDeviceId)) setSelectedDeviceId(ids[0])
         if (!ids.length) setSelectedDeviceId('')
+        setDevicePollState('ready')
       } catch {}
     }
+    if (!devicePollEnabled) {
+      setDevicePollState('idle')
+      return () => {}
+    }
+    setDevicePollState((prev) => (prev === 'ready' ? 'ready' : 'loading'))
     fetchDevices()
-    if (appiumAutoRefresh) id = setInterval(fetchDevices, 5000)
+    if (devicePollEnabled && appiumAutoRefresh) id = setInterval(fetchDevices, 5000)
     return () => id && clearInterval(id)
-  }, [appiumAutoRefresh, selectedDeviceId])
+  }, [appiumAutoRefresh, devicePollEnabled, selectedDeviceId])
+  const handleToggleDevicePolling = useCallback((enabled: boolean) => {
+    setDevicePollEnabled(enabled)
+    setDevicePollState(enabled ? 'loading' : 'idle')
+  }, [])
+  const handleSelectDevice = useCallback((id: string) => {
+    setSelectedDeviceId(id)
+  }, [])
+  const handleAppiumRunning = useCallback(() => {
+    setDevicePollEnabled(true)
+    setDevicePollState((prev) => (prev === 'ready' ? 'ready' : 'loading'))
+  }, [])
   const paramsRef = useRef<ParametersFormHandle | null>(null)
   // Directory tree cache settings (global)
   const [dirCacheDisabled, setDirCacheDisabled] = useState<boolean>(() => {
@@ -567,6 +564,13 @@ export default function Page() {
       cancelled = true
     }
   }, [currentFile])
+  const handleViewLinkedScenario = useCallback(() => {
+    if (!linkedScenario) return
+    try {
+      localStorage.setItem('gtt:scenarios:lastCaseId', String(linkedScenario.id))
+    } catch {}
+    router.push('/scenarios')
+  }, [linkedScenario, router])
 
   const stopRun = useCallback(async () => {
     if (typeof window !== 'undefined') {
@@ -610,6 +614,13 @@ export default function Page() {
       toast.error(e?.message || 'Stop failed')
     }
   }, [clientId, selectedDeviceId])
+  const handleRunClick = useCallback(() => {
+    if (running) {
+      stopRun()
+    } else {
+      void openRunEnvDialog()
+    }
+  }, [openRunEnvDialog, running, stopRun])
   const closeKeptSessions = useCallback(async () => {
     try {
       const csrfResp = await fetch(`/api/csrf-token`, {
@@ -683,6 +694,19 @@ export default function Page() {
       toast.error(String(err))
     }
   }, [buildingLibs, clientId])
+  const handleToggleKeepAppOpen = useCallback(() => {
+    const v = !keepAppOpen
+    try {
+      localStorage.setItem('gtt:testcases:keepAppOpen', v ? '1' : '0')
+    } catch {}
+    setKeepAppOpen(v)
+  }, [keepAppOpen])
+  const handleRefreshTypes = useCallback(async () => {
+    await editorRef.current?.reloadTypings?.({
+      force: true,
+    })
+    updateTypesStatus()
+  }, [updateTypesStatus])
 
   const renderLogs = () => {
     return logs.map((log, index) => {
@@ -715,6 +739,15 @@ export default function Page() {
       )
     })
   }
+  const handleSelectRelativeType = useCallback(
+    (path: string) => {
+      try {
+        setCurrentFile(path)
+      } catch {}
+      setTypesOpen(false)
+    },
+    []
+  )
   // Restore cached state on mount, with support for "forceReload" (from Scenarios page)
   useEffect(() => {
     let lastFromStorage = ''
@@ -809,33 +842,12 @@ export default function Page() {
           </DirectoryTreePanel>
         </div>
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col pl-4 transition-all duration-300">
-        {currentFile && linkedScenario && (
-          <div className="mb-1 flex items-center justify-between rounded-md border bg-muted/40 px-2 py-1 text-[11px]">
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate">
-                映射用例：[{linkedScenario.platform}] {linkedScenario.code}（ID:{' '}
-                {linkedScenario.id}）
-              </span>
-              <span className="text-muted-foreground truncate">
-                {linkedScenario.title}
-              </span>
-            </div>
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              className="ml-2 h-6 px-2 text-[11px]"
-              onClick={() => {
-                try {
-                  localStorage.setItem('gtt:scenarios:lastCaseId', String(linkedScenario.id))
-                } catch {}
-                router.push('/scenarios')
-              }}
-            >
-              在「用户场景」中查看
-            </Button>
-          </div>
-        )}
+        {currentFile ? (
+          <LinkedScenarioBanner
+            linkedScenario={linkedScenario}
+            onViewScenario={handleViewLinkedScenario}
+          />
+        ) : null}
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 justify-between">
             <MonacoScriptEditor
@@ -843,286 +855,37 @@ export default function Page() {
               filePath={currentFile}
               cachedValue={currentFile ? fileCache[currentFile] : undefined}
               extraActions={
-                <div className="flex flex-row">
-                  <div>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant={running ? 'destructive' : 'ghost'}
-                          size="icon"
-                          className="h-8 w-8 rounded-full"
-                          onClick={() => (running ? stopRun() : openRunEnvDialog())}
-                          disabled={!currentFile}
-                          aria-label={running ? 'Stop' : 'Execute'}
-                        >
-                          {running ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>{running ? 'Stop' : 'Execute'}</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="relative ml-1 h-8 w-8 rounded-full"
-                              aria-label="Select device"
-                            >
-                              <Smartphone className="h-4 w-4" />
-                              {selectedDeviceId ? (
-                                <span
-                                  aria-hidden
-                                  className="ring-background absolute -top-0.5 -right-0.5 inline-block h-2 w-2 rounded-full bg-green-500 ring-2"
-                                />
-                              ) : null}
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-44">
-                            {deviceIds.length ? (
-                              deviceIds.map((id) => (
-                                <DropdownMenuItem key={id} onClick={() => setSelectedDeviceId(id)}>
-                                  {selectedDeviceId === id ? (
-                                    <Check className="mr-2 h-4 w-4 text-green-600" />
-                                  ) : (
-                                    <span className="mr-2 inline-block h-4 w-4" />
-                                  )}
-                                  <span
-                                    className={
-                                      selectedDeviceId === id ? 'font-medium text-green-700' : ''
-                                    }
-                                  >
-                                    {id}
-                                  </span>
-                                </DropdownMenuItem>
-                              ))
-                            ) : (
-                              <DropdownMenuItem disabled>No devices</DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>
-                        {selectedDeviceId ? `Device: ${selectedDeviceId}` : 'Select device'}
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="ml-1 h-8 w-8 rounded-full"
-                          disabled={buildingLibs}
-                          onClick={() => buildLibs()}
-                          aria-label="Build libs"
-                        >
-                          <PackagePlus className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>Build Libs</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="ml-1 h-8 w-8 rounded-full"
-                          onClick={async () => {
-                            await editorRef.current?.reloadTypings?.({
-                              force: true,
-                            })
-                            updateTypesStatus()
-                          }}
-                          aria-label="Refresh types"
-                        >
-                          <ListRestart className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>Refresh Types</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <Dialog open={typesOpen} onOpenChange={setTypesOpen}>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="ml-1 h-8 w-8 rounded-full"
-                            onClick={() => {
-                              setTypesOpen(true) /* useEffect will update */
-                            }}
-                            aria-label="Show types"
-                          >
-                            <FileScan className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>Loaded Types</DialogTitle>
-                          </DialogHeader>
-                          <div className="max-h-[60vh] space-y-3 overflow-auto">
-                            <div>
-                              <div className="mb-1 text-sm font-medium">
-                                Global typings ({typesGlobal.length})
-                              </div>
-                              <ul className="text-xs">
-                                {typesGlobal.map((p) => (
-                                  <li key={p} className="truncate">
-                                    {p}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                            <div>
-                              <div className="mb-1 text-sm font-medium">
-                                Relative imports ({typesRelatives.length})
-                              </div>
-                              <ul className="text-xs">
-                                {typesRelatives.map((p) => (
-                                  <li key={p} className="truncate">
-                                    <button
-                                      type="button"
-                                      className="text-left hover:underline"
-                                      onClick={() => {
-                                        try {
-                                          setCurrentFile(p)
-                                        } catch {}
-                                        setTypesOpen(false)
-                                      }}
-                                    >
-                                      {p}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <DialogClose asChild>
-                              <Button variant="outline">Close</Button>
-                            </DialogClose>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                      <TooltipContent sideOffset={6}>Show Types</TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <div>
-                    <AppiumToggleButton
-                      queryKey={['appium-status', 'testcases']}
-                      pollIntervalMs={appiumAutoRefresh ? 5000 : false}
-                    />
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={`ml-1 h-8 w-8 rounded-full ${keepAppOpen ? 'text-green-600' : ''}`}
-                          onClick={() => {
-                            const v = !keepAppOpen
-                            try {
-                              localStorage.setItem('gtt:testcases:keepAppOpen', v ? '1' : '0')
-                            } catch {}
-                            setKeepAppOpen(v)
-                          }}
-                          aria-label="Keep App Open"
-                        >
-                          {keepAppOpen ? (
-                            <Activity className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <Activity className="h-4 w-4 text-yellow-600" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>
-                        Keep App Open {keepAppOpen ? '(On)' : '(Off)'}
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="ml-1 h-8 w-8 rounded-full text-yellow-600 hover:text-yellow-700 focus-visible:ring-2 focus-visible:ring-red-500 active:text-red-800"
-                          onClick={() => setConfirmCloseMineOpen(true)}
-                          aria-label="Close current client sessions"
-                        >
-                          <Unplug className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>Close current client sessions</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="ml-1 h-8 w-8 rounded-full text-yellow-600 hover:text-yellow-700 focus-visible:ring-2 focus-visible:ring-red-500 active:text-red-800"
-                          onClick={() => setConfirmCloseAllOpen(true)}
-                          aria-label="Close all retained sessions"
-                        >
-                          <RouteOff className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>Close all retained sessions</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="ml-2 inline-flex h-8 w-8 items-center justify-center rounded-full">
-                          {connected ? (
-                            <Server className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <ServerOff className="h-4 w-4 text-red-600" />
-                          )}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>
-                        {connected ? 'Connected' : 'Disconnected'}
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <Tooltip>
-                    <Dialog>
-                      <TooltipTrigger asChild>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="ml-1 h-8 w-8 rounded-full"
-                            aria-label="Settings"
-                          >
-                            <SlidersHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DialogTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>Settings</TooltipContent>
-                      <DialogContent className="max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
-                        <div className="flex h-[80vh] flex-col">
-                          <div className="bg-background border-b p-6">
-                            <DialogHeader>
-                              <DialogTitle>Parameters</DialogTitle>
-                            </DialogHeader>
-                          </div>
-                          <div className="flex-1 overflow-y-auto p-6">
-                            <ParametersForm ref={paramsRef} hideActions />
-                          </div>
-                          <div className="bg-background border-t p-4">
-                            <DialogFooter>
-                              <Button onClick={() => paramsRef.current?.save()}>Save</Button>
-                              <Button variant="outline" onClick={() => paramsRef.current?.reset()}>
-                                Reset
-                              </Button>
-                              <DialogClose asChild>
-                                <Button variant="outline">Close</Button>
-                              </DialogClose>
-                            </DialogFooter>
-                          </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  </Tooltip>
-                </div>
+                <EditorToolbar
+                  running={running}
+                  canRun={!!currentFile}
+                  onRunClick={handleRunClick}
+                  buildingLibs={buildingLibs}
+                  onBuildLibs={buildLibs}
+                  keepAppOpen={keepAppOpen}
+                  onToggleKeepAppOpen={handleToggleKeepAppOpen}
+                  onCloseMine={() => setConfirmCloseMineOpen(true)}
+                  onCloseAll={() => setConfirmCloseAllOpen(true)}
+                  connected={connected}
+                  paramsRef={paramsRef}
+                  deviceState={{
+                    devicePollEnabled,
+                    devicePollState,
+                    deviceIds,
+                    selectedDeviceId,
+                    appiumAutoRefresh,
+                    onTogglePolling: handleToggleDevicePolling,
+                    onSelectDevice: handleSelectDevice,
+                    onAppiumRunning: handleAppiumRunning,
+                  }}
+                  typesState={{
+                    open: typesOpen,
+                    globals: typesGlobal,
+                    relatives: typesRelatives,
+                    onOpenChange: setTypesOpen,
+                    onSelectRelative: handleSelectRelativeType,
+                    onRefresh: handleRefreshTypes,
+                  }}
+                />
               }
               onContentLoaded={({ content, original }, { filePath }) => {
                 if (!filePath) return

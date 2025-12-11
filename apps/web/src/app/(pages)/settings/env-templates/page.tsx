@@ -38,6 +38,23 @@ const DRIVER_OPTIONS = [
   { value: 'other', label: 'Other' },
 ]
 
+const getDefaultConfigText = (plat?: string, drv?: string): string | null => {
+  const platform = (plat || '').toLowerCase()
+  const driver = (drv || '').toLowerCase()
+  if (platform === 'gettr-web' && driver === 'browser') {
+    return JSON.stringify(
+      {
+        headless: false,
+        debug: true,
+        domain: 'https://stg.gettr.com',
+      },
+      null,
+      2
+    )
+  }
+  return null
+}
+
 function normalizeJsonLike(input: string): string | null {
   const text = input.trim()
   if (!text) return null
@@ -127,7 +144,7 @@ export default function EnvTemplatesPage() {
       sortOrder: 0,
     }
     setEditing(next)
-    setEditingConfigText('')
+    setEditingConfigText(getDefaultConfigText(platform, driver) ?? '')
   }
 
   const saveEditing = async () => {
@@ -319,9 +336,13 @@ export default function EnvTemplatesPage() {
                 <OptionsSelect<string>
                   value={editing.platform}
                   items={PLATFORM_OPTIONS}
-                  onSelect={(item) =>
+                  onSelect={(item) => {
                     setEditing((prev) => (prev ? { ...prev, platform: item.value } : prev))
-                  }
+                    if (!editingConfigText.trim()) {
+                      const def = getDefaultConfigText(item.value, editing?.driver)
+                      if (def) setEditingConfigText(def)
+                    }
+                  }}
                   placeholder="选择平台"
                   size="sm"
                   triggerClassName="text-xs"
@@ -332,11 +353,15 @@ export default function EnvTemplatesPage() {
                 <OptionsSelect<'browser' | 'android' | 'ios' | 'other'>
                   value={editing.driver}
                   items={DRIVER_OPTIONS as any}
-                  onSelect={(item) =>
+                  onSelect={(item) => {
                     setEditing((prev) =>
                       prev ? { ...prev, driver: item.value as any } : prev
                     )
-                  }
+                    if (!editingConfigText.trim()) {
+                      const def = getDefaultConfigText(editing?.platform, item.value)
+                      if (def) setEditingConfigText(def)
+                    }
+                  }}
                   placeholder="选择驱动"
                   size="sm"
                   triggerClassName="text-xs"

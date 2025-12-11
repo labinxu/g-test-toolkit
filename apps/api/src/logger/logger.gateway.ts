@@ -107,7 +107,7 @@ export class LoggerGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.emit('close', `process exit,code：${code}`)
         unlink(filename)
       })
-    } catch (err) {
+    } catch (_err) {
     } finally {
     }
   }

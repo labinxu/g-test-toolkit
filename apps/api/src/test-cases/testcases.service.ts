@@ -9,7 +9,6 @@ import path from 'path'
 // import { pathToFileURL } from 'url';
 import * as vm from 'vm'
 import { Project } from 'ts-morph'
-import { getErrorMessage } from 'src/common/utils'
 import { BrowserHelper } from 'src/browser/browser-helper'
 import { SettingsService } from 'src/settings/settings.service'
 import { ChildProcess, fork } from 'child_process'

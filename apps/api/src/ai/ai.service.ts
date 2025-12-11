@@ -338,7 +338,7 @@ export class AiService {
     }
     try {
       let url = ''
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'content-type': 'application/json',
       }
       let body: any = null

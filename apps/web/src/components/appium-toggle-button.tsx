@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -16,6 +17,8 @@ export function AppiumToggleButton({
   disabled,
   queryKey,
   pollIntervalMs,
+  enabled = true,
+  onStatusChange,
 }: {
   className?: string
   onAfterChange?: (running: boolean, port?: number) => void
@@ -26,6 +29,11 @@ export function AppiumToggleButton({
    * Defaults to 5000 ms.
    */
   pollIntervalMs?: number | false
+  /**
+   * Whether to enable the status query. When false, status is not fetched.
+   */
+  enabled?: boolean
+  onStatusChange?: (running: boolean, port?: number | undefined) => void
 }) {
   const statusQuery = useQuery<AppiumStatus>({
     queryKey: queryKey ?? ['appium-status'],
@@ -37,6 +45,7 @@ export function AppiumToggleButton({
       }
       return res.json()
     },
+    enabled,
     staleTime: 5000,
     refetchOnWindowFocus: false,
     refetchInterval: pollIntervalMs === false ? false : (typeof pollIntervalMs === 'number' ? Math.max(1000, pollIntervalMs) : 5000),
@@ -82,6 +91,9 @@ export function AppiumToggleButton({
   })
 
   const running = !!statusQuery.data?.running
+  useEffect(() => {
+    onStatusChange?.(running, statusQuery.data?.port)
+  }, [onStatusChange, running, statusQuery.data?.port])
   const busy = startMutation.isPending || stopMutation.isPending
   const isDisabled = !!disabled || busy
 

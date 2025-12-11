@@ -1,14 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  ActionCatalog,
-  ActionParamDef,
-  GETTR_WEB_ACTION_CATALOG,
-  PageActionDef,
-  PageDef,
-  StepBindingV1,
-} from './action-catalog';
+import { ActionCatalog, ActionParamDef, PageActionDef, PageDef, StepBindingV1 } from './action-catalog';
 import { ActionPage } from './entities/action-page.entity';
 import { ActionPageAction } from './entities/action-page-action.entity';
 import { ActionParam } from './entities/action-param.entity';
@@ -54,6 +47,14 @@ export class ActionCatalogService {
       const rawKind = (a.kind as any) || 'action';
       const kind: 'action' | 'assert' | 'call' =
         rawKind === 'assert' ? 'assert' : rawKind === 'call' ? 'call' : 'action';
+      const actionType: 'click' | 'input' | 'drag' | undefined =
+        kind === 'action'
+          ? (a.actionType as any) === 'input'
+            ? 'input'
+            : (a.actionType as any) === 'drag'
+              ? 'drag'
+              : 'click'
+          : undefined;
       const callSteps = (() => {
         const raw = (a as any).callStepsJson as string | null | undefined;
         if (!raw) return undefined;
@@ -82,6 +83,7 @@ export class ActionCatalogService {
         label: a.label,
         method: a.method,
         kind,
+        actionType,
         callSteps,
         defaultExpected: a.defaultExpected || undefined,
         locator: a.locator || undefined,
@@ -122,10 +124,10 @@ export class ActionCatalogService {
     binding: StepBindingV1 | null | undefined,
   ): { page: PageDef; action: PageActionDef } | null {
     if (!binding) return null;
-    if (!binding.platform || binding.platform.toLowerCase() !== catalog.platform.toLowerCase()) {
-      return null;
-    }
-    if (binding.ver !== 1) return null;
+    const platform = (binding.platform || catalog.platform || '').toLowerCase();
+    if (platform !== (catalog.platform || '').toLowerCase()) return null;
+    const ver = (binding as any).ver ?? 1;
+    if (ver !== 1) return null;
     const page = catalog.pages.find((p) => p.key === binding.pageKey);
     if (!page) return null;
     const action = page.actions.find((a) => a.key === binding.actionKey);

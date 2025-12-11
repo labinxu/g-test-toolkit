@@ -2,10 +2,8 @@ import {
   Controller,
   Get,
   Query,
-  UseGuards,
   NotFoundException,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { IosService } from './ios.service';
 import { getErrorMessage } from 'src/common/utils';
 import { randomUUID } from 'crypto';

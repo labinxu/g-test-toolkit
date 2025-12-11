@@ -75,7 +75,7 @@ export class BrowserHelper {
         domain &&
           (await page.goto(domain, { waitUntil: 'networkidle2', timeout }));
         break;
-      } catch (err) {
+      } catch (_err) {
         retry_ -= 1;
         await delay(2000);
       }
@@ -89,7 +89,7 @@ export class BrowserHelper {
     for (const bs of this.broweres) {
       try {
         await bs.close();
-      } catch (err) {
+      } catch (_err) {
         continue;
       }
     }

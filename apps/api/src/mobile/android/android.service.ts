@@ -306,7 +306,7 @@ export class AndroidService {
     );
     const dumppath = `.`;
     await this.commandService.expandNotifBar(deviceId);
-    const tmpfile = await this.dumpxmlTo(deviceId, dumppath);
+    await this.dumpxmlTo(deviceId, dumppath);
     await this.click(deviceId, attribute, text);
     // await unlink(tmpfile);
   }
