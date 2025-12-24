@@ -1,22 +1,38 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, type Dispatch, type SetStateAction } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { SlidersHorizontal, Pencil, FileCode, Eye, Trash2, Plus } from 'lucide-react'
+import {
+  SlidersHorizontal,
+  Pencil,
+  FileCode,
+  Eye,
+  Trash2,
+  Plus,
+  MoreVertical,
+} from 'lucide-react'
+import { TableHeaderContent } from '@/components/table-header-content'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import TableToolbar from '@/components/table-toolbar'
-import { GTable } from '@/components/g-table'
+import { GTable } from '@/components/data-table'
 import type { PageSummary } from '../../action-catalog/types'
 
 type Props = {
   pagedPages: PageSummary[]
   filteredPages: PageSummary[]
   selectedPageIds: number[]
-  setSelectedPageIds: (ids: number[]) => void
+  setSelectedPageIds: Dispatch<SetStateAction<number[]>>
   keyFilter: string
   setKeyFilter: (v: string) => void
   nameFilter: string
@@ -96,119 +112,128 @@ export function PageTable({
           aria-label="选择当前页所有页面"
         />
       </div>,
-      <div key="key-head" className="flex items-center justify-between gap-1">
-        <span>页面 key</span>
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="按页面 key 筛选"
-              className={filterButtonClass(Boolean(keyFilter.trim()))}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <SlidersHorizontal className="h-3 w-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-56 p-2"
-            align="end"
-            sideOffset={4}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="space-y-1">
-              <div className="text-muted-foreground text-[11px]">按页面 key 筛选</div>
-              <Input
-                value={keyFilter}
-                placeholder="输入页面 key"
-                className="h-8 w-full text-xs"
-                onChange={(e) => {
-                  setKeyFilter(e.target.value)
-                  setPageTablePage(1)
-                }}
-              />
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>,
-      <div key="label-head" className="flex items-center justify-between gap-1">
-        <span>名称</span>
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="按名称筛选"
-              className={filterButtonClass(Boolean(nameFilter.trim()))}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <SlidersHorizontal className="h-3 w-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-56 p-2"
-            align="end"
-            sideOffset={4}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="space-y-1">
-              <div className="text-muted-foreground text-[11px]">按名称筛选</div>
-              <Input
-                value={nameFilter}
-                placeholder="输入名称关键字"
-                className="h-8 w-full text-xs"
-                onChange={(e) => {
-                  setNameFilter(e.target.value)
-                  setPageTablePage(1)
-                }}
-              />
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>,
-      '模块',
-      '动作数',
-      '元素数',
-      <div key="enabled-head" className="flex items-center justify-between gap-1">
-        <span>启用</span>
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="按启用状态筛选"
-              className={filterButtonClass(enabledFilter !== 'all')}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <SlidersHorizontal className="h-3 w-3" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-48 p-2"
-            align="end"
-            sideOffset={4}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="space-y-1">
-              <div className="text-muted-foreground text-[11px]">选择启用状态</div>
-              <Select
-                value={enabledFilter}
-                onValueChange={(val) => {
-                  const next = val as typeof enabledFilter
-                  setEnabledFilter(next)
-                  setPageTablePage(1)
-                }}
+      <TableHeaderContent
+        key="key-head"
+        label="页面 key"
+        right={
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="按页面 key 筛选"
+                className={filterButtonClass(Boolean(keyFilter.trim()))}
+                onClick={(e) => e.stopPropagation()}
               >
-                <SelectTrigger className="h-8 w-full px-2 text-xs">
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部</SelectItem>
-                  <SelectItem value="enabled">仅启用</SelectItem>
-                  <SelectItem value="disabled">仅禁用</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>,
+                <SlidersHorizontal className="h-3 w-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-56 p-2"
+              align="end"
+              sideOffset={4}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-1">
+                <div className="text-muted-foreground text-[11px]">按页面 key 筛选</div>
+                <Input
+                  value={keyFilter}
+                  placeholder="输入页面 key"
+                  className="h-8 w-full text-xs"
+                  onChange={(e) => {
+                    setKeyFilter(e.target.value)
+                    setPageTablePage(1)
+                  }}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
+        }
+      />,
+      <TableHeaderContent
+        key="label-head"
+        label="名称"
+        right={
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="按名称筛选"
+                className={filterButtonClass(Boolean(nameFilter.trim()))}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <SlidersHorizontal className="h-3 w-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-56 p-2"
+              align="end"
+              sideOffset={4}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-1">
+                <div className="text-muted-foreground text-[11px]">按名称筛选</div>
+                <Input
+                  value={nameFilter}
+                  placeholder="输入名称关键字"
+                  className="h-8 w-full text-xs"
+                  onChange={(e) => {
+                    setNameFilter(e.target.value)
+                    setPageTablePage(1)
+                  }}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
+        }
+      />,
+      <TableHeaderContent key="module-head" label="模块" />,
+      <TableHeaderContent key="actions-head" label="动作数" />,
+      <TableHeaderContent key="elements-head" label="元素数" />,
+      <TableHeaderContent
+        key="enabled-head"
+        label="启用"
+        right={
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="按启用状态筛选"
+                className={filterButtonClass(enabledFilter !== 'all')}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <SlidersHorizontal className="h-3 w-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-48 p-2"
+              align="end"
+              sideOffset={4}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-1">
+                <div className="text-muted-foreground text-[11px]">选择启用状态</div>
+                <Select
+                  value={enabledFilter}
+                  onValueChange={(val) => {
+                    const next = val as typeof enabledFilter
+                    setEnabledFilter(next)
+                    setPageTablePage(1)
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-full px-2 text-xs">
+                    <SelectValue placeholder="全部" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="enabled">仅启用</SelectItem>
+                    <SelectItem value="disabled">仅禁用</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </PopoverContent>
+          </Popover>
+        }
+      />,
       '',
     ]
   }, [
@@ -273,12 +298,12 @@ export function PageTable({
           <span key={`enabled-${p.id}`} className="text-[11px]">
             {p.enabled ? '是' : '否'}
           </span>,
-          <div key={`ops-${p.id}`} className="flex items-center gap-1 pl-1">
+          <div key={`ops-${p.id}`} className="flex items-center justify-end gap-1">
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-7 w-7"
               onClick={(e) => {
                 e.stopPropagation()
                 onOpenDetails(p.id)
@@ -291,20 +316,7 @@ export function PageTable({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenLib(p)
-              }}
-              aria-label={`在 Libs 中打开页面 ${p.key}`}
-            >
-              <FileCode className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
+              className="h-7 w-7"
               onClick={(e) => {
                 e.stopPropagation()
                 onViewPage(p.id)
@@ -313,19 +325,41 @@ export function PageTable({
             >
               <Eye className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDeletePage(p)
-              }}
-              aria-label={`删除页面 ${p.key}`}
-            >
-              <Trash2 className="h-3.5 w-3.5 text-destructive" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  aria-label={`更多操作 ${p.key}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreVertical className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="min-w-[170px]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <DropdownMenuItem
+                  className="text-xs"
+                  onClick={() => onOpenLib(p)}
+                >
+                  <FileCode className="mr-2 h-3.5 w-3.5" />
+                  在 Libs 中打开
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-xs text-destructive focus:text-destructive"
+                  onClick={() => onDeletePage(p)}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>,
         ]
       }),
@@ -381,6 +415,8 @@ export function PageTable({
           headers={pageTableHeaders}
           rows={pageTableRows}
           stickyFirstColumn
+          stickyLastColumn
+          stickyLastColumnWidthPx={88}
           showFooter={false}
           containerClassName="h-full overflow-x-auto overflow-y-auto"
           onSelectedRow={(rowIndex) => {

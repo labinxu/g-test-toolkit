@@ -670,7 +670,7 @@ export default function FlutterPageObjectsToolPage() {
             </span>
             <Button
               type="button"
-              size="xs"
+              size="sm"
               variant="outline"
               disabled={uploading}
               onClick={handleRegenerateWithLanguage}

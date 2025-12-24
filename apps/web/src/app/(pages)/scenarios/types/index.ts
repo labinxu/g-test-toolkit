@@ -3,6 +3,7 @@ export type CaseStatus = 'draft' | 'in_progress' | 'ready' | 'code_generated'
 export type UserScenarioSummary = {
   id: number
   code: string
+  csvId?: string | null
   title: string
   module?: string | null
   platform?: string | null
@@ -108,6 +109,8 @@ export type UserScenarioSuiteSummary = {
   platform: string
   module: string
   sharedPreSteps?: string[]
+  actors?: Record<string, any> | null
+  defaultActor?: string | null
   caseIds?: number[]
   caseCount?: number
 }

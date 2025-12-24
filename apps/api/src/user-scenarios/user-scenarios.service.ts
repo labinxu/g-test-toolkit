@@ -108,6 +108,26 @@ export class UserScenariosService {
     return serializeSharedPreSteps(steps);
   }
 
+  private parseSuiteActors(raw?: string | null): Record<string, any> | null {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      return parsed as Record<string, any>;
+    } catch {
+      return null;
+    }
+  }
+
+  private serializeSuiteActors(actors?: Record<string, any> | null) {
+    if (!actors || typeof actors !== 'object' || Array.isArray(actors)) return null;
+    try {
+      return JSON.stringify(actors);
+    } catch {
+      return null;
+    }
+  }
+
   async findAll(params?: {
     status?: UserScenarioStatus | 'all';
     submenu?: string | 'all';
@@ -568,6 +588,8 @@ export class UserScenariosService {
       platform: s.platform,
       module: s.module,
       sharedPreSteps: this.parseSharedPreSteps(s.sharedPreStepsJson),
+      actors: this.parseSuiteActors(s.actorsJson),
+      defaultActor: s.defaultActor ?? null,
       caseIds: (s.cases || []).map((c) => c.id),
       caseCount: (s.cases || []).length,
     }));
@@ -588,6 +610,8 @@ export class UserScenariosService {
       platform: suite.platform,
       module: suite.module,
       sharedPreSteps: this.parseSharedPreSteps(suite.sharedPreStepsJson),
+      actors: this.parseSuiteActors(suite.actorsJson),
+      defaultActor: suite.defaultActor ?? null,
       cases:
         (suite.cases || []).map((c) => ({
           id: c.id,
@@ -604,6 +628,8 @@ export class UserScenariosService {
     platform?: string | null;
     module?: string | null;
     sharedPreSteps?: string[];
+    actors?: Record<string, any> | null;
+    defaultActor?: string | null;
   }) {
     const suite = new UserScenarioSuite();
     suite.name = (dto.name || 'Suite').toString().trim() || 'Suite';
@@ -611,6 +637,8 @@ export class UserScenariosService {
     suite.platform = normalizePlatform(dto.platform);
     suite.module = normalizeModule(dto.module);
     suite.sharedPreStepsJson = this.serializeSharedPreSteps(dto.sharedPreSteps);
+    suite.actorsJson = this.serializeSuiteActors(dto.actors);
+    suite.defaultActor = dto.defaultActor != null ? String(dto.defaultActor) : null;
     await this.suiteRepo.save(suite);
     return await this.getSuiteDetail(suite.id);
   }
@@ -623,6 +651,8 @@ export class UserScenariosService {
       platform?: string | null;
       module?: string | null;
       sharedPreSteps?: string[] | null;
+      actors?: Record<string, any> | null;
+      defaultActor?: string | null;
     },
   ) {
     const suite = await this.suiteRepo.findOne({ where: { id } });
@@ -645,6 +675,12 @@ export class UserScenariosService {
       suite.sharedPreStepsJson = this.serializeSharedPreSteps(
         dto.sharedPreSteps,
       );
+    }
+    if ((dto as any).actors !== undefined) {
+      suite.actorsJson = this.serializeSuiteActors((dto as any).actors);
+    }
+    if ((dto as any).defaultActor !== undefined) {
+      suite.defaultActor = (dto as any).defaultActor != null ? String((dto as any).defaultActor) : null;
     }
     await this.suiteRepo.save(suite);
     return await this.getSuiteDetail(id);

@@ -13,6 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { OptionsSelect } from '@/components/select/options-select';
 import { OptionsSelectSearch } from '@/components/select/options-select-search';
 import { Button } from '@/components/ui/button';
+import { useRouter } from 'next/navigation';
+import { ExternalLink } from 'lucide-react';
 import type {
   ActionCatalog,
   StepCheckRuleType,
@@ -94,6 +96,7 @@ export function StepDialog({
   onSetStepDialogApiBody,
   onSubmit,
 }: StepDialogProps) {
+  const router = useRouter();
   const dialogPlatform = (
     (stepDialogTarget === 'case' ? selectedCase?.platform : platform) ||
     platform ||
@@ -102,6 +105,20 @@ export function StepDialog({
     .toString()
     .toLowerCase();
   const isDialogApiPlatform = isApiPlatform || dialogPlatform.includes('-api-');
+  const dialogPage =
+    (actionCatalog?.pages || []).find((p) => p.key === stepDialogPageKey) || null;
+  const dialogAction =
+    dialogPage?.actions.find((a) => a.key === stepDialogActionKey) || null;
+
+  const handleOpenInActionCatalog = () => {
+    if (!dialogPage) return;
+    const qs = new URLSearchParams();
+    if (dialogPlatform) qs.set('platform', dialogPlatform);
+    qs.set('pageKey', dialogPage.key);
+    if (dialogAction) qs.set('actionKey', dialogAction.key);
+    router.push(`/scenarios/action-catalog?${qs.toString()}`);
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -269,6 +286,25 @@ export function StepDialog({
                 />
               </div>
             </div>
+
+            {!isDialogApiPlatform && dialogPage ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
+                  已选择映射：{dialogPage.label}
+                  {dialogAction ? ` · ${dialogAction.label}` : ''}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  className="h-7 px-2"
+                  onClick={handleOpenInActionCatalog}
+                >
+                  <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                  去页面映射
+                </Button>
+              </div>
+            ) : null}
 
             <div className="space-y-3">
               {(() => {

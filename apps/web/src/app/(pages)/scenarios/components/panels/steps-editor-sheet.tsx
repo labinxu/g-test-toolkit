@@ -19,12 +19,28 @@ export type StepsEditorSheetProps = {
   suiteNameDraft: string;
   suitePreSteps: string[];
   suitePreStepDraft: string;
+  suiteActorsDraft: {
+    name: string;
+    scope: 'suite' | 'test';
+    authMode: 'ui' | 'cookies';
+    cookiesPath: string;
+  }[];
+  suiteDefaultActorDraft: string;
   suiteSaving: boolean;
   suiteDeleting?: boolean;
   onSuiteDescChange: (val: string) => void;
   onSuiteNameChange: (val: string) => void;
   onSuitePreStepsChange: (steps: string[]) => void;
   onSuitePreStepDraftChange: (val: string) => void;
+  onSuiteActorsDraftChange: (
+    actors: {
+      name: string;
+      scope: 'suite' | 'test';
+      authMode: 'ui' | 'cookies';
+      cookiesPath: string;
+    }[],
+  ) => void;
+  onSuiteDefaultActorDraftChange: (val: string) => void;
   onOpenSuiteStepDialog: () => void;
   onEditSuiteStep: (id: string) => void;
   onAssignSuite: (id: number | null) => void;
@@ -53,12 +69,16 @@ export function StepsEditorSheet({
   suiteNameDraft,
   suitePreSteps,
   suitePreStepDraft,
+  suiteActorsDraft,
+  suiteDefaultActorDraft,
   suiteSaving,
   suiteDeleting,
   onSuiteDescChange,
   onSuiteNameChange,
   onSuitePreStepsChange,
   onSuitePreStepDraftChange,
+  onSuiteActorsDraftChange,
+  onSuiteDefaultActorDraftChange,
   onOpenSuiteStepDialog,
   onEditSuiteStep,
   onAssignSuite,
@@ -98,10 +118,14 @@ export function StepsEditorSheet({
               suiteDescDraft={suiteDescDraft}
               suitePreSteps={suitePreSteps}
               suitePreStepDraft={suitePreStepDraft}
+              suiteActorsDraft={suiteActorsDraft}
+              suiteDefaultActorDraft={suiteDefaultActorDraft}
               onSuiteDescChange={onSuiteDescChange}
               onSuiteNameChange={onSuiteNameChange}
               onSuitePreStepsChange={onSuitePreStepsChange}
               onSuitePreStepDraftChange={onSuitePreStepDraftChange}
+              onSuiteActorsDraftChange={onSuiteActorsDraftChange}
+              onSuiteDefaultActorDraftChange={onSuiteDefaultActorDraftChange}
               onOpenSuiteStepDialog={onOpenSuiteStepDialog}
               onEditSuiteStep={onEditSuiteStep}
               onAssignSuite={(id) => void onAssignSuite(id)}

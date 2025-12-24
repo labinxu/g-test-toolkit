@@ -124,6 +124,7 @@ function ScenariosPageContent() {
           }}
           onRunCase={vm.handleRunCase}
           onRunSelected={vm.handleRunSelected}
+          onOpenRunLogs={() => vm.setLogPanelOpen(true)}
         />
       </div>
 
@@ -140,12 +141,16 @@ function ScenariosPageContent() {
         suiteNameDraft={vm.suiteNameDraft}
         suitePreSteps={vm.suitePreSteps}
         suitePreStepDraft={vm.suitePreStepDraft}
+        suiteActorsDraft={vm.suiteActorsDraft}
+        suiteDefaultActorDraft={vm.suiteDefaultActorDraft}
         suiteSaving={vm.suiteSaving}
         suiteDeleting={vm.suiteDeleting}
         onSuiteDescChange={vm.setSuiteDescDraft}
         onSuiteNameChange={vm.setSuiteNameDraft}
         onSuitePreStepsChange={vm.setSuitePreSteps}
         onSuitePreStepDraftChange={vm.setSuitePreStepDraft}
+        onSuiteActorsDraftChange={vm.setSuiteActorsDraft}
+        onSuiteDefaultActorDraftChange={vm.setSuiteDefaultActorDraft}
         onOpenSuiteStepDialog={vm.handleAddSuitePreStep}
         onEditSuiteStep={vm.handleEditSuitePreStep}
         onAssignSuite={(id) => void vm.handleAssignSuite(id)}

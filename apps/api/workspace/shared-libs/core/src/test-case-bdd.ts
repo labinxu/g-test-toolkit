@@ -1,6 +1,6 @@
 import { TestCase } from './test-case-base'
-import type { WithAndroidOptions } from './test-case-decorator'
-import { withAndroid, withBrowser } from './test-case-decorator'
+import type { ActorOptions, WithAndroidOptions } from './test-case-decorator'
+import { withActors, withAndroid, withBrowser } from './test-case-decorator'
 
 type HookType = 'beforeAll' | 'afterAll' | 'beforeEach' | 'afterEach'
 
@@ -34,6 +34,12 @@ export type UseTestCaseOptions = {
   module?: string
   browser?: UseBrowserOptions | false
   android?: UseAndroidOptions | false
+  /**
+   * Multi-actor (multi-account) support for web tests.
+   * Actors can be referenced via `tc.useActor('<name>')` / `tc.actor('<name>')`.
+   */
+  actors?: Record<string, ActorOptions>
+  defaultActor?: string
   keepAppOpen?: boolean
   shareSession?: boolean
   sessionKey?: string
@@ -252,11 +258,11 @@ export function resolveUseTestCaseOptions(
   const merged: UseTestCaseOptions = { ...base }
 
   if (payload.browser && base.browser !== false) {
-    const existing = merged.browser && merged.browser !== false ? (merged.browser as any) : {}
+    const existing = merged.browser !== false && merged.browser ? (merged.browser as any) : {}
     merged.browser = { ...existing, ...(payload.browser as any) }
   }
   if (payload.android && base.android !== false) {
-    const existing = merged.android && merged.android !== false ? (merged.android as any) : {}
+    const existing = merged.android !== false && merged.android ? (merged.android as any) : {}
     merged.android = { ...existing, ...(payload.android as any) }
   }
 
@@ -396,6 +402,9 @@ function applyTestCaseOptions(ctor: any, options?: UseTestCaseOptions) {
     if (bringToFront !== undefined) {
       ctor.__androidBringToFront = !!bringToFront
     }
+  }
+  if (options.actors && typeof options.actors === 'object') {
+    withActors({ actors: options.actors, defaultActor: options.defaultActor })(ctor)
   }
   if (options.keepAppOpen !== undefined) {
     ctor.__keepAppOpen = !!options.keepAppOpen

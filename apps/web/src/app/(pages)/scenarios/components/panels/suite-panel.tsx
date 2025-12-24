@@ -1,12 +1,24 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { OptionsSelectSearch } from '@/components/select/options-select-search';
-import { Loader2, Plus, Save } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+} from 'lucide-react';
 import { ScenarioStepsTable } from '../shared/steps-table';
 import type { UserScenarioStep } from '../../types';
 
@@ -16,6 +28,13 @@ type SuiteSummary = {
   description?: string | null;
   caseCount?: number;
   sharedPreSteps?: string[];
+};
+
+type SuiteActorDraft = {
+  name: string;
+  scope: 'suite' | 'test';
+  authMode: 'ui' | 'cookies';
+  cookiesPath: string;
 };
 
 type SuitePanelProps = {
@@ -29,10 +48,14 @@ type SuitePanelProps = {
   suiteDescDraft: string;
   suitePreSteps: string[];
   suitePreStepDraft: string;
+  suiteActorsDraft: SuiteActorDraft[];
+  suiteDefaultActorDraft: string;
   onSuiteDescChange: (val: string) => void;
   onSuiteNameChange: (val: string) => void;
   onSuitePreStepsChange: (steps: string[]) => void;
   onSuitePreStepDraftChange: (val: string) => void;
+  onSuiteActorsDraftChange: (actors: SuiteActorDraft[]) => void;
+  onSuiteDefaultActorDraftChange: (val: string) => void;
   onAssignSuite: (suiteId: number | null) => void;
   onEditSuiteStep: (id: string) => void;
   onSaveSuitePreSteps: () => void;
@@ -51,10 +74,14 @@ export function SuitePanel({
   suiteDescDraft,
   suitePreSteps,
   suitePreStepDraft,
+  suiteActorsDraft,
+  suiteDefaultActorDraft,
   onSuiteDescChange,
   onSuiteNameChange,
   onSuitePreStepsChange,
   onSuitePreStepDraftChange,
+  onSuiteActorsDraftChange,
+  onSuiteDefaultActorDraftChange,
   onAssignSuite,
   onEditSuiteStep,
   onSaveSuitePreSteps,
@@ -65,6 +92,23 @@ export function SuitePanel({
   suiteSaving = false,
   suiteDeleting = false,
 }: SuitePanelProps) {
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const v = localStorage.getItem('gtt:scenarios:suitePanelOpen');
+      if (v === '0') return false;
+      if (v === '1') return true;
+    } catch {}
+    return true;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('gtt:scenarios:suitePanelOpen', open ? '1' : '0');
+    } catch {}
+  }, [open]);
+
   const suiteStepsParsed: UserScenarioStep[] = useMemo(() => {
     return suitePreSteps.map((raw, idx) => {
       let parsed: any = null;
@@ -102,10 +146,31 @@ export function SuitePanel({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border bg-card p-4">
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="space-y-3 rounded-lg border bg-card p-4"
+    >
       <div className="flex items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-semibold">测试套件</div>
+          <div className="flex items-center gap-2">
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                aria-label={open ? '折叠测试套件' : '展开测试套件'}
+              >
+                {open ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <div className="text-sm font-semibold">测试套件</div>
+          </div>
           <p className="text-muted-foreground mt-1 text-xs">
             将多个用例放入同一套件，复用套件级前置步骤并生成单个测试文件。
           </p>
@@ -144,6 +209,7 @@ export function SuitePanel({
         </div>
       </div>
 
+      <CollapsibleContent className="space-y-3">
       <div className="grid gap-3 md:grid-cols-3">
         <div className="space-y-1 md:col-span-2">
           <Label className="text-xs">所属套件</Label>
@@ -194,6 +260,149 @@ export function SuitePanel({
             placeholder="为套件添加说明，帮助团队理解覆盖范围"
             disabled={!selectedSuiteId}
           />
+        </div>
+      </div>
+
+      <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <Label className="text-xs">Actors（多账号）</Label>
+            <p className="text-muted-foreground mt-1 text-[11px]">
+              用例的 `submenu` 如果等于 actor name，生成的套件代码会自动插入 `tc.useActor(submenu)`。
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!selectedSuiteId}
+            onClick={() => {
+              onSuiteActorsDraftChange([
+                ...suiteActorsDraft,
+                { name: '', scope: 'suite', authMode: 'ui', cookiesPath: '' },
+              ]);
+            }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            添加 actor
+          </Button>
+        </div>
+
+        <div className="grid gap-2">
+          {suiteActorsDraft.length ? (
+            <div className="grid gap-2">
+              {suiteActorsDraft.map((row, idx) => (
+                <div
+                  key={`actor-${idx}`}
+                  className="grid items-center gap-2 rounded-md border bg-background p-2 md:grid-cols-12"
+                >
+                  <div className="md:col-span-2">
+                    <Label className="text-[11px]">name</Label>
+                    <Input
+                      value={row.name}
+                      onChange={(e) => {
+                        const next = suiteActorsDraft.slice();
+                        next[idx] = { ...row, name: e.target.value };
+                        onSuiteActorsDraftChange(next);
+                      }}
+                      placeholder="host / viewer / user1 ..."
+                      disabled={!selectedSuiteId}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-[11px]">scope</Label>
+                    <select
+                      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                      value={row.scope}
+                      disabled={!selectedSuiteId}
+                      onChange={(e) => {
+                        const v = e.target.value === 'test' ? 'test' : 'suite';
+                        const next = suiteActorsDraft.slice();
+                        next[idx] = { ...row, scope: v };
+                        onSuiteActorsDraftChange(next);
+                      }}
+                    >
+                      <option value="suite">suite</option>
+                      <option value="test">test</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-[11px]">auth</Label>
+                    <select
+                      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                      value={row.authMode}
+                      disabled={!selectedSuiteId}
+                      onChange={(e) => {
+                        const v = e.target.value === 'cookies' ? 'cookies' : 'ui';
+                        const next = suiteActorsDraft.slice();
+                        next[idx] = { ...row, authMode: v, cookiesPath: v === 'cookies' ? row.cookiesPath : '' };
+                        onSuiteActorsDraftChange(next);
+                      }}
+                    >
+                      <option value="ui">ui</option>
+                      <option value="cookies">cookies</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-5">
+                    <Label className="text-[11px]">cookiesPath</Label>
+                    <Input
+                      value={row.cookiesPath}
+                      onChange={(e) => {
+                        const next = suiteActorsDraft.slice();
+                        next[idx] = { ...row, cookiesPath: e.target.value };
+                        onSuiteActorsDraftChange(next);
+                      }}
+                      placeholder="auth/user1.cookies.json"
+                      disabled={!selectedSuiteId || row.authMode !== 'cookies'}
+                    />
+                  </div>
+                  <div className="flex justify-end md:col-span-1">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      disabled={!selectedSuiteId}
+                      onClick={() => {
+                        const next = suiteActorsDraft.filter((_, i) => i !== idx);
+                        onSuiteActorsDraftChange(next);
+                        if (suiteDefaultActorDraft && !next.some((a) => a.name === suiteDefaultActorDraft)) {
+                          onSuiteDefaultActorDraftChange('');
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              未配置 actors。需要多账号场景时添加 host/viewer 等。
+            </p>
+          )}
+
+          <div className="grid gap-1 md:grid-cols-3">
+            <div className="space-y-1 md:col-span-1">
+              <Label className="text-[11px]">defaultActor</Label>
+              <select
+                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={suiteDefaultActorDraft}
+                disabled={!selectedSuiteId}
+                onChange={(e) => onSuiteDefaultActorDraftChange(e.target.value)}
+              >
+                <option value="">（无）</option>
+                {suiteActorsDraft
+                  .map((a) => a.name.trim())
+                  .filter(Boolean)
+                  .map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -251,6 +460,7 @@ export function SuitePanel({
           }}
         />
       </div>
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

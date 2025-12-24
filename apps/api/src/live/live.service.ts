@@ -70,7 +70,7 @@ export class LiveService {
     }
 
     const videoKbps = Number.isFinite(dto.videoBitrateKbps)
-      ? Math.max(100, Math.min(5000, dto.videoBitrateKbps!))
+      ? Math.max(100, Math.min(20000, dto.videoBitrateKbps!))
       : 800
     const audioKbps = Number.isFinite(dto.audioBitrateKbps)
       ? Math.max(32, Math.min(512, dto.audioBitrateKbps!))

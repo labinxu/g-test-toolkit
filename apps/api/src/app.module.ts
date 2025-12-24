@@ -36,6 +36,7 @@ import { CurlModule } from './curl/curl.module';
 import { FlutterModule } from './mobile/flutter/flutter.module';
 import { LiveModule } from './live/live.module';
 import { UserScenarioSuite } from './user-scenarios/entities/user-scenario-suite.entity';
+import { AuthAssetsModule } from './auth-assets/auth-assets.module';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -77,6 +78,7 @@ import { UserScenarioSuite } from './user-scenarios/entities/user-scenario-suite
     FlutterModule,
     UserScenariosModule,
     LiveModule,
+    AuthAssetsModule,
   ],
   controllers: [AppController],
   providers: [AppService, LoggerService, LoggerGateway],

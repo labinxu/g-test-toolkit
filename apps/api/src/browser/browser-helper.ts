@@ -1,4 +1,4 @@
-import { Browser } from 'puppeteer';
+import { Browser, BrowserContext } from 'puppeteer';
 import puppeteerExra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import puppeteer from 'puppeteer';
@@ -7,7 +7,7 @@ export { Browser };
 puppeteerExra.use(StealthPlugin());
 
 export class BrowserHelper {
-  private broweres: Browser[];
+  private broweres: Browser[] = [];
   public newPagePromise: any;
   async newBrowser({
     logger = null,
@@ -46,11 +46,12 @@ export class BrowserHelper {
         '--use-fake-ui-for-media-stream',
       ],
     });
+    this.broweres.push(bs);
     // 等待新标签页的 Promise
 
     const pages = await bs.pages();
     const page = pages[0];
-    const context = bs.defaultBrowserContext();
+    const context: BrowserContext = bs.defaultBrowserContext();
     // fixed popup permission dialog
     domain && (await context.overridePermissions(domain, []));
     page.setUserAgent(
@@ -83,7 +84,7 @@ export class BrowserHelper {
     if (retry_ === 0) {
       throw new Error(`Open ${domain} failed`);
     }
-    return { bs, page };
+    return { bs, page, context };
   }
   async close() {
     for (const bs of this.broweres) {
@@ -93,5 +94,6 @@ export class BrowserHelper {
         continue;
       }
     }
+    this.broweres = [];
   }
 }

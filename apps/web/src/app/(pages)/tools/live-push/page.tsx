@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Cast, Loader2, RefreshCcw, Square } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSession } from '@/app/context/session-context'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -56,6 +58,10 @@ export default function LivePushToolPage() {
   const [loadingStatus, setLoadingStatus] = useState(false)
   const [videoOptions, setVideoOptions] = useState<OptionsSelectItem<string>[]>([])
   const [selectedVideo, setSelectedVideo] = useState<string>('')
+  const [loopPush, setLoopPush] = useState(false)
+  const [desiredRunning, setDesiredRunning] = useState(false)
+  const didInitDesiredRunningRef = useRef(false)
+  const lastAutoStartAtRef = useRef(0)
 
   const rtmpUrl = useMemo(() => {
     const server = rtmpServer.trim().replace(/\/+$/, '')
@@ -76,7 +82,12 @@ export default function LivePushToolPage() {
       if ((data as any)?.error) {
         throw new Error((data as any)?.error || '获取推流状态失败')
       }
-      setStatus(data as LiveStatus)
+      const nextStatus = data as LiveStatus
+      setStatus(nextStatus)
+      if (!didInitDesiredRunningRef.current) {
+        setDesiredRunning(!!nextStatus.running)
+        didInitDesiredRunningRef.current = true
+      }
     } catch (e: any) {
       setStatus(null)
     } finally {
@@ -135,12 +146,12 @@ export default function LivePushToolPage() {
   // 推流运行时，定时轮询后台进度，便于在页面看到实时时间点
   const running = !!status?.running
   useEffect(() => {
-    if (!running) return
+    if (!running && !(desiredRunning && loopPush)) return
     const timer = setInterval(() => {
       fetchStatus().catch(() => {})
     }, 2000)
     return () => clearInterval(timer)
-  }, [running, fetchStatus])
+  }, [running, desiredRunning, loopPush, fetchStatus])
 
   const formatTime = (value?: number) => {
     if (!Number.isFinite(value as number)) return '(未知)'
@@ -152,18 +163,18 @@ export default function LivePushToolPage() {
     return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
   }
 
-  const handleStart = async () => {
+  const handleStart = async (opts?: { silent?: boolean }) => {
     if (!isAuthenticated) {
-      toast.error('请先登录后再启动推流')
-      return
+      if (!opts?.silent) toast.error('请先登录后再启动推流')
+      return false
     }
     if (!selectedVideo) {
-      toast.error('请选择一个视频文件')
-      return
+      if (!opts?.silent) toast.error('请选择一个视频文件')
+      return false
     }
     if (!rtmpUrl) {
-      toast.error('请填写 RTMP Server 和 Stream Key 或直接填 rtmpUrl')
-      return
+      if (!opts?.silent) toast.error('请填写 RTMP Server 和 Stream Key 或直接填 rtmpUrl')
+      return false
     }
     setLoadingStart(true)
     try {
@@ -191,15 +202,17 @@ export default function LivePushToolPage() {
         throw new Error((data as any)?.error || (data as any)?.message || '启动推流失败')
       }
       setStatus(data as LiveStatus)
-      toast.success('已启动推流')
+      if (!opts?.silent) toast.success('已启动推流')
+      return true
     } catch (e: any) {
-      toast.error(e?.message || '启动推流失败')
+      if (!opts?.silent) toast.error(e?.message || '启动推流失败')
+      return false
     } finally {
       setLoadingStart(false)
     }
   }
 
-  const handleStop = async () => {
+  const handleStop = async (opts?: { silent?: boolean }) => {
     setLoadingStop(true)
     try {
       const res = await fetch('/api/live/stop', { method: 'POST' })
@@ -227,13 +240,33 @@ export default function LivePushToolPage() {
             : { running: false }
         )
       }
-      toast.success('已发送停止指令')
+      if (!opts?.silent) toast.success('已发送停止指令')
+      return true
     } catch (e: any) {
-      toast.error(e?.message || '停止推流失败')
+      if (!opts?.silent) toast.error(e?.message || '停止推流失败')
+      return false
     } finally {
       setLoadingStop(false)
     }
   }
+
+  useEffect(() => {
+    if (!loopPush) return
+    if (!desiredRunning) return
+    if (running) return
+    if (loadingStart || loadingStop) return
+    if (!didInitDesiredRunningRef.current) return
+
+    const now = Date.now()
+    if (now - lastAutoStartAtRef.current < 2500) return
+    lastAutoStartAtRef.current = now
+
+    handleStart({ silent: true }).then((ok) => {
+      if (!ok) {
+        setDesiredRunning(false)
+      }
+    })
+  }, [loopPush, desiredRunning, running, loadingStart, loadingStop])
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-2 overflow-y-auto rounded-lg border-2 p-6 shadow-lg">
@@ -305,7 +338,7 @@ export default function LivePushToolPage() {
                 id="video-bitrate"
                 type="number"
                 min={100}
-                max={5000}
+                max={20000}
                 value={videoBitrate}
                 onChange={(e) => setVideoBitrate(parseInt(e.target.value || '0', 10) || 800)}
               />
@@ -323,34 +356,72 @@ export default function LivePushToolPage() {
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              onClick={handleStart}
-              disabled={loadingStart || running}
-              className="flex items-center gap-2"
-            >
-              {loadingStart ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Cast className="h-4 w-4" />
-              )}
-              {running ? '推流进行中' : '开始推流'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleStop}
-              disabled={loadingStop || !running}
-              className="flex items-center gap-2"
-            >
-              {loadingStop ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Square className="h-4 w-4" />
-              )}
-              停止推流
-            </Button>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="loop-push"
+                checked={loopPush}
+                onCheckedChange={(v) => setLoopPush(!!v)}
+                aria-label="循环推流"
+              />
+              <Label
+                htmlFor="loop-push"
+                className="text-muted-foreground cursor-pointer select-none text-xs"
+              >
+                循环推流
+              </Label>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    if (running) {
+                      setDesiredRunning(false)
+                      await handleStop()
+                      return
+                    }
+                    setDesiredRunning(true)
+                    const ok = await handleStart()
+                    if (!ok) setDesiredRunning(false)
+                  }}
+                  disabled={loadingStart || loadingStop}
+                  variant={running ? 'outline' : 'default'}
+                  size="icon"
+                  aria-label={
+                    running
+                      ? '停止推流'
+                      : loopPush
+                        ? desiredRunning
+                          ? '启动中（循环）'
+                          : '开始推流（循环）'
+                        : '开始推流'
+                  }
+                  className={cn(
+                    'relative h-9 w-9 rounded-full',
+                    running &&
+                      'after:pointer-events-none after:absolute after:inset-0 after:rounded-full after:ring-2 after:ring-emerald-500/70 dark:after:ring-emerald-400/70 before:pointer-events-none before:absolute before:inset-0 before:rounded-full before:bg-emerald-500/10 before:ring-4 before:ring-emerald-500/45 before:animate-[ping_1.4s_ease-out_infinite] dark:before:bg-emerald-400/10 dark:before:ring-emerald-400/45'
+                  )}
+                >
+                  {loadingStart || loadingStop ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : running ? (
+                    <Square className="h-4 w-4" />
+                  ) : (
+                    <Cast className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={6}>
+                {running
+                  ? '停止推流'
+                  : loopPush
+                    ? desiredRunning
+                      ? '启动中（循环）'
+                      : '开始推流（循环）'
+                    : '开始推流'}
+              </TooltipContent>
+            </Tooltip>
             <Button
               type="button"
               variant="ghost"

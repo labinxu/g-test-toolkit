@@ -138,6 +138,10 @@ export function getMenuList(pathname: string): Group[] {
               href: '/resource/app',
               label: 'APP',
             },
+            {
+              href: '/resource/auth',
+              label: 'Auth',
+            },
           ],
         },
         {

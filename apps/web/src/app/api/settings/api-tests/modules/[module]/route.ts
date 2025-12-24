@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(
   req: NextRequest,
-  context: { params: { module: string } },
+  context: { params: Promise<{ module: string }> },
 ) {
   const base =
     process.env.API_BASE_URL || process.env.INSPECTOR_BASE_URL || '';
@@ -13,7 +13,8 @@ export async function GET(
     );
   }
 
-  const mod = (context.params.module || '').trim() || 'default';
+  const { module } = await context.params;
+  const mod = (module || '').trim() || 'default';
   const url = `${base.replace(
     /\/$/,
     '',
@@ -40,7 +41,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  context: { params: { module: string } },
+  context: { params: Promise<{ module: string }> },
 ) {
   const base =
     process.env.API_BASE_URL || process.env.INSPECTOR_BASE_URL || '';
@@ -51,7 +52,8 @@ export async function PUT(
     );
   }
 
-  const mod = (context.params.module || '').trim() || 'default';
+  const { module } = await context.params;
+  const mod = (module || '').trim() || 'default';
   const url = `${base.replace(
     /\/$/,
     '',
@@ -83,4 +85,3 @@ export async function PUT(
 
   return NextResponse.json(data as any, { status: res.status });
 }
-

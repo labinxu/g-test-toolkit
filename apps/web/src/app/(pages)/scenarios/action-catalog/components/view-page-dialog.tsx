@@ -1,7 +1,7 @@
 'use client'
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { GTable } from '@/components/g-table'
+import { GTable } from '@/components/data-table'
 import { resolveActionSubtypeLabel } from '../use-action-catalog'
 import type { AdminPage } from '../types'
 

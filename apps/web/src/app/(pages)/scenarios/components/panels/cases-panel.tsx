@@ -1,10 +1,26 @@
+'use client';
+
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { OptionsSelect, type OptionsSelectItem } from '@/components/select/options-select';
+import {
+  OptionsSelect,
+  type OptionsSelectItem,
+} from '@/components/select/options-select';
 import ResizableStickyTable from '@/components/data-table';
 import TableToolbar from '@/components/table-toolbar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Download,
   ExternalLink,
@@ -17,6 +33,7 @@ import {
   Play,
   Radio,
   RefreshCw,
+  MoreVertical,
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -113,6 +130,9 @@ export function CasesPanel({
   onRunSelected,
   onOpenRunLogs,
 }: CasesPanelProps) {
+  const [sortKey, setSortKey] = React.useState<string>('id');
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
+
   return (
     <Card className="flex min-h-0 flex-1 flex-col">
       <CardHeader className="pb-2">
@@ -140,7 +160,10 @@ export function CasesPanel({
             <TooltipContent sideOffset={6}>刷新列表</TooltipContent>
           </Tooltip>
           <div className="flex flex-wrap items-center gap-1.5">
-            <form className="flex items-center gap-1.5" onSubmit={(e) => e.preventDefault()}>
+            <form
+              className="flex items-center gap-1.5"
+              onSubmit={(e) => e.preventDefault()}
+            >
               <input
                 id="ls-upload-csv"
                 type="file"
@@ -161,17 +184,24 @@ export function CasesPanel({
                     size="icon"
                     className="h-8 w-8 rounded-full"
                     onClick={() => {
-                      const input = document.getElementById('ls-upload-csv') as HTMLInputElement | null;
+                      const input = document.getElementById(
+                        'ls-upload-csv',
+                      ) as HTMLInputElement | null;
                       input?.click();
                     }}
                   >
                     <FileUp className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent sideOffset={6}>从结构化 CSV 导入（要求符合 Livestream CSV 模板）</TooltipContent>
+                <TooltipContent sideOffset={6}>
+                  从结构化 CSV 导入（要求符合 Livestream CSV 模板）
+                </TooltipContent>
               </Tooltip>
             </form>
-            <form className="flex items-center gap-1.5" onSubmit={(e) => e.preventDefault()}>
+            <form
+              className="flex items-center gap-1.5"
+              onSubmit={(e) => e.preventDefault()}
+            >
               <input
                 id="ls-upload-doc"
                 type="file"
@@ -197,7 +227,11 @@ export function CasesPanel({
                       onOpenDocPrompt();
                     }}
                   >
-                    {ingestingDoc ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                    {ingestingDoc ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent sideOffset={6}>
@@ -210,7 +244,11 @@ export function CasesPanel({
             <OptionsSelect
               id="ls-platform"
               value={platform}
-              items={platforms.length ? platforms : [{ value: 'gettr-web', label: 'GETTR Web' }]}
+              items={
+                platforms.length
+                  ? platforms
+                  : [{ value: 'gettr-web', label: 'GETTR Web' }]
+              }
               placeholder="平台"
               onSelect={(item) => onPlatformChange(item.value)}
               size="sm"
@@ -232,7 +270,8 @@ export function CasesPanel({
           </div>
           {ingestingDoc && (
             <p className="text-muted-foreground max-w-xl text-[11px]">
-              导入中：后端正在解析说明文档并写入用户场景，通常需要 10～60 秒，完成后列表会自动刷新…
+              导入中：后端正在解析说明文档并写入用户场景，通常需要 10～60
+              秒，完成后列表会自动刷新…
             </p>
           )}
         </div>
@@ -292,7 +331,9 @@ export function CasesPanel({
                       <Play className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent sideOffset={6}>顺序运行所选用例</TooltipContent>
+                  <TooltipContent sideOffset={6}>
+                    顺序运行所选用例
+                  </TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -318,7 +359,11 @@ export function CasesPanel({
                       onClick={onDeleteSelected}
                       type="button"
                     >
-                      {deletingBulk ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      {deletingBulk ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent sideOffset={6}>删除所选</TooltipContent>
@@ -329,19 +374,46 @@ export function CasesPanel({
           <div className="relative min-h-0 flex-1">
             <ResizableStickyTable<UserScenarioSummary>
               rows={filteredCases}
+              framePadding="none"
+              frameClassName="rounded-none"
+              headerHeightPx={40}
               columns={[
                 {
-                  key: 'code',
+                  key: 'id',
                   header: '用例ID',
-                  width: 80,
-                  minWidth: 72,
+                  width: 72,
+                  minWidth: 64,
                   sticky: 'left' as const,
-                  filterType: 'text' as const,
-                  filterPlaceholder: '按用例ID筛选',
+                  sortable: true,
+                  headerClassName: 'text-center',
                   render: (row: UserScenarioSummary) => (
                     <button
                       type="button"
-                      className={cn('w-full truncate text-left', selectedCaseId === row.id && 'font-semibold')}
+                      className={cn(
+                        'w-full truncate text-left',
+                        selectedCaseId === row.id && 'font-semibold',
+                      )}
+                      onClick={() => onSelectCase(row.id)}
+                    >
+                      {row.id}
+                    </button>
+                  ),
+                },
+                {
+                  key: 'code',
+                  header: '用例编号',
+                  width: 96,
+                  minWidth: 80,
+                  filterType: 'text' as const,
+                  filterPlaceholder: '按用例编号筛选',
+                  headerClassName: 'text-center',
+                  render: (row: UserScenarioSummary) => (
+                    <button
+                      type="button"
+                      className={cn(
+                        'w-full truncate text-left',
+                        selectedCaseId === row.id && 'font-semibold',
+                      )}
                       onClick={() => onSelectCase(row.id)}
                     >
                       {row.code}
@@ -355,10 +427,14 @@ export function CasesPanel({
                   minWidth: 160,
                   filterType: 'text' as const,
                   filterPlaceholder: '按标题筛选',
+                  headerClassName: 'text-center',
                   render: (row: UserScenarioSummary) => (
                     <button
                       type="button"
-                      className={cn('w-full truncate text-left', selectedCaseId === row.id && 'font-semibold')}
+                      className={cn(
+                        'w-full truncate text-left',
+                        selectedCaseId === row.id && 'font-semibold',
+                      )}
                       title={row.title}
                       onClick={() => onSelectCase(row.id)}
                     >
@@ -372,16 +448,21 @@ export function CasesPanel({
                   width: 120,
                   minWidth: 96,
                   filterType: 'select' as const,
-                  accessor: (row: UserScenarioSummary) => (row.module ? moduleLabelMap[row.module] || row.module : ''),
+                  headerClassName: 'text-center',
+                  accessor: (row: UserScenarioSummary) =>
+                    row.module ? moduleLabelMap[row.module] || row.module : '',
                 },
                 {
                   key: 'submenu',
-                  header: '角色 / Persona',
+                  header: '角色',
                   width: 80,
                   minWidth: 72,
                   filterType: 'select' as const,
+                  headerClassName: 'text-center',
                   accessor: (row: UserScenarioSummary) =>
-                    row.submenu ? submenuLabelMap[row.submenu] || row.submenu : '-',
+                    row.submenu
+                      ? submenuLabelMap[row.submenu] || row.submenu
+                      : '-',
                 },
                 {
                   key: 'priority',
@@ -389,6 +470,7 @@ export function CasesPanel({
                   width: 72,
                   minWidth: 64,
                   filterType: 'select' as const,
+                  headerClassName: 'text-center',
                   accessor: (row: UserScenarioSummary) =>
                     row.priority ? priorityLabelMap[row.priority] : '',
                 },
@@ -398,133 +480,139 @@ export function CasesPanel({
                   width: 80,
                   minWidth: 72,
                   filterType: 'select' as const,
-                  accessor: (row: UserScenarioSummary) => statusLabelMap[row.status],
+                  headerClassName: 'text-center',
+                  accessor: (row: UserScenarioSummary) =>
+                    statusLabelMap[row.status],
                 },
                 {
                   key: 'actions',
                   header: '',
-                  width: 188,
-                  minWidth: 168,
-                  render: (row: UserScenarioSummary) => (
-                    <div className="flex items-center justify-end gap-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => {
-                              onSelectCase(row.id);
-                              onOpenSteps(row.id);
-                            }}
-                            aria-label="编辑步骤"
+                  width: 88,
+                  minWidth: 80,
+                  sticky: 'right' as const,
+                  headerClassName: 'text-center',
+                  className: 'px-1 py-1',
+                  render: (row: UserScenarioSummary) => {
+                    const canOpen =
+                      row.status === 'code_generated' &&
+                      !!row.generatedFilePath &&
+                      row.generatedFilePath.trim().length > 0;
+
+                    return (
+                      <div className="flex items-center justify-end gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => {
+                                onSelectCase(row.id);
+                                onOpenSteps(row.id);
+                              }}
+                              aria-label="编辑步骤"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>
+                            编辑步骤
+                          </TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => onRunCase(row.id)}
+                              aria-label="运行用例"
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={6}>
+                            运行用例（未生成则先生成）
+                          </TooltipContent>
+                        </Tooltip>
+
+                        <DropdownMenu>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  aria-label="更多操作"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreVertical className="h-3.5 w-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                            </TooltipTrigger>
+                            <TooltipContent sideOffset={6}>更多</TooltipContent>
+                          </Tooltip>
+                          <DropdownMenuContent
+                            align="end"
+                            className="min-w-[180px]"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent sideOffset={6}>编辑步骤</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => {
-                              onSelectCase(row.id);
-                              onOpenMeta(row.id);
-                            }}
-                            aria-label="编辑基本信息"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent sideOffset={6}>编辑基本信息</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => onGenerateCode(row.id, row.platform || platform)}
-                            aria-label="为该用例生成代码"
-                          >
-                            <FileCode className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent sideOffset={6}>为该用例生成代码</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => onRunCase(row.id)}
-                            aria-label="运行用例"
-                          >
-                            <Play className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent sideOffset={6}>运行用例（未生成则先生成）</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          {(() => {
-                            const canOpen =
-                              row.status === 'code_generated' &&
-                              !!row.generatedFilePath &&
-                              row.generatedFilePath.trim().length > 0;
-                            return (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                disabled={!canOpen}
-                                onClick={() => {
-                                  if (!canOpen) return;
-                                  onOpenTestcases(row.generatedFilePath);
-                                }}
-                                aria-label="在用例库中打开生成代码"
-                              >
-                                <ExternalLink className={cn('h-3.5 w-3.5', !canOpen && 'opacity-30 cursor-default')} />
-                              </Button>
-                            );
-                          })()}
-                        </TooltipTrigger>
-                        <TooltipContent sideOffset={6}>在「用例库」中打开生成代码</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive h-7 w-7"
-                            disabled={deletingId === row.id}
-                            onClick={() => onDeleteCase(row.id)}
-                            aria-label="删除用户场景"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent sideOffset={6}>删除用例</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  ),
+                            <DropdownMenuItem
+                              className="text-xs"
+                              onClick={() => {
+                                onSelectCase(row.id);
+                                onOpenMeta(row.id);
+                              }}
+                            >
+                              <FileText className="mr-2 h-3.5 w-3.5" />
+                              编辑基本信息
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-xs"
+                              onClick={() =>
+                                onGenerateCode(row.id, row.platform || platform)
+                              }
+                            >
+                              <FileCode className="mr-2 h-3.5 w-3.5" />
+                              生成代码
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-xs"
+                              disabled={!canOpen}
+                              onClick={() => {
+                                if (!canOpen) return;
+                                onOpenTestcases(row.generatedFilePath);
+                              }}
+                            >
+                              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                              在「用例库」中打开
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-xs text-destructive focus:text-destructive"
+                              disabled={deletingId === row.id}
+                              onClick={() => onDeleteCase(row.id)}
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
+                              删除用例
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    );
+                  },
                 },
               ]}
               getRowKey={(row) => `id:${row.id}`}
               page={safePage}
               pageSize={tablePageSize}
-              headerLightClass="bg-muted text-foreground border-b border-border"
-              headerDarkClass="dark:bg-muted dark:text-foreground dark:border-border"
+              headerLightClass="bg-muted/70 text-foreground"
+              headerDarkClass="dark:bg-muted/70 dark:text-foreground"
               density="compact"
               selection={{
                 enabled: true,
@@ -542,8 +630,21 @@ export function CasesPanel({
                 minWidth: 36,
               }}
               containerClassName="h-full overflow-x-auto overflow-y-auto"
-              rowClassName={(row) => (selectedCaseId === row.id ? 'bg-primary/10 dark:bg-primary/20' : '')}
+              rowClassName={(row) =>
+                selectedCaseId === row.id
+                  ? 'bg-primary/10 dark:bg-primary/20'
+                  : ''
+              }
               enableFilters
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSortChange={(key, dir) => {
+                setSortKey(key);
+                setSortDir(dir);
+              }}
+              compareFns={{
+                id: (a, b) => (a.id || 0) - (b.id || 0),
+              }}
               onRowCountChange={onRowCountChange}
               onRowDoubleClick={(row) => {
                 onSelectCase(row.id);

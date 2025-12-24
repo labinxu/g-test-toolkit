@@ -13,9 +13,12 @@ type OptionsSelectInputProps<TValue extends string = string> = {
   value: string;
   onChange: (value: string) => void;
   items: OptionsSelectItem<TValue>[];
+  onSelect?: (item: OptionsSelectItem<TValue>) => void;
+  onBlur?: () => void;
   className?: string;
   inputClassName?: string;
   triggerClassName?: string;
+  contentClassName?: string;
   size?: 'default' | 'sm';
   onDeleteOption?: (item: OptionsSelectItem<TValue>) => void;
   disabled?: boolean;
@@ -27,9 +30,12 @@ export function OptionsSelectInput<TValue extends string = string>({
   value,
   onChange,
   items,
+  onSelect,
+  onBlur,
   className,
   inputClassName,
   triggerClassName,
+  contentClassName,
   size = 'default',
   onDeleteOption,
   disabled = false,
@@ -67,6 +73,7 @@ export function OptionsSelectInput<TValue extends string = string>({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         disabled={disabled}
       />
       <button
@@ -87,7 +94,12 @@ export function OptionsSelectInput<TValue extends string = string>({
         <ChevronDownIcon className="h-4 w-4" />
       </button>
       {open && !disabled && items.length > 0 && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
+        <div
+          className={cn(
+            'absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md',
+            contentClassName,
+          )}
+        >
           {items.map((item) => (
             <div
               key={item.value}
@@ -98,6 +110,7 @@ export function OptionsSelectInput<TValue extends string = string>({
                 className="flex-1 truncate text-left"
                 onClick={() => {
                   onChange(item.value);
+                  onSelect?.(item);
                   setOpen(false);
                 }}
               >

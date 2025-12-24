@@ -7,6 +7,35 @@ export const __multiTaskClasses: Function[] = []
 
 export const __useBrowserStaticMethods: Record<string, Function[]> = {}
 
+export type ActorScope = 'suite' | 'test'
+export type ActorAuthMode = 'ui' | 'cookies'
+
+export type ActorAuthOptions = {
+  mode?: ActorAuthMode
+  /**
+   * Cookie JSON file path (absolute or relative to the current user's `userDir`).
+   * Expected format: Puppeteer cookies array, or `{ cookies: [...] }`.
+   */
+  cookiesPath?: string
+  /**
+   * Cookie objects to apply directly (Puppeteer-compatible CookieParam array).
+   */
+  cookies?: any[]
+}
+
+export type ActorBrowserOptions = {
+  headless?: boolean
+  timeout?: number
+  domain?: string
+  retry?: number
+}
+
+export type ActorOptions = {
+  scope?: ActorScope
+  browser?: ActorBrowserOptions
+  auth?: ActorAuthOptions
+}
+
 export function Test(options?: { module?: string }): ClassDecorator {
   return function (constructor: Function, ...args: any[]) {
     ;(constructor as any).module = options?.module ? options.module : 'default'
@@ -14,6 +43,19 @@ export function Test(options?: { module?: string }): ClassDecorator {
     console.log('Decorator args', args)
   }
 }
+
+export function withActors(options: {
+  actors: Record<string, ActorOptions>
+  defaultActor?: string
+}): ClassDecorator {
+  return function (constructor: Function) {
+    const actors =
+      options?.actors && typeof options.actors === 'object' ? options.actors : {}
+    ;(constructor as any).__actors = actors
+    ;(constructor as any).__defaultActor = options?.defaultActor
+  }
+}
+
 export function useBrowser() {
   return function (target: Function, context: ClassMethodDecoratorContext) {
     return function (this: any, ...args: any[]) {

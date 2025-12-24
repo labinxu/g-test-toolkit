@@ -3,9 +3,9 @@ import { proxyJsonWithReq } from '../../../android/_utils'
 
 export async function POST(
   req: NextRequest,
-  context: { params: { id: string } },
+  context: { params: Promise<{ id: string }> },
 ) {
-  const id = context.params.id
+  const { id } = await context.params
   const body = await req.json().catch(() => ({}))
   return proxyJsonWithReq(req, `/user-scenarios/${encodeURIComponent(id)}/steps`, {
     method: 'POST',
@@ -13,4 +13,3 @@ export async function POST(
     body: JSON.stringify(body ?? {}),
   })
 }
-

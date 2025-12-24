@@ -38,5 +38,6 @@ import { SettingsModule } from 'src/settings/settings.module';
   providers: [
     TestCasesService,
   ],
+  exports: [TestCasesService],
 })
 export class TestCaseModule {}

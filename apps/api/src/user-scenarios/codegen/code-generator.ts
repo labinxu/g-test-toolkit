@@ -501,6 +501,21 @@ export class UserScenarioCodeGenerator {
     const relPath = path.relative(process.cwd(), filePath);
 
     const sharedPreSteps = this.parseSharedPreSteps(suite.sharedPreStepsJson);
+    let suiteActors: Record<string, any> | null = null;
+    try {
+      const raw = (suite as any).actorsJson as string | null | undefined;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          suiteActors = parsed as Record<string, any>;
+        }
+      }
+    } catch {
+      suiteActors = null;
+    }
+    const suiteDefaultActor =
+      (suite as any).defaultActor != null ? String((suite as any).defaultActor) : null;
+    const suiteActorKeys = suiteActors ? Object.keys(suiteActors) : [];
 
     const lines: string[] = [
       '// Auto-generated live stream suite',
@@ -621,6 +636,21 @@ export class UserScenarioCodeGenerator {
 
     const envConfigLines: string[] = [];
     const tplLines: string[] = [];
+    const actorConfigLines: string[] = [];
+    if (!isApiPlatform && platform !== 'gettr-android' && suiteActors && suiteActorKeys.length) {
+      const rawLines = JSON.stringify(suiteActors, null, 2).split('\n');
+      if (rawLines.length === 1) {
+        actorConfigLines.push(`    actors: ${rawLines[0]},`);
+      } else {
+        actorConfigLines.push(`    actors: ${rawLines[0]}`);
+        actorConfigLines.push(...rawLines.slice(1).map((ln) => `    ${ln}`));
+        actorConfigLines[actorConfigLines.length - 1] =
+          actorConfigLines[actorConfigLines.length - 1] + ',';
+      }
+      if (suiteDefaultActor && suiteActorKeys.includes(suiteDefaultActor)) {
+        actorConfigLines.push(`    defaultActor: ${JSON.stringify(suiteDefaultActor)},`);
+      }
+    }
     if (envTemplateId && Number.isFinite(envTemplateId)) {
       const tpl = await this.envTemplateRepo.findOne({
         where: { id: envTemplateId as number },
@@ -664,6 +694,7 @@ export class UserScenarioCodeGenerator {
             `    browser: {`,
             ...json,
             `    },`,
+            ...actorConfigLines,
             `  });`,
             '',
           );
@@ -695,6 +726,7 @@ export class UserScenarioCodeGenerator {
           `      headless: false,`,
           `      debug: true,`,
           `    },`,
+          ...actorConfigLines,
           `  });`,
           '',
         );
@@ -824,6 +856,12 @@ export class UserScenarioCodeGenerator {
       const steps = (sc.steps || []).slice().sort((a, b) => a.order - b.order);
       const caseTitle = `${sc.code} ${sc.title}`;
       lines.push(`  it(${JSON.stringify(caseTitle)}, async () => {`);
+      if (!isApiPlatform && suiteActors) {
+        const submenu = (sc.submenu || '').toString().trim();
+        if (submenu && (suiteActors as any)[submenu]) {
+          lines.push(`    (tc as any).useActor(${JSON.stringify(submenu)});`);
+        }
+      }
       if (isApiPlatform) {
         if (!steps.length) {
           lines.push(

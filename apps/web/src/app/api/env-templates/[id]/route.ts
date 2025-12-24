@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server'
 import { proxyJsonWithReq } from '../../android/_utils'
 
-export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
-  const id = ctx.params.id
+export async function PATCH(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params
   const path = `/env-templates/${encodeURIComponent(id)}`
   return proxyJsonWithReq(req, path, {
     method: 'PATCH',
@@ -13,9 +16,11 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
   })
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) {
-  const id = ctx.params.id
+export async function DELETE(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params
   const path = `/env-templates/${encodeURIComponent(id)}`
   return proxyJsonWithReq(req, path, { method: 'DELETE' })
 }
-

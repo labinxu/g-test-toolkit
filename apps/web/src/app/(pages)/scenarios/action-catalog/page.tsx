@@ -188,6 +188,8 @@ export default function ActionCatalogSettingsPage() {
         onOpenChange={vm.setDetailsOpen}
         draft={vm.draft}
         setDraft={vm.setDraft}
+        jumpActionKey={vm.pendingOpenActionKey}
+        onJumpActionKeyConsumed={() => vm.setPendingOpenActionKey(null)}
         saving={vm.saving}
         deleting={vm.deleting}
         loadingDetail={vm.loadingDetail}

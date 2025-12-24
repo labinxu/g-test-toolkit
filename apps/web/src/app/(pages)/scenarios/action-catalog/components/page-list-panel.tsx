@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, type Dispatch, type SetStateAction } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { OptionsSelect } from '@/components/select/options-select'
@@ -41,9 +41,10 @@ type PageListPanelProps = {
   clearingWebIds: boolean
   onClearWebIds: () => Promise<void>
   totalElements: number
+  filteredPages: PageSummary[]
   pagedPages: PageSummary[]
   selectedPageIds: number[]
-  setSelectedPageIds: (ids: number[]) => void
+  setSelectedPageIds: Dispatch<SetStateAction<number[]>>
   loadingPages: boolean
   deleting: boolean
   onCreatePage: () => void

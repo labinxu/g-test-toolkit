@@ -4,7 +4,7 @@ import { getBackendBase, withForwardedAuth } from '../../../android/_utils';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { branch: string } },
+  { params }: { params: Promise<{ branch: string }> },
 ) {
   try {
     const base = getBackendBase();
@@ -15,7 +15,8 @@ export async function GET(
       );
     }
 
-    const sanitizedBranch = encodeURIComponent(params.branch || '');
+    const { branch } = await params;
+    const sanitizedBranch = encodeURIComponent(branch || '');
     const url = `${base.replace(/\/$/, '')}/flutter/meta/${sanitizedBranch}`;
     const headers = withForwardedAuth(req);
 
@@ -37,4 +38,3 @@ export async function GET(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

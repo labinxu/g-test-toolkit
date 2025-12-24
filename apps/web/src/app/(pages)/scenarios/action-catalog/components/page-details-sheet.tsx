@@ -17,6 +17,8 @@ type Props = {
   onOpenChange: (v: boolean) => void
   draft: AdminPage | null
   setDraft: (page: AdminPage | null) => void
+  jumpActionKey?: string | null
+  onJumpActionKeyConsumed?: () => void
   saving: boolean
   deleting: boolean
   loadingDetail: boolean
@@ -42,6 +44,8 @@ export function PageDetailsSheet({
   onOpenChange,
   draft,
   setDraft,
+  jumpActionKey,
+  onJumpActionKeyConsumed,
   saving,
   deleting,
   loadingDetail,
@@ -65,6 +69,18 @@ export function PageDetailsSheet({
   const [selectedActionIndex, setSelectedActionIndex] = useState(0)
   const [actionDialogOpen, setActionDialogOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<AdminAction | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    if (!draft) return
+    if (!jumpActionKey) return
+    const idx = currentActions.findIndex((a) => a.key === jumpActionKey)
+    if (idx >= 0) {
+      setSelectedActionIndex(idx)
+      setActionDialogOpen(true)
+    }
+    onJumpActionKeyConsumed?.()
+  }, [open, draft, currentActions, jumpActionKey, onJumpActionKeyConsumed])
 
   useEffect(() => {
     if (!currentActions.length) {

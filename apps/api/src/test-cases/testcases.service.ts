@@ -105,6 +105,17 @@ export class TestCasesService {
       reportMeta?: { platform?: string; module?: string; caseName?: string }
     }
   ) {
+    // Ensure shared-libs dist outputs are available and up-to-date before the worker loads them.
+    // (runner-worker loads from dist directly and does not rebuild.)
+    try {
+      await this.loadCoreLib()
+      await this.loadGettrWebLib()
+      await this.loadGettrAndroidLib()
+      await this.loadGettrMobileWebLib()
+    } catch (e) {
+      this.logger.warn(`Failed to pre-load shared libs before worker run: ${e}`)
+      // Continue; worker will surface the error if libs are truly missing.
+    }
     if (!clientId) {
       // fall back to in-process when clientId is missing
       return this.runInSandbox(code, clientId, options)

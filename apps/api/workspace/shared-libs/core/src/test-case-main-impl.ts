@@ -1,7 +1,9 @@
 import { __testCaseClasses } from './test-case-decorator'
-import { TestCase } from './test-case-base'
+import { TestCase, type WebActorSession } from './test-case-base'
 import { remote } from 'webdriverio'
 import { spawnSync } from 'child_process'
+import * as fs from 'fs'
+import * as path from 'path'
 import { clearBddSuites, createBddTestCaseClasses } from './test-case-bdd'
 
 // Small utilities
@@ -387,6 +389,17 @@ async function runSingleTestCaseCtor(params: {
   const isBddGenerated = (Ctor as any).__isBddGenerated === true
   const classLogger = loggerService.createLogger(Ctor.name, clientId)
   const instance = new Ctor(classLogger, clientId, workspace)
+  const actorDefs = needBrowser ? asRecord((Ctor as any).__actors) : {}
+  const actorNames = Object.keys(actorDefs)
+  const hasActors = needBrowser && actorNames.length > 0
+  const defaultActorFromCtor =
+    typeof (Ctor as any).__defaultActor === 'string' ? String((Ctor as any).__defaultActor) : ''
+  const defaultActor =
+    hasActors && defaultActorFromCtor && actorNames.includes(defaultActorFromCtor)
+      ? defaultActorFromCtor
+      : hasActors
+        ? actorNames[0]!
+        : undefined
   const classMetadata = asRecord((Ctor as any).__reportMetadata)
   if (Object.keys(classMetadata).length) {
     instance.setReportMetadata(classMetadata)
@@ -400,10 +413,141 @@ async function runSingleTestCaseCtor(params: {
   runtimeMetadata.workspace = workspace
   runtimeMetadata.platform = isAndroid ? 'android' : needBrowser ? 'web' : 'generic'
   instance.setReportMetadata(runtimeMetadata)
+  if (hasActors && typeof (instance as any).__setDefaultActor === 'function') {
+    ;(instance as any).__setDefaultActor(defaultActor)
+  }
   const allMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(instance))
   mainLogger.info(`browser:${needBrowser},isAndroid:${isAndroid}`)
   const withBrowserMethods: string[] = []
   const testMethods: string[] = []
+
+  const resolveUserPath = (filePath: string) => {
+    if (!filePath) return filePath
+    if (path.isAbsolute(filePath)) return filePath
+    const userDir =
+      (options?.userDir && String(options.userDir).trim()) ||
+      (typeof (instance as any).getReportMetadata === 'function'
+        ? String(((instance as any).getReportMetadata() || {}).userDir || '').trim()
+        : '')
+    if (!userDir) return path.resolve(process.cwd(), filePath)
+    const base = path.isAbsolute(userDir) ? userDir : path.resolve(process.cwd(), userDir)
+    return path.resolve(base, filePath)
+  }
+
+  const parseCookiesFromAny = (raw: any): any[] => {
+    if (Array.isArray(raw)) return raw
+    if (raw && typeof raw === 'object' && Array.isArray(raw.cookies)) return raw.cookies
+    return []
+  }
+
+  const applyCookiesIfConfigured = async (page: any, actorOpt: any) => {
+    const mode = actorOpt?.auth?.mode
+    if (mode !== 'cookies') return
+    const directCookies = Array.isArray(actorOpt?.auth?.cookies) ? actorOpt.auth.cookies : null
+    let cookies: any[] = directCookies || []
+    if (!cookies.length && actorOpt?.auth?.cookiesPath) {
+      const abs = resolveUserPath(String(actorOpt.auth.cookiesPath))
+      const content = await fs.promises.readFile(abs, 'utf-8')
+      const parsed = JSON.parse(content)
+      cookies = parseCookiesFromAny(parsed)
+    }
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      throw new Error(`cookies auth enabled but no cookies found for actor`)
+    }
+    if (typeof page.setCookie !== 'function') {
+      throw new Error(`cookies auth requires a Puppeteer page`)
+    }
+    await page.setCookie(...cookies)
+    if (typeof page.reload === 'function') {
+      await page.reload({ waitUntil: 'networkidle2' })
+    }
+  }
+
+  const createWebActorSession = async (name: string, actorOpt: any): Promise<WebActorSession> => {
+    const optBrowser = asRecord(actorOpt?.browser)
+    const domainEffective = optBrowser.domain ?? domain
+    const timeoutEffective = optBrowser.timeout ?? timeout
+    const retryEffective = optBrowser.retry ?? retry
+    const headlessEffective = optBrowser.headless ?? headless
+    const rst = await browserHelper.newBrowser({
+      logger: mainLogger,
+      headless: headlessEffective,
+      timeout: timeoutEffective,
+      domain: domainEffective,
+      retry: retryEffective,
+    })
+    const session: WebActorSession = {
+      name,
+      browser: rst.bs,
+      context: rst.context ?? null,
+      page: rst.page,
+      scope: actorOpt?.scope === 'test' ? 'test' : 'suite',
+      auth: actorOpt?.auth ? { mode: actorOpt.auth.mode } : undefined,
+    }
+    await applyCookiesIfConfigured(rst.page, actorOpt)
+    return session
+  }
+
+  const suiteActorNames = hasActors
+    ? actorNames.filter((n) => (actorDefs[n]?.scope || 'suite') !== 'test')
+    : []
+  const testActorNames = hasActors
+    ? actorNames.filter((n) => (actorDefs[n]?.scope || 'suite') === 'test')
+    : []
+
+  const ensureSuiteActors = async () => {
+    if (!hasActors) return
+    for (const name of suiteActorNames) {
+      if ((instance as any).__getActor?.(name)) continue
+      const session = await createWebActorSession(name, actorDefs[name])
+      ;(instance as any).__registerActor?.(session)
+    }
+    if (defaultActor && (instance as any).__getActor?.(defaultActor)) {
+      ;(instance as any).useActor?.(defaultActor)
+    }
+  }
+
+  const createTestActors = async () => {
+    if (!hasActors) return
+    for (const name of testActorNames) {
+      const existing = (instance as any).__getActor?.(name)
+      if (existing) {
+        try {
+          await existing.page?.close?.()
+        } catch {}
+        try {
+          await existing.context?.close?.()
+        } catch {}
+        try {
+          await existing.browser?.close?.()
+        } catch {}
+        ;(instance as any).__unregisterActor?.(name)
+      }
+      const session = await createWebActorSession(name, actorDefs[name])
+      ;(instance as any).__registerActor?.(session)
+    }
+    if (defaultActor && (instance as any).__getActor?.(defaultActor)) {
+      ;(instance as any).useActor?.(defaultActor)
+    }
+  }
+
+  const cleanupTestActors = async () => {
+    if (!hasActors) return
+    for (const name of testActorNames) {
+      const sess = (instance as any).__getActor?.(name)
+      if (!sess) continue
+      try {
+        await sess.page?.close?.()
+      } catch {}
+      try {
+        await sess.context?.close?.()
+      } catch {}
+      try {
+        await sess.browser?.close?.()
+      } catch {}
+      ;(instance as any).__unregisterActor?.(name)
+    }
+  }
 
   if (shouldStop?.()) {
     mainLogger.info(`Stop requested before executing ${Ctor.name}, skipping`)
@@ -463,15 +607,19 @@ async function runSingleTestCaseCtor(params: {
   try {
     // end for with browser methods
     if (needBrowser) {
-      rst = await browserHelper.newBrowser({
-        logger: mainLogger,
-        headless,
-        timeout,
-        domain,
-        retry,
-      })
-      rst?.page && instance.setPage(rst?.page)
-      rst?.bs && instance.setBrowser(rst.bs)
+      if (hasActors) {
+        await ensureSuiteActors()
+      } else {
+        rst = await browserHelper.newBrowser({
+          logger: mainLogger,
+          headless,
+          timeout,
+          domain,
+          retry,
+        })
+        rst?.page && instance.setPage(rst?.page)
+        rst?.bs && instance.setBrowser(rst.bs)
+      }
     } else if (isAndroid) {
       await setupAndroidForTestCaseInstance({
         Ctor,
@@ -504,6 +652,15 @@ async function runSingleTestCaseCtor(params: {
       mainLogger.info(`Stop requested; skipping remaining tests for ${Ctor.name}`)
       break
     }
+    if (needBrowser && hasActors) {
+      try {
+        await createTestActors()
+      } catch (e) {
+        mainLogger.error(`Failed to prepare test-scoped actors for ${Ctor.name}.${method}: ${e}`)
+        await cleanupTestActors()
+        break
+      }
+    }
     const shouldAutoTrack = !isBddGenerated
     const caseName = `${Ctor.name}.${method}`
     if (shouldAutoTrack) {
@@ -524,8 +681,13 @@ async function runSingleTestCaseCtor(params: {
         )
         throw ensureErr
       }
+      const hasBrowserOpened = needBrowser
+        ? hasActors
+          ? !!(instance as any).page
+          : !!rst?.page
+        : false
       mainLogger.info(
-        `Running ${Ctor.name}.${method} ret:${!rst?.page ? 'no browser' : 'browser opened'}`,
+        `Running ${Ctor.name}.${method} ret:${hasBrowserOpened ? 'browser opened' : 'no browser'}`,
       )
       await (instance as any)[method]()
       mainLogger.info(`${Ctor.name}.${method} passed`)
@@ -544,6 +706,9 @@ async function runSingleTestCaseCtor(params: {
         )
       }
       mainLogger.info(`${Ctor.name}.${method} completed`)
+      if (needBrowser && hasActors) {
+        await cleanupTestActors()
+      }
     }
   }
 

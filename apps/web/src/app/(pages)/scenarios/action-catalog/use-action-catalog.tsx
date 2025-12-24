@@ -66,6 +66,8 @@ export function useActionCatalogModel() {
   const [pageTablePage, setPageTablePage] = useState(1)
   const [pageTablePageSize, setPageTablePageSize] = useState(20)
   const [pendingSelectPageId, setPendingSelectPageId] = useState<number | null>(null)
+  const [pendingSelectPageKey, setPendingSelectPageKey] = useState<string | null>(null)
+  const [pendingOpenActionKey, setPendingOpenActionKey] = useState<string | null>(null)
 
   const selectedSummary = useMemo(
     () => pages.find((p) => p.id === selectedPageId) || null,
@@ -303,6 +305,8 @@ export function useActionCatalogModel() {
   useEffect(() => {
     const qpPlat = searchParams?.get('platform')
     const qpPageId = searchParams?.get('pageId')
+    const qpPageKey = searchParams?.get('pageKey')
+    const qpActionKey = searchParams?.get('actionKey')
     if (qpPlat && qpPlat !== platform) {
       setPlatform(qpPlat)
     }
@@ -310,9 +314,28 @@ export function useActionCatalogModel() {
       const n = Number(qpPageId)
       if (Number.isFinite(n)) {
         setPendingSelectPageId(n)
+        setDetailsOpen(true)
       }
     }
+    if (qpPageKey) {
+      setKeyFilter(qpPageKey)
+      setPendingSelectPageKey(qpPageKey)
+      setDetailsOpen(true)
+    }
+    if (qpActionKey) {
+      setPendingOpenActionKey(qpActionKey)
+      setDetailsOpen(true)
+    }
   }, [platform, searchParams])
+
+  useEffect(() => {
+    if (!pendingSelectPageKey) return
+    if (!pages.length) return
+    const match = pages.find((p) => p.key === pendingSelectPageKey) || null
+    if (!match) return
+    setPendingSelectPageId(match.id)
+    setPendingSelectPageKey(null)
+  }, [pages, pendingSelectPageKey])
 
   useEffect(() => {
     if (selectedPageId != null) {
@@ -946,6 +969,7 @@ export function useActionCatalogModel() {
     loadingDetail,
     saving,
     deleting,
+    setDeleting,
     draft,
     setDraft,
     keyFilter,
@@ -962,6 +986,7 @@ export function useActionCatalogModel() {
     setViewPageDialogOpen,
     viewPageLoading,
     viewPageDetail,
+    setViewPageDetail,
     uploadingWebIds,
     setUploadingWebIds,
     clearingWebIds,
@@ -997,5 +1022,7 @@ export function useActionCatalogModel() {
     handleCreatePlatform,
     handleDeletePlatform,
     setPendingSelectPageId,
+    pendingOpenActionKey,
+    setPendingOpenActionKey,
   }
 }

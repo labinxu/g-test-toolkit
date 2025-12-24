@@ -24,6 +24,7 @@ type OptionsSelectProps<TValue extends string = string> = {
   triggerClassName?: string
   contentClassName?: string
   size?: 'default' | 'sm'
+  disabled?: boolean
 }
 
 export function OptionsSelect<TValue extends string = string>({
@@ -36,6 +37,7 @@ export function OptionsSelect<TValue extends string = string>({
   triggerClassName,
   contentClassName,
   size = 'default',
+  disabled = false,
 }: OptionsSelectProps<TValue>) {
   const selectProps: any = {}
   if (value !== undefined) selectProps.value = value
@@ -43,6 +45,7 @@ export function OptionsSelect<TValue extends string = string>({
   return (
     <Select
       {...selectProps}
+      disabled={disabled}
       onValueChange={(value) => {
         const selectedItem = items.find((item) => item.value === value)
         if (selectedItem) {

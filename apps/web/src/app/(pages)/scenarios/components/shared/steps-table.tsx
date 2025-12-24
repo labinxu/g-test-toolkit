@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
-import { GTable } from '@/components/g-table';
+import { GTable } from '@/components/data-table';
 import type { StepParamHint, UserScenarioStep } from '../../types';
 
 export type ScenarioStepsTableProps = {

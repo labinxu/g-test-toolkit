@@ -19,7 +19,7 @@ export class StartLiveDto {
   @IsOptional()
   @IsInt()
   @Min(100)
-  @Max(5000)
+  @Max(20000)
   videoBitrateKbps?: number
 
   @IsOptional()
@@ -32,4 +32,3 @@ export class StartLiveDto {
   @IsString()
   resolution?: string
 }
-

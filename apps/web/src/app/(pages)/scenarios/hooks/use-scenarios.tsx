@@ -207,6 +207,18 @@ export function useScenariosModel() {
   const [newSuiteDesc, setNewSuiteDesc] = useState('');
   const [suiteGenerating, setSuiteGenerating] = useState(false);
   const [suiteDeleting, setSuiteDeleting] = useState(false);
+  type SuiteActorDraft = {
+    name: string;
+    scope: 'suite' | 'test';
+    authMode: 'ui' | 'cookies';
+    cookiesPath: string;
+  };
+  const [suiteActorsDraft, setSuiteActorsDraft] = useState<SuiteActorDraft[]>(
+    [],
+  );
+  const [suiteDefaultActorDraft, setSuiteDefaultActorDraft] = useState<string>(
+    '',
+  );
 
   const selectedCase = useMemo(
     () => cases.find((c) => c.id === selectedCaseId) || null,
@@ -240,6 +252,8 @@ useEffect(() => {
       setSuitePreStepDraft('');
       setSuiteDescDraft('');
       setSuiteNameDraft('');
+      setSuiteActorsDraft([]);
+      setSuiteDefaultActorDraft('');
       return;
     }
     const suite = suites.find((s) => s.id === selectedSuiteId);
@@ -247,6 +261,31 @@ useEffect(() => {
     setSuitePreStepDraft('');
     setSuiteDescDraft(suite?.description || '');
     setSuiteNameDraft(suite?.name || '');
+    const actorsObj =
+      suite?.actors && typeof suite.actors === 'object' ? suite.actors : null;
+    const nextActors: SuiteActorDraft[] = actorsObj
+      ? Object.entries(actorsObj)
+          .map(([name, opt]) => {
+            const rec: any = opt && typeof opt === 'object' ? opt : {};
+            const auth: any =
+              rec.auth && typeof rec.auth === 'object' ? rec.auth : {};
+            const mode: SuiteActorDraft['authMode'] =
+              auth.mode === 'cookies' ? 'cookies' : 'ui';
+            const scope: SuiteActorDraft['scope'] =
+              rec.scope === 'test' ? 'test' : 'suite';
+            return {
+              name: String(name || ''),
+              scope,
+              authMode: mode,
+              cookiesPath: mode === 'cookies' ? String(auth.cookiesPath || '') : '',
+            };
+          })
+          .filter((r) => !!r.name.trim())
+      : [];
+    setSuiteActorsDraft(nextActors);
+    setSuiteDefaultActorDraft(
+      suite?.defaultActor ? String(suite.defaultActor) : '',
+    );
   }, [selectedSuiteId, suites]);
 
   // Restore last selected case when coming back from Testcases (via gtt:scenarios:lastCaseId)
@@ -713,7 +752,7 @@ useEffect(() => {
     }
 
     if (!actionCatalog || !actionCatalog.pages?.length) {
-      onSuitePreStepsChange([...suitePreSteps, '']);
+      setSuitePreSteps([...suitePreSteps, '']);
       return;
     }
     const firstPage = actionCatalog.pages[0];
@@ -1143,10 +1182,35 @@ useEffect(() => {
     const steps = suitePreSteps
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+    const actorsObject = suiteActorsDraft
+      .map((row) => ({
+        ...row,
+        name: row.name.trim(),
+        cookiesPath: row.cookiesPath.trim(),
+      }))
+      .filter((row) => !!row.name)
+      .reduce<Record<string, any>>((acc, row) => {
+        acc[row.name] = {
+          scope: row.scope,
+          auth:
+            row.authMode === 'cookies'
+              ? {
+                  mode: 'cookies',
+                  cookiesPath: row.cookiesPath || undefined,
+                }
+              : {
+                  mode: 'ui',
+                },
+        };
+        return acc;
+      }, {});
+    const defaultActorValue = suiteDefaultActorDraft.trim() || null;
     const payload = {
       name: suiteNameDraft || undefined,
       description: suiteDescDraft || null,
       sharedPreSteps: steps,
+      actors: Object.keys(actorsObject).length ? actorsObject : null,
+      defaultActor: defaultActorValue,
     };
     try {
       setSuiteSaving(true);
@@ -1184,6 +1248,36 @@ useEffect(() => {
       setSuitePreStepDraft('');
       setSuiteDescDraft(normalizedUpdated.description || '');
       setSuiteNameDraft(normalizedUpdated.name || '');
+      const actorsObj =
+        normalizedUpdated.actors && typeof normalizedUpdated.actors === 'object'
+          ? normalizedUpdated.actors
+          : null;
+      const nextActors: SuiteActorDraft[] = actorsObj
+        ? Object.entries(actorsObj)
+            .map(([name, opt]) => {
+              const rec: any = opt && typeof opt === 'object' ? opt : {};
+              const auth: any =
+                rec.auth && typeof rec.auth === 'object' ? rec.auth : {};
+              const mode: SuiteActorDraft['authMode'] =
+                auth.mode === 'cookies' ? 'cookies' : 'ui';
+              const scope: SuiteActorDraft['scope'] =
+                rec.scope === 'test' ? 'test' : 'suite';
+              return {
+                name: String(name || ''),
+                scope,
+                authMode: mode,
+                cookiesPath:
+                  mode === 'cookies' ? String(auth.cookiesPath || '') : '',
+              };
+            })
+            .filter((r) => !!r.name.trim())
+        : [];
+      setSuiteActorsDraft(nextActors);
+      setSuiteDefaultActorDraft(
+        normalizedUpdated.defaultActor
+          ? String(normalizedUpdated.defaultActor)
+          : '',
+      );
       toast.success('已保存套件信息');
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
@@ -2159,6 +2253,7 @@ const handleSaveSteps = async () => {
     status?: CaseStatus;
     submenu?: string;
     priority?: 'P0' | 'P1' | 'P2';
+    module?: string;
     platform?: string;
     suiteId?: number | null;
   }) => {
@@ -2582,7 +2677,6 @@ const handleSaveSteps = async () => {
   };
 
   return {
-    handleMoveStep,
     handleMoveSuitePreStep,
     STATUS_LABEL,
     PRIORITY_LABEL,
@@ -2656,6 +2750,7 @@ const handleSaveSteps = async () => {
     envDialogTemplates,
     envDialogCaseId,
     envDialogSelectedId,
+    setEnvDialogSelectedId,
     envDialogPlatform,
     envDialogDriver,
     docAiPromptOpen,
@@ -2715,6 +2810,10 @@ const handleSaveSteps = async () => {
     setSuiteDescDraft,
     suiteNameDraft,
     setSuiteNameDraft,
+    suiteActorsDraft,
+    setSuiteActorsDraft,
+    suiteDefaultActorDraft,
+    setSuiteDefaultActorDraft,
     selectedSuiteId,
     setSelectedSuiteId,
     newSuiteName,

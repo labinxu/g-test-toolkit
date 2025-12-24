@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class UpsertSuiteDto {
   @IsOptional()
@@ -20,4 +20,12 @@ export class UpsertSuiteDto {
   @IsOptional()
   @IsArray()
   sharedPreSteps?: string[];
+
+  @IsOptional()
+  @IsObject()
+  actors?: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  defaultActor?: string | null;
 }

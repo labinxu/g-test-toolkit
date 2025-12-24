@@ -28,6 +28,12 @@ export class UserScenarioSuite {
   @Column({ type: 'text', name: 'shared_pre_steps', nullable: true })
   sharedPreStepsJson?: string | null;
 
+  @Column({ type: 'text', name: 'actors', nullable: true })
+  actorsJson?: string | null;
+
+  @Column({ type: 'text', name: 'default_actor', nullable: true })
+  defaultActor?: string | null;
+
   @CreateDateColumn({ type: 'datetime' })
   createdAt: Date;
 

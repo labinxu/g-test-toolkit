@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { Browser, Page } from 'puppeteer';
+import { Browser, BrowserContext, Page } from 'puppeteer';
 import { Browser as DriverBrowser } from 'webdriverio';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -31,6 +31,15 @@ type CaseResult = {
   artifacts: CaseArtifact[];
 };
 
+export type WebActorSession = {
+  name: string;
+  browser: Browser;
+  context?: BrowserContext | null;
+  page: Page;
+  scope: 'suite' | 'test';
+  auth?: { mode?: 'ui' | 'cookies' };
+};
+
 export class TestCase {
   public page: Page | DriverBrowser | null = null;
   public browser: Browser | null = null;
@@ -48,6 +57,9 @@ export class TestCase {
     currentCase: CaseResult | null;
     artifacts: CaseArtifact[];
     reportMetadata: Record<string, any>;
+    sharedValues: Record<string, any>;
+    actors: Map<string, WebActorSession>;
+    defaultActor?: string;
   };
   constructor(logger: any, clientId: string, workspace: string) {
     const emiter = new EventEmitter();
@@ -64,6 +76,9 @@ export class TestCase {
       currentCase: null,
       artifacts: [],
       reportMetadata: {},
+      sharedValues: {},
+      actors: new Map(),
+      defaultActor: undefined,
     };
     emiter.on('event', (msg) => console.log(msg));
   }
@@ -95,6 +110,76 @@ export class TestCase {
   setBrowser(br: any) {
     this.browser = br;
   }
+
+  __setDefaultActor(name?: string) {
+    if (!name) return;
+    this.sharedState.defaultActor = name;
+  }
+
+  __registerActor(session: WebActorSession) {
+    if (!session?.name) return;
+    this.sharedState.actors.set(session.name, session);
+  }
+
+  __getActor(name: string) {
+    return this.sharedState.actors.get(name);
+  }
+
+  __unregisterActor(name: string) {
+    this.sharedState.actors.delete(name);
+  }
+
+  getActorNames() {
+    return Array.from(this.sharedState.actors.keys());
+  }
+
+  actor(name?: string) {
+    const actorName = name || this.sharedState.defaultActor;
+    if (!actorName) {
+      throw new Error('No actor specified and defaultActor is not set');
+    }
+    const session = this.sharedState.actors.get(actorName);
+    if (!session) {
+      throw new Error(`Actor session not found: ${actorName}`);
+    }
+    const cloned = this.clone();
+    cloned.setBrowser(session.browser);
+    cloned.setPage(session.page);
+    return cloned as this;
+  }
+
+  useActor(name?: string) {
+    const actorName = name || this.sharedState.defaultActor;
+    if (!actorName) {
+      throw new Error('No actor specified and defaultActor is not set');
+    }
+    const session = this.sharedState.actors.get(actorName);
+    if (!session) {
+      throw new Error(`Actor session not found: ${actorName}`);
+    }
+    this.setBrowser(session.browser);
+    this.setPage(session.page);
+  }
+
+  sharedSet(key: string, value: any) {
+    if (!key) return;
+    this.sharedState.sharedValues[key] = value;
+  }
+
+  sharedGet<T = any>(key: string): T | undefined {
+    if (!key) return undefined;
+    return this.sharedState.sharedValues[key] as T;
+  }
+
+  sharedHas(key: string): boolean {
+    if (!key) return false;
+    return Object.prototype.hasOwnProperty.call(this.sharedState.sharedValues, key);
+  }
+
+  sharedDelete(key: string): boolean {
+    if (!key) return false;
+    return delete this.sharedState.sharedValues[key];
+  }
   get clientId() {
     return this.sharedState.clientId;
   }
@@ -121,6 +206,66 @@ export class TestCase {
   }
   get workspace() {
     return this.sharedState.workspace;
+  }
+
+  private resolveUserPath(filePath: string) {
+    if (!filePath) {
+      throw new Error('filePath is required');
+    }
+    if (path.isAbsolute(filePath)) return filePath;
+    const userDir =
+      (this.sharedState.reportMetadata &&
+      typeof this.sharedState.reportMetadata.userDir === 'string' &&
+      this.sharedState.reportMetadata.userDir.trim().length > 0
+        ? this.sharedState.reportMetadata.userDir.trim()
+        : '') || '';
+    const base = userDir ? path.resolve(process.cwd(), userDir) : process.cwd();
+    return path.resolve(base, filePath);
+  }
+
+  async exportCookies(filePath: string, actorName?: string) {
+    const inst: any = actorName ? this.actor(actorName) : this;
+    const page: any = inst?.page;
+    if (!page || typeof page.cookies !== 'function') {
+      throw new Error('exportCookies requires a Puppeteer Page (web actor)');
+    }
+    const cookies = await page.cookies();
+    const abs = this.resolveUserPath(filePath);
+    await fs.promises.mkdir(path.dirname(abs), { recursive: true });
+    const payload = {
+      cookies,
+      exportedAt: new Date().toISOString(),
+      actor: actorName || this.sharedState.defaultActor || null,
+    };
+    await fs.promises.writeFile(abs, JSON.stringify(payload, null, 2), 'utf-8');
+    return abs;
+  }
+
+  async importCookies(
+    filePath: string,
+    actorName?: string,
+    options?: { reload?: boolean },
+  ) {
+    const inst: any = actorName ? this.actor(actorName) : this;
+    const page: any = inst?.page;
+    if (!page || typeof page.setCookie !== 'function') {
+      throw new Error('importCookies requires a Puppeteer Page (web actor)');
+    }
+    const abs = this.resolveUserPath(filePath);
+    const raw = await fs.promises.readFile(abs, 'utf-8');
+    const parsed = JSON.parse(raw);
+    const cookies = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.cookies)
+        ? parsed.cookies
+        : [];
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      throw new Error(`No cookies found in ${abs}`);
+    }
+    await page.setCookie(...cookies);
+    if (options?.reload && typeof page.reload === 'function') {
+      await page.reload({ waitUntil: 'networkidle2' });
+    }
   }
 
   async tearUp() {
