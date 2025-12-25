@@ -7,8 +7,9 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-  import { UserScenarioStep } from './user-scenario-step.entity';
+import { UserScenarioStep } from './user-scenario-step.entity';
 import { UserScenarioSuite } from './user-scenario-suite.entity';
+import { UserScenarioSuiteCase } from './user-scenario-suite-case.entity';
 
 export type UserScenarioStatus = 'draft' | 'in_progress' | 'ready' | 'code_generated';
 
@@ -108,4 +109,7 @@ export class UserScenario {
     cascade: true,
   })
   steps?: UserScenarioStep[];
+
+  @OneToMany(() => UserScenarioSuiteCase, (link) => link.scenario)
+  suiteCases?: UserScenarioSuiteCase[];
 }

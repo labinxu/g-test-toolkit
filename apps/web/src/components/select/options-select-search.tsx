@@ -92,12 +92,16 @@ export function OptionsSelectSearch<TValue extends string = string>({
           'w-full text-sm',
           inputClassName,
         )}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        inputMode="search"
         placeholder={placeholder}
         value={inputValue}
         disabled={disabled}
         onChange={(e) => {
           const next = e.target.value;
-          console.log(`select search ${next}`);
           setQuery(next);
           setOpen(true);
         }}

@@ -85,6 +85,8 @@ export function useScenariosModel() {
   const [selectedCaseId, setSelectedCaseId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deletingBulk, setDeletingBulk] = useState(false);
+  const [removingSuiteCaseId, setRemovingSuiteCaseId] = useState<number | null>(null);
+  const [addingSuiteCases, setAddingSuiteCases] = useState(false);
   const [ingestingDoc, setIngestingDoc] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [metaOpen, setMetaOpen] = useState(true);
@@ -1135,8 +1137,25 @@ useEffect(() => {
       setSuiteNameDraft('');
     }
     try {
-      await updateCaseMeta({ suiteId });
+      if (suiteId && target) {
+        const res = await fetch(`${apiPrefix}/suites/${suiteId}/cases`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ caseId: selectedCase.id }),
+        });
+        if (!res.ok) {
+          const err = await normalizeResponseError(res as any);
+          if (isUnauthorizedError(err)) {
+            try {
+              router.push('/signin');
+            } catch {}
+            throw new Error('Unauthorized');
+          }
+          throw new Error(err.message || '加入套件失败');
+        }
+      }
       await loadSuites();
+      await refreshCases();
     } catch {
       // updateCaseMeta 已处理提示
       setSelectedSuiteId(prevSuiteId ?? null);
@@ -1150,6 +1169,86 @@ useEffect(() => {
         setSuitePreStepDraft('');
         setSuiteDescDraft('');
       }
+    }
+  };
+
+  const handleRemoveCaseFromSuite = async (suiteId: number, caseId: number) => {
+    if (!Number.isFinite(suiteId) || !Number.isFinite(caseId)) return;
+    setRemovingSuiteCaseId(caseId);
+    try {
+      const res = await fetch(`${apiPrefix}/suites/${suiteId}/cases/${caseId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const err = await normalizeResponseError(res as any);
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin');
+          } catch {}
+          throw new Error('Unauthorized');
+        }
+        throw new Error(err.message || '从套件移除失败');
+      }
+      await refreshCases();
+      await loadSuites();
+      toast.success('已从套件移除');
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '从套件移除失败');
+      }
+    } finally {
+      setRemovingSuiteCaseId(null);
+    }
+  };
+
+  const handleAddCasesToSuite = async (suiteId: number, caseIds: number[]) => {
+    const suiteIdNum = Number(suiteId);
+    if (!Number.isFinite(suiteIdNum)) return false;
+    const ids = Array.from(
+      new Set(caseIds.map((id) => Number(id)).filter((id) => Number.isFinite(id))),
+    );
+    if (!ids.length) return false;
+
+    setAddingSuiteCases(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map(async (caseId) => {
+          const res = await fetch(`${apiPrefix}/suites/${suiteIdNum}/cases`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ caseId }),
+          });
+          if (!res.ok) {
+            const err = await normalizeResponseError(res as any);
+            if (isUnauthorizedError(err)) {
+              try {
+                router.push('/signin');
+              } catch {}
+              throw new Error('Unauthorized');
+            }
+            throw new Error(err.message || '加入套件失败');
+          }
+        }),
+      );
+      const okCount = results.filter((r) => r.status === 'fulfilled').length;
+      const fail = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+      if (fail.length) {
+        const msg =
+          (fail[0]?.reason as any)?.message || '加入套件失败';
+        toast.error(`加入套件失败：${msg}（成功 ${okCount} / 失败 ${fail.length}）`);
+      } else {
+        toast.success(`已加入套件（${okCount} 条）`);
+      }
+      await loadSuites();
+      await refreshCases();
+      return okCount > 0;
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '加入套件失败');
+      }
+      return false;
+    } finally {
+      setAddingSuiteCases(false);
     }
   };
 
@@ -1465,11 +1564,8 @@ useEffect(() => {
       setSuitePreStepDraft('');
       setSuiteDescDraft('');
       setSuiteNameDraft('');
-      if (selectedCase?.suiteId === selectedSuiteId) {
-        await updateCaseMeta({ suiteId: null });
-      } else {
-        await refreshCases();
-      }
+      await loadSuites();
+      await refreshCases();
       toast.success('套件已删除');
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
@@ -2688,6 +2784,8 @@ const handleSaveSteps = async () => {
     setSelectedCaseId,
     deletingId,
     deletingBulk,
+    removingSuiteCaseId,
+    addingSuiteCases,
     ingestingDoc,
     setIngestingDoc,
     selectedIds,
@@ -2847,6 +2945,8 @@ const handleSaveSteps = async () => {
     loadSuites,
     handleCreateSuite,
     handleAssignSuite,
+    handleRemoveCaseFromSuite,
+    handleAddCasesToSuite,
     handleSaveSuitePreSteps,
     handleDeleteSuite,
     handleGenerateSuiteCode,

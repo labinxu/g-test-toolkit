@@ -1,7 +1,9 @@
 // Auto-generated live stream suite
 // Suite: live studio status check
-// Generated at: 2025-12-23T08:35:55.413Z
+// Generated at: 2025-12-25T13:01:51.867Z
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { describe, it, useTestCase, beforeAll } from 'core-lib';
 import { HomePage, LoginPage, LivePage } from 'gettr-web-lib';
 
@@ -15,6 +17,45 @@ describe("[gettr-web] Suite: live studio status check", () => {
   });
 
   let homePage = new HomePage(tc as any);
+
+  afterEach(async function () {
+    try {
+      const current: any = this as any;
+      const failed =
+        (current?.currentTest?.state && current.currentTest.state !== 'passed') || !!current?.currentTest?.err;
+      if (!failed) return;
+      const page: any = (tc as any)?.page;
+      if (!page || page.isClosed?.()) return;
+      if (typeof page.screenshot !== 'function') return;
+      const ts = Date.now();
+      const title = (current?.currentTest?.title || 'case').toString().replace(/\s+/g, '_');
+      const name = "gettr-web" + '-' + "liveStudio" + '-' + title + '-' + ts + '.png';
+      const base64 = await page.screenshot({ encoding: 'base64', fullPage: true });
+      const fetchFn = typeof fetch === 'function' ? fetch : (await import('node-fetch')).default as any;
+      const apiBase = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+      const resp = await fetchFn(`${apiBase.replace(/\/$/, '')}/api/testcase/screenshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: base64,
+          platform: "gettr-web",
+          module: "liveStudio",
+          caseName: title,
+          filename: name,
+          root: 'user',
+        }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        (tc as any).meta = { ...(tc as any).meta, lastScreenshot: result?.path };
+        console.log('[screenshot]', result?.path);
+      } else {
+        console.warn('upload screenshot failed', resp.status);
+      }
+    } catch (err) {
+      console.warn('screenshot failed:', err);
+    }
+  });
 
   async function runSuitePreSteps() {
     // 套件级前置步骤（在「用户场景」页面的套件中维护，仅需实现一次即可复用）：

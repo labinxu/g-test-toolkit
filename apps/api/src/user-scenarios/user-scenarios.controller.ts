@@ -136,6 +136,46 @@ export class UserScenariosController {
     }
   }
 
+  @Post('suites/:id/cases')
+  @UseGuards(AuthGuard('jwt'))
+  async addSuiteCase(
+    @Param('id', ParseIntPipe) suiteId: number,
+    @Body()
+    body: {
+      caseId: number;
+      sortOrder?: number | null;
+    },
+  ) {
+    const caseId = Number((body as any)?.caseId);
+    if (!Number.isFinite(caseId)) {
+      throw new BadRequestException('caseId is required');
+    }
+    try {
+      return await this.service.addCaseToSuite(suiteId, caseId, body?.sortOrder);
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) ||
+          `Failed to add case ${caseId} to suite ${suiteId}`,
+      );
+    }
+  }
+
+  @Delete('suites/:id/cases/:caseId')
+  @UseGuards(AuthGuard('jwt'))
+  async removeSuiteCase(
+    @Param('id', ParseIntPipe) suiteId: number,
+    @Param('caseId', ParseIntPipe) caseId: number,
+  ) {
+    try {
+      return await this.service.removeCaseFromSuite(suiteId, caseId);
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) ||
+          `Failed to remove case ${caseId} from suite ${suiteId}`,
+      );
+    }
+  }
+
   @Post()
   @UseGuards(AuthGuard('jwt'))
   async createCase(@Body() body: CreateUserScenarioDto) {

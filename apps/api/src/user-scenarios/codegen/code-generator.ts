@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { ActionCatalogService } from '../action-catalog.service';
 import { UserScenario } from '../entities/user-scenario.entity';
 import { UserScenarioSuite } from '../entities/user-scenario-suite.entity';
+import { UserScenarioSuiteCase } from '../entities/user-scenario-suite-case.entity';
 import { EnvTemplate } from '../entities/env-template.entity';
 import { buildApiStepLines } from './api-generator';
 import { appendUiStepLines } from './ui-generator';
@@ -15,6 +16,7 @@ export class UserScenarioCodeGenerator {
   constructor(
     private readonly caseRepo: Repository<UserScenario>,
     private readonly suiteRepo: Repository<UserScenarioSuite>,
+    private readonly suiteCaseRepo: Repository<UserScenarioSuiteCase>,
     private readonly envTemplateRepo: Repository<EnvTemplate>,
     private readonly actionCatalog: ActionCatalogService,
   ) {}
@@ -463,16 +465,24 @@ export class UserScenarioCodeGenerator {
     username: string,
     envTemplateId?: number | null,
   ) {
-    const suite = await this.suiteRepo.findOne({
-      where: { id: suiteId },
-      relations: ['cases', 'cases.steps'],
-    });
+    const suite = await this.suiteRepo.findOne({ where: { id: suiteId } });
     if (!suite) {
       throw new NotFoundException(`Suite ${suiteId} not found`);
     }
-    const cases = (suite.cases || [])
+    const links = await this.suiteCaseRepo
+      .createQueryBuilder('sc')
+      .leftJoinAndSelect('sc.scenario', 'c')
+      .leftJoinAndSelect('c.steps', 'steps')
+      .where('sc.suiteId = :suiteId', { suiteId })
+      .orderBy('sc.sortOrder', 'ASC')
+      .addOrderBy('c.id', 'ASC')
+      .addOrderBy('steps.order', 'ASC')
+      .getMany();
+    const cases = links
       .slice()
-      .sort((a, b) => a.code.localeCompare(b.code));
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.caseId - b.caseId)
+      .map((l) => l.scenario)
+      .filter(Boolean);
     if (!cases.length) {
       throw new NotFoundException(`Suite ${suite.name} 尚未包含任何用例`);
     }

@@ -403,6 +403,12 @@ export default function LivePushToolPage() {
                       'after:pointer-events-none after:absolute after:inset-0 after:rounded-full after:ring-2 after:ring-emerald-500/70 dark:after:ring-emerald-400/70 before:pointer-events-none before:absolute before:inset-0 before:rounded-full before:bg-emerald-500/10 before:ring-4 before:ring-emerald-500/45 before:animate-[ping_1.4s_ease-out_infinite] dark:before:bg-emerald-400/10 dark:before:ring-emerald-400/45'
                   )}
                 >
+                  {running ? (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 rounded-full ring-8 ring-yellow-400/30 dark:ring-yellow-300/30 animate-[ping_1.8s_ease-out_infinite] [animation-delay:0.45s]"
+                    />
+                  ) : null}
                   {loadingStart || loadingStop ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : running ? (

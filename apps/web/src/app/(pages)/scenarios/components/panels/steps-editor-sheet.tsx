@@ -11,12 +11,19 @@ export type StepsEditorSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedCase: UserScenarioSummary | null;
+  selectedCaseId: number | null;
+  allCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[];
   suites: UserScenarioSuiteSummary[];
   selectedSuiteId: number | null;
+  suiteCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[];
+  removingSuiteCaseId?: number | null;
+  addingSuiteCases?: boolean;
+  onEditSuiteCase: (id: number) => void;
+  onRemoveSuiteCase: (id: number) => void;
+  onAddSuiteCases: (suiteId: number, caseIds: number[]) => Promise<boolean> | boolean;
   suiteLoading: boolean;
   suiteGenerating: boolean;
   suiteDescDraft: string;
-  suiteNameDraft: string;
   suitePreSteps: string[];
   suitePreStepDraft: string;
   suiteActorsDraft: {
@@ -29,7 +36,6 @@ export type StepsEditorSheetProps = {
   suiteSaving: boolean;
   suiteDeleting?: boolean;
   onSuiteDescChange: (val: string) => void;
-  onSuiteNameChange: (val: string) => void;
   onSuitePreStepsChange: (steps: string[]) => void;
   onSuitePreStepDraftChange: (val: string) => void;
   onSuiteActorsDraftChange: (
@@ -61,12 +67,19 @@ export function StepsEditorSheet({
   open,
   onOpenChange,
   selectedCase,
+  selectedCaseId,
+  allCases,
   suites,
   selectedSuiteId,
+  suiteCases,
+  removingSuiteCaseId,
+  addingSuiteCases,
+  onEditSuiteCase,
+  onRemoveSuiteCase,
+  onAddSuiteCases,
   suiteLoading,
   suiteGenerating,
   suiteDescDraft,
-  suiteNameDraft,
   suitePreSteps,
   suitePreStepDraft,
   suiteActorsDraft,
@@ -74,7 +87,6 @@ export function StepsEditorSheet({
   suiteSaving,
   suiteDeleting,
   onSuiteDescChange,
-  onSuiteNameChange,
   onSuitePreStepsChange,
   onSuitePreStepDraftChange,
   onSuiteActorsDraftChange,
@@ -96,7 +108,10 @@ export function StepsEditorSheet({
 }: StepsEditorSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-3xl">
+      <SheetContent
+        side="right"
+        className="flex h-full w-full flex-col overflow-hidden sm:max-w-3xl"
+      >
         <SheetHeader>
           <SheetTitle>编辑步骤与检查点</SheetTitle>
           {selectedCase && (
@@ -105,90 +120,100 @@ export function StepsEditorSheet({
             </SheetDescription>
           )}
         </SheetHeader>
-        {!selectedCase ? (
-          <p className="text-muted-foreground mt-2 text-sm">请先在列表中选择一个用户场景。</p>
-        ) : (
-          <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
-            <SuitePanel
-              suites={suites}
-              selectedSuiteId={selectedSuiteId}
-              suiteLoading={suiteLoading}
-              suiteGenerating={suiteGenerating}
-              suiteNameDraft={suiteNameDraft}
-              suiteDescDraft={suiteDescDraft}
-              suitePreSteps={suitePreSteps}
-              suitePreStepDraft={suitePreStepDraft}
-              suiteActorsDraft={suiteActorsDraft}
-              suiteDefaultActorDraft={suiteDefaultActorDraft}
-              onSuiteDescChange={onSuiteDescChange}
-              onSuiteNameChange={onSuiteNameChange}
-              onSuitePreStepsChange={onSuitePreStepsChange}
-              onSuitePreStepDraftChange={onSuitePreStepDraftChange}
-              onSuiteActorsDraftChange={onSuiteActorsDraftChange}
-              onSuiteDefaultActorDraftChange={onSuiteDefaultActorDraftChange}
-              onOpenSuiteStepDialog={onOpenSuiteStepDialog}
-              onEditSuiteStep={onEditSuiteStep}
-              onAssignSuite={(id) => void onAssignSuite(id)}
-              onSaveSuitePreSteps={onSaveSuitePreSteps}
-              onDeleteSuite={onDeleteSuite}
-              onOpenCreateSuite={onOpenCreateSuite}
-              onGenerateSuiteCode={onGenerateSuiteCode}
-              suiteSaving={suiteSaving}
-              suiteDeleting={suiteDeleting}
-            />
+        <div className="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+          {!selectedCase ? (
+            <p className="text-muted-foreground text-sm">
+              请先在列表中选择一个用户场景。
+            </p>
+          ) : (
+            <div className="flex min-h-0 flex-col gap-2">
+              <SuitePanel
+                suites={suites}
+                selectedSuiteId={selectedSuiteId}
+                suiteCases={suiteCases}
+                allCases={allCases}
+                selectedCaseId={selectedCaseId}
+                removingSuiteCaseId={removingSuiteCaseId}
+                addingSuiteCases={addingSuiteCases}
+                suiteLoading={suiteLoading}
+                suiteGenerating={suiteGenerating}
+                suiteDescDraft={suiteDescDraft}
+                suitePreSteps={suitePreSteps}
+                suitePreStepDraft={suitePreStepDraft}
+                suiteActorsDraft={suiteActorsDraft}
+                suiteDefaultActorDraft={suiteDefaultActorDraft}
+                onSuiteDescChange={onSuiteDescChange}
+                onSuitePreStepsChange={onSuitePreStepsChange}
+                onSuitePreStepDraftChange={onSuitePreStepDraftChange}
+                onSuiteActorsDraftChange={onSuiteActorsDraftChange}
+                onSuiteDefaultActorDraftChange={onSuiteDefaultActorDraftChange}
+                onOpenSuiteStepDialog={onOpenSuiteStepDialog}
+                onEditSuiteStep={onEditSuiteStep}
+                onAssignSuite={(id) => void onAssignSuite(id)}
+                onEditSuiteCase={onEditSuiteCase}
+                onRemoveSuiteCase={onRemoveSuiteCase}
+                onAddSuiteCases={onAddSuiteCases}
+                onSaveSuitePreSteps={onSaveSuitePreSteps}
+                onDeleteSuite={onDeleteSuite}
+                onOpenCreateSuite={onOpenCreateSuite}
+                onGenerateSuiteCode={onGenerateSuiteCode}
+                suiteSaving={suiteSaving}
+                suiteDeleting={suiteDeleting}
+              />
 
-            <Card className="flex min-h-0 flex-1 flex-col border-none shadow-none">
-              <CardHeader className="flex flex-row items-center justify-between gap-2">
-                <div>
-                  <CardTitle>步骤与检查点</CardTitle>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    为当前用例补充详细执行步骤，每一步包含操作、数据与期望结果。
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="h-8 w-8 rounded-full"
-                        onClick={onAddStep}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent sideOffset={6}>添加步骤</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="h-8 w-8 rounded-full"
-                        onClick={onSaveSteps}
-                      >
-                        <Save className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent sideOffset={6}>保存步骤</TooltipContent>
-                  </Tooltip>
-                </div>
-              </CardHeader>
-              <CardContent className="min-h-0 flex-1 overflow-auto">
-                <ScenarioStepsTable
-                  steps={currentSteps}
-                  mode="editable"
-                  showRowNumber
-                  getStepParamHint={getStepParamHint}
-                  onEditStep={onEditStep}
-                  onDeleteStep={onDeleteStep}
-                  onMoveStep={onMoveStep}
-                />
-              </CardContent>
-            </Card>
-          </div>
-        )}
+              <Card className="flex min-h-0 flex-1 flex-col border-none shadow-none">
+                <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <div>
+                    <CardTitle>步骤与检查点</CardTitle>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      为当前用例补充详细执行步骤，每一步包含操作、数据与期望结果。
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-8 w-8 rounded-full"
+                          onClick={onAddStep}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>添加步骤</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          onClick={onSaveSteps}
+                        >
+                          <Save className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>保存步骤</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </CardHeader>
+                <CardContent className="min-h-0 flex-1 overflow-auto">
+                  <ScenarioStepsTable
+                    steps={currentSteps}
+                    mode="editable"
+                    showRowNumber
+                    getStepParamHint={getStepParamHint}
+                    onEditStep={onEditStep}
+                    onDeleteStep={onDeleteStep}
+                    onMoveStep={onMoveStep}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
       </SheetContent>
     </Sheet>
   );

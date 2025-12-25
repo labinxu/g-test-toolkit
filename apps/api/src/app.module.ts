@@ -37,6 +37,7 @@ import { FlutterModule } from './mobile/flutter/flutter.module';
 import { LiveModule } from './live/live.module';
 import { UserScenarioSuite } from './user-scenarios/entities/user-scenario-suite.entity';
 import { AuthAssetsModule } from './auth-assets/auth-assets.module';
+import { UserScenarioSuiteCase } from './user-scenarios/entities/user-scenario-suite-case.entity';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -59,6 +60,7 @@ import { AuthAssetsModule } from './auth-assets/auth-assets.module';
         UserScenarioOption,
         EnvTemplate,
         UserScenarioSuite,
+        UserScenarioSuiteCase,
       ],
       synchronize: true,
     }),

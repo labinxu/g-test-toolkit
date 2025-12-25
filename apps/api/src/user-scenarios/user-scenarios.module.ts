@@ -17,6 +17,7 @@ import { User } from '../auth/entities/user.entity';
 import { EnvTemplate } from './entities/env-template.entity';
 import { EnvTemplatesController } from './env-templates.controller';
 import { UserScenarioSuite } from './entities/user-scenario-suite.entity';
+import { UserScenarioSuiteCase } from './entities/user-scenario-suite-case.entity';
 
 @Module({
   imports: [
@@ -25,13 +26,14 @@ import { UserScenarioSuite } from './entities/user-scenario-suite.entity';
       UserScenarioStep,
       ActionPage,
       ActionPageAction,
-       ActionPageElement,
+      ActionPageElement,
       ActionParam,
       ActionPlatform,
       UserScenarioOption,
       User,
       EnvTemplate,
       UserScenarioSuite,
+      UserScenarioSuiteCase,
     ]),
     AiModule,
   ],

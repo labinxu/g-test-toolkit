@@ -27,6 +27,17 @@ export default function ScenariosPage() {
 
 function ScenariosPageContent() {
   const vm = useScenariosModel();
+  const suiteCases = (() => {
+    if (vm.selectedSuiteId == null) return [];
+    const suite = vm.suites.find((s) => s.id === vm.selectedSuiteId);
+    const ids = Array.isArray(suite?.caseIds) ? suite!.caseIds! : [];
+    if (!ids.length) return [];
+    const byId = new Map(vm.cases.map((c) => [c.id, c]));
+    return ids
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((c) => ({ id: c!.id, code: c!.code, title: c!.title }));
+  })();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
@@ -133,12 +144,25 @@ function ScenariosPageContent() {
         open={vm.detailsOpen}
         onOpenChange={vm.setDetailsOpen}
         selectedCase={vm.selectedCase}
+        selectedCaseId={vm.selectedCaseId}
+        allCases={vm.cases.map((c) => ({ id: c.id, code: c.code, title: c.title }))}
         suites={vm.suites}
         selectedSuiteId={vm.selectedSuiteId}
+        suiteCases={suiteCases}
+        removingSuiteCaseId={vm.removingSuiteCaseId}
+        addingSuiteCases={vm.addingSuiteCases}
+        onEditSuiteCase={(id) => {
+          vm.setSelectedCaseId(id);
+          vm.setDetailsOpen(true);
+        }}
+        onRemoveSuiteCase={(id) => {
+          if (vm.selectedSuiteId == null) return;
+          void vm.handleRemoveCaseFromSuite(vm.selectedSuiteId, id);
+        }}
+        onAddSuiteCases={(suiteId, ids) => vm.handleAddCasesToSuite(suiteId, ids)}
         suiteLoading={vm.suiteLoading}
         suiteGenerating={vm.suiteGenerating}
         suiteDescDraft={vm.suiteDescDraft}
-        suiteNameDraft={vm.suiteNameDraft}
         suitePreSteps={vm.suitePreSteps}
         suitePreStepDraft={vm.suitePreStepDraft}
         suiteActorsDraft={vm.suiteActorsDraft}
@@ -146,7 +170,6 @@ function ScenariosPageContent() {
         suiteSaving={vm.suiteSaving}
         suiteDeleting={vm.suiteDeleting}
         onSuiteDescChange={vm.setSuiteDescDraft}
-        onSuiteNameChange={vm.setSuiteNameDraft}
         onSuitePreStepsChange={vm.setSuitePreSteps}
         onSuitePreStepDraftChange={vm.setSuitePreStepDraft}
         onSuiteActorsDraftChange={vm.setSuiteActorsDraft}

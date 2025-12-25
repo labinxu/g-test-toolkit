@@ -9,6 +9,7 @@ import {
 } from './entities/user-scenario.entity';
 import { UserScenarioStep } from './entities/user-scenario-step.entity';
 import { UserScenarioSuite } from './entities/user-scenario-suite.entity';
+import { UserScenarioSuiteCase } from './entities/user-scenario-suite-case.entity';
 import { UserScenarioSummaryDto } from './dto/user-scenario-summary.dto';
 import {
   UserScenarioStepInputDto,
@@ -32,6 +33,7 @@ import { UserScenarioCodeGenerator } from './codegen/code-generator';
 @Injectable()
 export class UserScenariosService {
   private readonly codeGenerator: UserScenarioCodeGenerator;
+  private suiteCasesBackfilled = false;
 
   constructor(
     @InjectRepository(UserScenario)
@@ -40,6 +42,8 @@ export class UserScenariosService {
     private readonly stepRepo: Repository<UserScenarioStep>,
     @InjectRepository(UserScenarioSuite)
     private readonly suiteRepo: Repository<UserScenarioSuite>,
+    @InjectRepository(UserScenarioSuiteCase)
+    private readonly suiteCaseRepo: Repository<UserScenarioSuiteCase>,
     @InjectRepository(UserScenarioOption)
     private readonly optionRepo: Repository<UserScenarioOption>,
     @InjectRepository(EnvTemplate)
@@ -49,9 +53,46 @@ export class UserScenariosService {
     this.codeGenerator = new UserScenarioCodeGenerator(
       this.caseRepo,
       this.suiteRepo,
+      this.suiteCaseRepo,
       this.envTemplateRepo,
       this.actionCatalog,
     );
+  }
+
+  private async ensureSuiteCasesBackfilled() {
+    if (this.suiteCasesBackfilled) return;
+    this.suiteCasesBackfilled = true;
+
+    const legacyRows = await this.caseRepo
+      .createQueryBuilder('c')
+      .select(['c.id AS id', 'c.suiteId AS suiteId'])
+      .where('c.suiteId IS NOT NULL')
+      .getRawMany<{ id: number; suiteId: number }>();
+    if (!legacyRows.length) return;
+
+    const existing = await this.suiteCaseRepo
+      .createQueryBuilder('sc')
+      .select(['sc.suiteId AS suiteId', 'sc.caseId AS caseId'])
+      .getRawMany<{ suiteId: number; caseId: number }>();
+    const existSet = new Set(existing.map((r) => `${r.suiteId}:${r.caseId}`));
+
+    const toInsert: Array<{
+      suiteId: number;
+      caseId: number;
+      sortOrder: number;
+    }> = [];
+    for (const r of legacyRows) {
+      const suiteId = Number(r.suiteId);
+      const caseId = Number(r.id);
+      if (!Number.isFinite(suiteId) || !Number.isFinite(caseId)) continue;
+      const key = `${suiteId}:${caseId}`;
+      if (existSet.has(key)) continue;
+      existSet.add(key);
+      toInsert.push({ suiteId, caseId, sortOrder: caseId });
+    }
+    if (toInsert.length) {
+      await this.suiteCaseRepo.insert(toInsert as any);
+    }
   }
 
   private async ensureOption(
@@ -571,15 +612,19 @@ export class UserScenariosService {
   }
 
   async listSuites(params?: { platform?: string | 'all' }) {
+    await this.ensureSuiteCasesBackfilled();
     const qb = this.suiteRepo
       .createQueryBuilder('suite')
-      .leftJoinAndSelect('suite.cases', 'c');
+      .leftJoinAndSelect('suite.suiteCases', 'sc')
+      .leftJoinAndSelect('sc.scenario', 'c');
     if (params?.platform && params.platform !== 'all') {
       qb.andWhere('suite.platform = :platform', {
         platform: normalizePlatform(params.platform),
       });
     }
-    qb.orderBy('suite.name', 'ASC');
+    qb.orderBy('suite.name', 'ASC')
+      .addOrderBy('sc.sortOrder', 'ASC')
+      .addOrderBy('c.id', 'ASC');
     const rows = await qb.getMany();
     return rows.map((s) => ({
       id: s.id,
@@ -590,19 +635,25 @@ export class UserScenariosService {
       sharedPreSteps: this.parseSharedPreSteps(s.sharedPreStepsJson),
       actors: this.parseSuiteActors(s.actorsJson),
       defaultActor: s.defaultActor ?? null,
-      caseIds: (s.cases || []).map((c) => c.id),
-      caseCount: (s.cases || []).length,
+      caseIds: (s.suiteCases || [])
+        .slice()
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.caseId - b.caseId)
+        .map((link) => link.caseId),
+      caseCount: (s.suiteCases || []).length,
     }));
   }
 
   async getSuiteDetail(id: number) {
-    const suite = await this.suiteRepo.findOne({
-      where: { id },
-      relations: ['cases'],
-    });
+    await this.ensureSuiteCasesBackfilled();
+    const suite = await this.suiteRepo.findOne({ where: { id } });
     if (!suite) {
       throw new NotFoundException(`Suite ${id} not found`);
     }
+    const links = await this.suiteCaseRepo.find({
+      where: { suiteId: id } as any,
+      relations: ['scenario'],
+    });
+    links.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.caseId - b.caseId);
     return {
       id: suite.id,
       name: suite.name,
@@ -613,13 +664,96 @@ export class UserScenariosService {
       actors: this.parseSuiteActors(suite.actorsJson),
       defaultActor: suite.defaultActor ?? null,
       cases:
-        (suite.cases || []).map((c) => ({
-          id: c.id,
-          code: c.code,
-          title: c.title,
-        })) || [],
-      caseCount: (suite.cases || []).length,
+        links
+          .map((link) => link.scenario)
+          .filter(Boolean)
+          .map((c) => ({
+            id: c.id,
+            code: c.code,
+            title: c.title,
+          })) || [],
+      caseIds: links.map((l) => l.caseId),
+      caseCount: links.length,
     };
+  }
+
+  async addCaseToSuite(
+    suiteId: number,
+    caseId: number,
+    sortOrder?: number | null,
+  ) {
+    await this.ensureSuiteCasesBackfilled();
+    const suite = await this.suiteRepo.findOne({ where: { id: suiteId } });
+    if (!suite) {
+      throw new NotFoundException(`Suite ${suiteId} not found`);
+    }
+    const scenario = await this.caseRepo.findOne({ where: { id: caseId } });
+    if (!scenario) {
+      throw new NotFoundException(`UserScenario ${caseId} not found`);
+    }
+
+    const existed = await this.suiteCaseRepo.findOne({
+      where: { suiteId, caseId } as any,
+    });
+    if (!existed) {
+      let nextOrder = 0;
+      if (typeof sortOrder === 'number' && Number.isFinite(sortOrder)) {
+        nextOrder = Math.floor(sortOrder);
+      } else {
+        const raw = await this.suiteCaseRepo
+          .createQueryBuilder('sc')
+          .select('MAX(sc.sortOrder)', 'max')
+          .where('sc.suiteId = :suiteId', { suiteId })
+          .getRawOne<{ max: number | null }>();
+        const maxVal = raw?.max != null ? Number(raw.max) : 0;
+        nextOrder = (Number.isFinite(maxVal) ? maxVal : 0) + 1;
+      }
+      await this.suiteCaseRepo.save({
+        suiteId,
+        caseId,
+        sortOrder: nextOrder,
+      } as any);
+    }
+
+    // Keep legacy single-suite fields as "last selected suite" for backward compatibility.
+    scenario.suite = suite as any;
+    scenario.suiteId = suite.id;
+    await this.caseRepo.save(scenario);
+
+    return await this.getSuiteDetail(suiteId);
+  }
+
+  async removeCaseFromSuite(suiteId: number, caseId: number) {
+    await this.ensureSuiteCasesBackfilled();
+    await this.suiteCaseRepo.delete({ suiteId, caseId } as any);
+
+    const scenario = await this.caseRepo.findOne({ where: { id: caseId } });
+    if (!scenario) {
+      return await this.getSuiteDetail(suiteId);
+    }
+
+    if (scenario.suiteId === suiteId) {
+      const remaining = await this.suiteCaseRepo.find({
+        where: { caseId } as any,
+      });
+      remaining.sort(
+        (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.suiteId - b.suiteId,
+      );
+      const nextSuiteId = remaining[0]?.suiteId ?? null;
+      if (nextSuiteId) {
+        const nextSuite = await this.suiteRepo.findOne({
+          where: { id: nextSuiteId },
+        });
+        scenario.suite = (nextSuite as any) || null;
+        scenario.suiteId = nextSuite?.id ?? null;
+      } else {
+        scenario.suite = null;
+        scenario.suiteId = null;
+      }
+      await this.caseRepo.save(scenario);
+    }
+
+    return await this.getSuiteDetail(suiteId);
   }
 
   async createSuite(dto: {
@@ -691,11 +825,10 @@ export class UserScenariosService {
     if (!suite) {
       throw new NotFoundException(`Suite ${id} not found`);
     }
-    // 将已关联用例解除套件关系
-    await this.caseRepo.update(
-      { suite: { id } as any },
-      { suite: null, suiteId: null },
-    );
+    await this.ensureSuiteCasesBackfilled();
+    await this.suiteCaseRepo.delete({ suiteId: id } as any);
+    // Best-effort cleanup for legacy single-suite column.
+    await this.caseRepo.update({ suiteId: id } as any, { suite: null, suiteId: null } as any);
     await this.suiteRepo.delete(id);
     return { result: 'ok' };
   }
@@ -973,9 +1106,11 @@ export class UserScenariosService {
       entity.description = dto.description || null;
     }
     if (dto.suiteId !== undefined) {
+      await this.ensureSuiteCasesBackfilled();
       if (dto.suiteId === null) {
         entity.suite = null;
         entity.suiteId = null;
+        await this.suiteCaseRepo.delete({ caseId: entity.id } as any);
       } else {
         const suite = await this.suiteRepo.findOne({
           where: { id: dto.suiteId },
@@ -985,6 +1120,9 @@ export class UserScenariosService {
         }
         entity.suite = suite;
         entity.suiteId = suite.id;
+        // Backward-compatible behavior: assigning suiteId replaces memberships.
+        await this.suiteCaseRepo.delete({ caseId: entity.id } as any);
+        await this.addCaseToSuite(suite.id, entity.id);
       }
     }
     await this.caseRepo.save(entity);

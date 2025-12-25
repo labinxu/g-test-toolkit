@@ -20,7 +20,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ScenarioStepsTable } from '../shared/steps-table';
-import type { UserScenarioStep } from '../../types';
+import { SuiteCasesTable } from './suite-cases-table';
+import type { UserScenarioStep, UserScenarioSummary } from '../../types';
 
 type SuiteSummary = {
   id: number;
@@ -40,9 +41,13 @@ type SuiteActorDraft = {
 type SuitePanelProps = {
   suites: SuiteSummary[];
   selectedSuiteId: number | null;
+  suiteCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[];
+  allCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[];
+  selectedCaseId?: number | null;
+  removingSuiteCaseId?: number | null;
+  addingSuiteCases?: boolean;
   suiteLoading: boolean;
   suiteGenerating: boolean;
-  suiteNameDraft: string;
   suiteSaving?: boolean;
   suiteDeleting?: boolean;
   suiteDescDraft: string;
@@ -51,12 +56,14 @@ type SuitePanelProps = {
   suiteActorsDraft: SuiteActorDraft[];
   suiteDefaultActorDraft: string;
   onSuiteDescChange: (val: string) => void;
-  onSuiteNameChange: (val: string) => void;
   onSuitePreStepsChange: (steps: string[]) => void;
   onSuitePreStepDraftChange: (val: string) => void;
   onSuiteActorsDraftChange: (actors: SuiteActorDraft[]) => void;
   onSuiteDefaultActorDraftChange: (val: string) => void;
   onAssignSuite: (suiteId: number | null) => void;
+  onEditSuiteCase: (caseId: number) => void;
+  onRemoveSuiteCase: (caseId: number) => void;
+  onAddSuiteCases: (suiteId: number, caseIds: number[]) => Promise<boolean> | boolean;
   onEditSuiteStep: (id: string) => void;
   onSaveSuitePreSteps: () => void;
   onDeleteSuite: () => void;
@@ -68,21 +75,27 @@ type SuitePanelProps = {
 export function SuitePanel({
   suites,
   selectedSuiteId,
+  suiteCases,
+  allCases,
+  selectedCaseId,
+  removingSuiteCaseId,
+  addingSuiteCases,
   suiteLoading,
   suiteGenerating,
-  suiteNameDraft,
   suiteDescDraft,
   suitePreSteps,
   suitePreStepDraft,
   suiteActorsDraft,
   suiteDefaultActorDraft,
   onSuiteDescChange,
-  onSuiteNameChange,
   onSuitePreStepsChange,
   onSuitePreStepDraftChange,
   onSuiteActorsDraftChange,
   onSuiteDefaultActorDraftChange,
   onAssignSuite,
+  onEditSuiteCase,
+  onRemoveSuiteCase,
+  onAddSuiteCases,
   onEditSuiteStep,
   onSaveSuitePreSteps,
   onDeleteSuite,
@@ -134,6 +147,7 @@ export function SuitePanel({
 
   const suiteSelectValue =
     selectedSuiteId != null ? String(selectedSuiteId) : 'none';
+  const selectedSuite = selectedSuiteId != null ? suites.find((s) => s.id === selectedSuiteId) : null;
 
   const addSuitePreSteps = () => {
     const lines = suitePreStepDraft
@@ -210,58 +224,64 @@ export function SuitePanel({
       </div>
 
       <CollapsibleContent className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="space-y-1 md:col-span-2">
-          <Label className="text-xs">所属套件</Label>
-          <OptionsSelectSearch
-            key={`suite-select-${suiteSelectValue}-${suites.length}`}
-            placeholder="搜索或选择套件"
-            value={suiteSelectValue}
-            items={[
-              { value: 'none', label: '不加入套件' },
-              ...suites
-                .slice()
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((s) => ({
-                  value: String(s.id),
-                  label: `${s.name}${
-                    s.caseCount ? `（${s.caseCount} 用例）` : ''
-                  }`,
-                })),
-            ]}
-            onChange={(val) => {
-              if (val === 'none') {
-                onAssignSuite(null);
-              } else {
-                const n = Number(val);
-                if (Number.isFinite(n)) {
-                  onAssignSuite(n);
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-1 md:col-span-1">
+            <Label className="text-xs">所属套件</Label>
+            <OptionsSelectSearch
+              key={`suite-select-${suiteSelectValue}-${suites.length}`}
+              placeholder="搜索或选择套件"
+              value={suiteSelectValue}
+              items={[
+                { value: 'none', label: '不加入套件' },
+                ...suites
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((s) => ({
+                    value: String(s.id),
+                    label: `${s.name}${
+                      s.caseCount ? `（${s.caseCount} 用例）` : ''
+                    }`,
+                  })),
+              ]}
+              onChange={(val) => {
+                if (val === 'none') {
+                  onAssignSuite(null);
+                } else {
+                  const n = Number(val);
+                  if (Number.isFinite(n)) {
+                    onAssignSuite(n);
+                  }
                 }
-              }
-            }}
-            className="w-full"
-            disabled={suiteLoading}
-          />
+              }}
+              className="w-full"
+              disabled={suiteLoading}
+            />
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <Label className="text-xs">套件描述（可选）</Label>
+            <Input
+              value={suiteDescDraft}
+              onChange={(e) => onSuiteDescChange(e.target.value)}
+              placeholder="为套件添加说明，帮助团队理解覆盖范围"
+              disabled={!selectedSuiteId}
+            />
+          </div>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs">套件名称</Label>
-          <Input
-            value={suiteNameDraft}
-            onChange={(e) => onSuiteNameChange(e.target.value)}
-            placeholder="输入或修改套件名称"
-            disabled={!selectedSuiteId}
+
+        {selectedSuiteId ? (
+          <SuiteCasesTable
+            suiteId={selectedSuiteId}
+            suiteName={selectedSuite?.name || null}
+            allCases={allCases}
+            adding={!!addingSuiteCases}
+            onAddCases={(caseIds) => onAddSuiteCases(selectedSuiteId, caseIds)}
+            cases={suiteCases}
+            selectedCaseId={selectedCaseId}
+            removingCaseId={removingSuiteCaseId}
+            onEditCase={onEditSuiteCase}
+            onRemoveCase={onRemoveSuiteCase}
           />
-        </div>
-        <div className="space-y-1 md:col-span-3">
-          <Label className="text-xs">套件描述（可选）</Label>
-          <Input
-            value={suiteDescDraft}
-            onChange={(e) => onSuiteDescChange(e.target.value)}
-            placeholder="为套件添加说明，帮助团队理解覆盖范围"
-            disabled={!selectedSuiteId}
-          />
-        </div>
-      </div>
+        ) : null}
 
       <div className="space-y-2 rounded-md border bg-muted/20 p-3">
         <div className="flex items-center justify-between gap-2">
