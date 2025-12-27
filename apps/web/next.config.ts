@@ -3,6 +3,10 @@ const nextConfig: NextConfig = {
   /* config options here */
   output: 'standalone',
   crossOrigin: 'anonymous',
+  experimental: {
+    // Allow large request bodies when Next.js proxies requests (e.g. rewrites to BACK_SERVER_API_URL).
+    proxyClientMaxBodySize: '300mb',
+  },
   typescript: {
     // This project contains a number of internal/admin pages with loose typing.
     // Allow production builds to proceed even if some pages have TS errors.

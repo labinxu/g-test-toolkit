@@ -20,6 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -418,6 +419,9 @@ export default function VideosResourcePage() {
             <>
               <DialogHeader>
                 <DialogTitle>播放视频：{selectedVideo.name}</DialogTitle>
+                <DialogDescription className="sr-only">
+                  播放并预览所选视频文件。
+                </DialogDescription>
               </DialogHeader>
               <div className="mt-2">
                 <video

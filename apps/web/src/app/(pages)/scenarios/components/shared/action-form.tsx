@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { OptionsSelect } from '@/components/select/options-select'
 import { OptionsSelectInput } from '@/components/select/options-select-input'
 import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScenarioStepsTable } from '../shared/steps-table'
 import type {
   AdminAction,
@@ -425,15 +425,18 @@ export function ActionForm({
             )}
           </div>
 
-          <Dialog open={callStepDialogOpen} onOpenChange={setCallStepDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>编辑内部调用</DialogTitle>
-              </DialogHeader>
-              <div className="max-h-[60vh] space-y-3 overflow-auto pr-1">
-                <div className="space-y-1">
-                  <Label className="text-[11px]">来源页面</Label>
-                  <OptionsSelect<string>
+	          <Dialog open={callStepDialogOpen} onOpenChange={setCallStepDialogOpen}>
+	            <DialogContent className="sm:max-w-md">
+	              <DialogHeader>
+	                <DialogTitle>编辑内部调用</DialogTitle>
+	                <DialogDescription className="sr-only">
+	                  配置当前函数的内部调用步骤与参数。
+	                </DialogDescription>
+	              </DialogHeader>
+	              <div className="max-h-[60vh] space-y-3 overflow-auto pr-1">
+	                <div className="space-y-1">
+	                  <Label className="text-[11px]">来源页面</Label>
+	                  <OptionsSelect<string>
                     value={editingCallSourcePageId != null ? String(editingCallSourcePageId) : ''}
                     items={[
                       ...(draft?.id

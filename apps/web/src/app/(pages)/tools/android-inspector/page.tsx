@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -1185,16 +1186,19 @@ export default function AndroidInspectorPage() {
                   </DialogTrigger>
                 </TooltipTrigger>
                 <TooltipContent sideOffset={6}>Settings</TooltipContent>
-                <DialogContent className="max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
-                  <div className="flex h-[80vh] flex-col">
-                    <div className="bg-background border-b p-6">
-                      <DialogHeader>
-                        <DialogTitle>Parameters</DialogTitle>
-                      </DialogHeader>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-6">
-                      <ParametersForm ref={paramsRef} hideActions />
-                    </div>
+	                <DialogContent className="max-w-3xl overflow-hidden p-0 sm:max-w-3xl">
+	                  <div className="flex h-[80vh] flex-col">
+	                    <div className="bg-background border-b p-6">
+	                      <DialogHeader>
+	                        <DialogTitle>Parameters</DialogTitle>
+	                        <DialogDescription className="sr-only">
+	                          Configure parameters used by the inspector runtime.
+	                        </DialogDescription>
+	                      </DialogHeader>
+	                    </div>
+	                    <div className="flex-1 overflow-y-auto p-6">
+	                      <ParametersForm ref={paramsRef} hideActions />
+	                    </div>
                     <div className="bg-background border-t p-4">
                       <DialogFooter>
                         <Button onClick={() => paramsRef.current?.save()}>Save</Button>

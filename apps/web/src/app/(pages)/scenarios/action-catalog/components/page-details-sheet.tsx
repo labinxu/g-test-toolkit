@@ -9,7 +9,7 @@ import { resolveActionSubtypeLabel } from '../use-action-catalog'
 import type { AdminAction, AdminPage, PageSummary } from '../types'
 import { ActionForm } from '../../components/shared/action-form'
 import { ScenarioStepsTable } from '../../components/shared/steps-table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AdminParam } from '../types'
 
 type Props = {
@@ -461,15 +461,18 @@ export function PageDetailsSheet({
                         setActionDialogOpen(open)
                         if (!open) setPendingAction(null)
                       }}
-                    >
-                      <DialogContent className="sm:max-w-3xl">
-                        <DialogHeader>
-                          <DialogTitle>{isCreating ? '新增动作' : actionDialogTitle}</DialogTitle>
-                        </DialogHeader>
-                        <div className="max-h-[75vh] overflow-auto pr-1">
-                          <ActionForm
-                            key={`${dialogAction.id ?? (isCreating ? 'new' : 'edit')}-${selectedActionIndex}`}
-                            action={dialogAction}
+	                    >
+	                      <DialogContent className="sm:max-w-3xl">
+	                        <DialogHeader>
+	                          <DialogTitle>{isCreating ? '新增动作' : actionDialogTitle}</DialogTitle>
+	                          <DialogDescription className="sr-only">
+	                            编辑动作的表单与参数配置。
+	                          </DialogDescription>
+	                        </DialogHeader>
+	                        <div className="max-h-[75vh] overflow-auto pr-1">
+	                          <ActionForm
+	                            key={`${dialogAction.id ?? (isCreating ? 'new' : 'edit')}-${selectedActionIndex}`}
+	                            action={dialogAction}
                             index={isCreating ? 0 : selectedActionIndex}
                             draft={draft}
                             pages={pages}

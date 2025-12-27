@@ -5,7 +5,7 @@ import { Plus } from 'lucide-react'
 
 import ResizableStickyTable from '@/components/data-table'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { SortDir } from '@/components/data-table'
@@ -73,13 +73,16 @@ export function AddSuiteCasesDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-3xl flex max-h-[85vh] flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            添加用例到套件
-          </DialogTitle>
-        </DialogHeader>
+	      <DialogContent className="sm:max-w-3xl flex max-h-[85vh] flex-col overflow-hidden">
+	        <DialogHeader>
+	          <DialogTitle className="flex items-center gap-2">
+	            <Plus className="h-4 w-4" />
+	            添加用例到套件
+	          </DialogTitle>
+	          <DialogDescription className="sr-only">
+	            从列表中选择用例并添加到目标套件。
+	          </DialogDescription>
+	        </DialogHeader>
 
         <div className="min-h-0 flex flex-1 flex-col gap-3 overflow-hidden">
           <div className="grid shrink-0 gap-2 md:grid-cols-2">
