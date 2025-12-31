@@ -12,6 +12,9 @@ import { Project } from 'ts-morph'
 import { BrowserHelper } from 'src/browser/browser-helper'
 import { SettingsService } from 'src/settings/settings.service'
 import { ChildProcess, fork } from 'child_process'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
+import { Actor } from 'src/actors/entities/actor.entity'
 @Injectable()
 export class TestCasesService {
   private logger: CustomLogger
@@ -30,7 +33,8 @@ export class TestCasesService {
     private readonly loggerService: LoggerService,
     private readonly androidService: AndroidService,
     private readonly reportService: ReportService,
-    private readonly settingsService: SettingsService
+    private readonly settingsService: SettingsService,
+    @InjectRepository(Actor) private readonly actors: Repository<Actor>,
   ) {
     this.logger = this.loggerService.createLogger('TestCaseService')
   }
@@ -139,6 +143,21 @@ export class TestCasesService {
     } catch {
       apiTestsConfig = null
     }
+
+    let actorCredentials: Record<string, { accountName: string; password: string; env?: string }> | null = null
+    try {
+      const list = await this.actors.find({ order: { id: 'ASC' as any } })
+      actorCredentials = {}
+      for (const a of list) {
+        actorCredentials[String(a.id)] = {
+          accountName: a.accountName,
+          password: a.password,
+          env: (a as any)?.env?.name ? String((a as any).env.name) : undefined,
+        }
+      }
+    } catch {
+      actorCredentials = null
+    }
     const { path: workerPath, isTs } = this.resolveRunnerScript()
     const forkOpts: any = {
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
@@ -215,6 +234,7 @@ export class TestCasesService {
         apiTestsConfig: apiTestsConfig ?? undefined,
         workspace: process.env.WORKSPACE,
         envConfig: options?.envConfig,
+        actorCredentials: actorCredentials ?? undefined,
         reportMeta: options?.reportMeta,
       },
     })

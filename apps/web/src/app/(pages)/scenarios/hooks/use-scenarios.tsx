@@ -67,6 +67,14 @@ const inferDriverFromPlatform = (
   return 'browser';
 };
 
+const inferSuiteCaseCount = (suite: any): number => {
+  const rawCaseCount = Number(suite?.caseCount);
+  const caseCount = Number.isFinite(rawCaseCount) ? rawCaseCount : 0;
+  const caseIdsCount = Array.isArray(suite?.caseIds) ? suite.caseIds.length : 0;
+  const casesCount = Array.isArray(suite?.cases) ? suite.cases.length : 0;
+  return Math.max(caseCount, caseIdsCount, casesCount);
+};
+
 export function useScenariosModel() {
   const router = useRouter();
   const {
@@ -209,18 +217,9 @@ export function useScenariosModel() {
   const [newSuiteDesc, setNewSuiteDesc] = useState('');
   const [suiteGenerating, setSuiteGenerating] = useState(false);
   const [suiteDeleting, setSuiteDeleting] = useState(false);
-  type SuiteActorDraft = {
-    name: string;
-    scope: 'suite' | 'test';
-    authMode: 'ui' | 'cookies';
-    cookiesPath: string;
-  };
-  const [suiteActorsDraft, setSuiteActorsDraft] = useState<SuiteActorDraft[]>(
-    [],
-  );
-  const [suiteDefaultActorDraft, setSuiteDefaultActorDraft] = useState<string>(
-    '',
-  );
+  const [actorItems, setActorItems] = useState<OptionsSelectItem<string>[]>([
+    { value: 'none', label: '（不指定）' },
+  ]);
 
   const selectedCase = useMemo(
     () => cases.find((c) => c.id === selectedCaseId) || null,
@@ -254,8 +253,6 @@ useEffect(() => {
       setSuitePreStepDraft('');
       setSuiteDescDraft('');
       setSuiteNameDraft('');
-      setSuiteActorsDraft([]);
-      setSuiteDefaultActorDraft('');
       return;
     }
     const suite = suites.find((s) => s.id === selectedSuiteId);
@@ -263,31 +260,6 @@ useEffect(() => {
     setSuitePreStepDraft('');
     setSuiteDescDraft(suite?.description || '');
     setSuiteNameDraft(suite?.name || '');
-    const actorsObj =
-      suite?.actors && typeof suite.actors === 'object' ? suite.actors : null;
-    const nextActors: SuiteActorDraft[] = actorsObj
-      ? Object.entries(actorsObj)
-          .map(([name, opt]) => {
-            const rec: any = opt && typeof opt === 'object' ? opt : {};
-            const auth: any =
-              rec.auth && typeof rec.auth === 'object' ? rec.auth : {};
-            const mode: SuiteActorDraft['authMode'] =
-              auth.mode === 'cookies' ? 'cookies' : 'ui';
-            const scope: SuiteActorDraft['scope'] =
-              rec.scope === 'test' ? 'test' : 'suite';
-            return {
-              name: String(name || ''),
-              scope,
-              authMode: mode,
-              cookiesPath: mode === 'cookies' ? String(auth.cookiesPath || '') : '',
-            };
-          })
-          .filter((r) => !!r.name.trim())
-      : [];
-    setSuiteActorsDraft(nextActors);
-    setSuiteDefaultActorDraft(
-      suite?.defaultActor ? String(suite.defaultActor) : '',
-    );
   }, [selectedSuiteId, suites]);
 
   // Restore last selected case when coming back from Testcases (via gtt:scenarios:lastCaseId)
@@ -1122,7 +1094,7 @@ useEffect(() => {
       toast.error('请先在左侧选择一个用例');
       return;
     }
-    const prevSuiteId = selectedSuiteId;
+    const prevSuiteId = selectedCase.suiteId ?? selectedSuiteId ?? null;
     const target = suiteId ? suites.find((s) => s.id === suiteId) : null;
     setSelectedSuiteId(suiteId);
     if (suiteId && target) {
@@ -1137,6 +1109,24 @@ useEffect(() => {
       setSuiteNameDraft('');
     }
     try {
+      if (prevSuiteId && prevSuiteId !== suiteId) {
+        const res = await fetch(
+          `${apiPrefix}/suites/${prevSuiteId}/cases/${selectedCase.id}`,
+          {
+            method: 'DELETE',
+          },
+        );
+        if (!res.ok) {
+          const err = await normalizeResponseError(res as any);
+          if (isUnauthorizedError(err)) {
+            try {
+              router.push('/signin');
+            } catch {}
+            throw new Error('Unauthorized');
+          }
+          throw new Error(err.message || '从套件移除失败');
+        }
+      }
       if (suiteId && target) {
         const res = await fetch(`${apiPrefix}/suites/${suiteId}/cases`, {
           method: 'POST',
@@ -1164,10 +1154,12 @@ useEffect(() => {
         setSuitePreSteps(prevSuite?.sharedPreSteps || []);
         setSuitePreStepDraft('');
         setSuiteDescDraft(prevSuite?.description || '');
+        setSuiteNameDraft(prevSuite?.name || '');
       } else {
         setSuitePreSteps([]);
         setSuitePreStepDraft('');
         setSuiteDescDraft('');
+        setSuiteNameDraft('');
       }
     }
   };
@@ -1198,6 +1190,40 @@ useEffect(() => {
       }
     } finally {
       setRemovingSuiteCaseId(null);
+    }
+  };
+
+  const handleUpdateSuiteCaseActor = async (
+    suiteId: number,
+    caseId: number,
+    actorId: number | null,
+  ) => {
+    if (!Number.isFinite(suiteId) || !Number.isFinite(caseId)) return;
+    try {
+      const res = await fetch(
+        `${apiPrefix}/suites/${suiteId}/cases/${caseId}`,
+        {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ actorId }),
+        },
+      );
+      if (!res.ok) {
+        const err = await normalizeResponseError(res as any);
+        if (isUnauthorizedError(err)) {
+          try {
+            router.push('/signin');
+          } catch {}
+          throw new Error('Unauthorized');
+        }
+        throw new Error(err.message || '更新用例 Actor 失败');
+      }
+      await loadSuites();
+      toast.success('已更新用例 Actor');
+    } catch (e: any) {
+      if (!isUnauthorizedError(e)) {
+        toast.error(e?.message || '更新用例 Actor 失败');
+      }
     }
   };
 
@@ -1281,35 +1307,10 @@ useEffect(() => {
     const steps = suitePreSteps
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    const actorsObject = suiteActorsDraft
-      .map((row) => ({
-        ...row,
-        name: row.name.trim(),
-        cookiesPath: row.cookiesPath.trim(),
-      }))
-      .filter((row) => !!row.name)
-      .reduce<Record<string, any>>((acc, row) => {
-        acc[row.name] = {
-          scope: row.scope,
-          auth:
-            row.authMode === 'cookies'
-              ? {
-                  mode: 'cookies',
-                  cookiesPath: row.cookiesPath || undefined,
-                }
-              : {
-                  mode: 'ui',
-                },
-        };
-        return acc;
-      }, {});
-    const defaultActorValue = suiteDefaultActorDraft.trim() || null;
     const payload = {
       name: suiteNameDraft || undefined,
       description: suiteDescDraft || null,
       sharedPreSteps: steps,
-      actors: Object.keys(actorsObject).length ? actorsObject : null,
-      defaultActor: defaultActorValue,
     };
     try {
       setSuiteSaving(true);
@@ -1331,11 +1332,7 @@ useEffect(() => {
       const updated = (await res.json()) as UserScenarioSuiteSummary;
       const normalizedUpdated: UserScenarioSuiteSummary = {
         ...updated,
-        caseCount:
-          (updated as any).caseCount ??
-          ((updated as any).cases?.length as number | undefined) ??
-          updated.caseIds?.length ??
-          0,
+        caseCount: inferSuiteCaseCount(updated),
       };
       setSuites((prev) => {
         const others = prev.filter((s) => s.id !== normalizedUpdated.id);
@@ -1347,36 +1344,6 @@ useEffect(() => {
       setSuitePreStepDraft('');
       setSuiteDescDraft(normalizedUpdated.description || '');
       setSuiteNameDraft(normalizedUpdated.name || '');
-      const actorsObj =
-        normalizedUpdated.actors && typeof normalizedUpdated.actors === 'object'
-          ? normalizedUpdated.actors
-          : null;
-      const nextActors: SuiteActorDraft[] = actorsObj
-        ? Object.entries(actorsObj)
-            .map(([name, opt]) => {
-              const rec: any = opt && typeof opt === 'object' ? opt : {};
-              const auth: any =
-                rec.auth && typeof rec.auth === 'object' ? rec.auth : {};
-              const mode: SuiteActorDraft['authMode'] =
-                auth.mode === 'cookies' ? 'cookies' : 'ui';
-              const scope: SuiteActorDraft['scope'] =
-                rec.scope === 'test' ? 'test' : 'suite';
-              return {
-                name: String(name || ''),
-                scope,
-                authMode: mode,
-                cookiesPath:
-                  mode === 'cookies' ? String(auth.cookiesPath || '') : '',
-              };
-            })
-            .filter((r) => !!r.name.trim())
-        : [];
-      setSuiteActorsDraft(nextActors);
-      setSuiteDefaultActorDraft(
-        normalizedUpdated.defaultActor
-          ? String(normalizedUpdated.defaultActor)
-          : '',
-      );
       toast.success('已保存套件信息');
     } catch (e: any) {
       if (!isUnauthorizedError(e)) {
@@ -1418,11 +1385,7 @@ useEffect(() => {
       const created = (await res.json()) as UserScenarioSuiteSummary;
       const normalizedCreated: UserScenarioSuiteSummary = {
         ...created,
-        caseCount:
-          (created as any).caseCount ??
-          ((created as any).cases?.length as number | undefined) ??
-          created.caseIds?.length ??
-          0,
+        caseCount: inferSuiteCaseCount(created),
       };
       setSuites((prev) => [...prev, normalizedCreated]);
       setNewSuiteName('');
@@ -1442,10 +1405,7 @@ useEffect(() => {
 
   const handleGenerateSuiteCodeInternal = async (suiteId: number) => {
     const targetSuite = suites.find((s) => s.id === suiteId);
-    const suiteCaseCount =
-      (targetSuite?.caseCount as number | undefined) ??
-      targetSuite?.caseIds?.length ??
-      0;
+    const suiteCaseCount = inferSuiteCaseCount(targetSuite);
     if (suiteCaseCount === 0) {
       toast.error('当前套件尚未包含任何用例');
       return;
@@ -2420,6 +2380,27 @@ const handleSaveSteps = async () => {
     void loadSuites();
   }, [platform]);
 
+  const loadActorItems = useCallback(async () => {
+    try {
+      const res = await fetch('/api/actors', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = (await res.json()) as any[];
+      const mapped = (data || [])
+        .map((a) => {
+          const id = a?.id != null ? String(a.id) : '';
+          const accountName = (a?.accountName || '').toString();
+          const env = (a?.env?.name || '').toString();
+          const label = env ? `${accountName} @ ${env}` : accountName;
+          return id ? { value: id, label } : null;
+        })
+        .filter(Boolean) as OptionsSelectItem<string>[];
+      mapped.sort((a, b) => a.label.localeCompare(b.label));
+      setActorItems([{ value: 'none', label: '（不指定）' }, ...mapped]);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const loadPlatforms = async () => {
     try {
       const res = await fetch('/api/action-catalog/platforms', {
@@ -2484,11 +2465,7 @@ const handleSaveSteps = async () => {
         sharedPreSteps: (s.sharedPreSteps || []).map((p) =>
           (p || '').toString(),
         ),
-        caseCount:
-          (s as any).caseCount ??
-          ((s as any).cases?.length as number | undefined) ??
-          s.caseIds?.length ??
-          0,
+        caseCount: inferSuiteCaseCount(s),
       }));
       setSuites(mapped);
     } catch (e: any) {
@@ -2503,6 +2480,10 @@ const handleSaveSteps = async () => {
   useEffect(() => {
     void loadPlatforms();
   }, []);
+
+  useEffect(() => {
+    void loadActorItems();
+  }, [loadActorItems]);
 
   useEffect(() => {
     const loadRunTemplates = async () => {
@@ -2908,10 +2889,6 @@ const handleSaveSteps = async () => {
     setSuiteDescDraft,
     suiteNameDraft,
     setSuiteNameDraft,
-    suiteActorsDraft,
-    setSuiteActorsDraft,
-    suiteDefaultActorDraft,
-    setSuiteDefaultActorDraft,
     selectedSuiteId,
     setSelectedSuiteId,
     newSuiteName,
@@ -2979,8 +2956,10 @@ const handleSaveSteps = async () => {
     runEnvSelectedId,
     setRunEnvSelectedId,
     handleSelectRunEnv,
+    actorItems,
     apiPrefix,
     router,
+    handleUpdateSuiteCaseActor,
   };
 }
 

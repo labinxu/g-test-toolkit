@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs';
@@ -20,6 +20,7 @@ import { CreateUserScenarioDto } from './dto/create-scenario.dto';
 import { ActionCatalogService } from './action-catalog.service';
 import { UserScenarioOption } from './entities/user-scenario-option.entity';
 import { EnvTemplate } from './entities/env-template.entity';
+import { Actor } from '../actors/entities/actor.entity';
 import {
   getModuleNameForPlatform,
   normalizeModule,
@@ -48,6 +49,8 @@ export class UserScenariosService {
     private readonly optionRepo: Repository<UserScenarioOption>,
     @InjectRepository(EnvTemplate)
     private readonly envTemplateRepo: Repository<EnvTemplate>,
+    @InjectRepository(Actor)
+    private readonly actorRepo: Repository<Actor>,
     private readonly actionCatalog: ActionCatalogService,
   ) {
     this.codeGenerator = new UserScenarioCodeGenerator(
@@ -639,6 +642,10 @@ export class UserScenariosService {
         .slice()
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.caseId - b.caseId)
         .map((link) => link.caseId),
+      caseBindings: (s.suiteCases || [])
+        .slice()
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.caseId - b.caseId)
+        .map((link) => ({ caseId: link.caseId, actorId: link.actorId ?? null })),
       caseCount: (s.suiteCases || []).length,
     }));
   }
@@ -673,6 +680,7 @@ export class UserScenariosService {
             title: c.title,
           })) || [],
       caseIds: links.map((l) => l.caseId),
+      caseBindings: links.map((l) => ({ caseId: l.caseId, actorId: l.actorId ?? null })),
       caseCount: links.length,
     };
   }
@@ -753,6 +761,46 @@ export class UserScenariosService {
       await this.caseRepo.save(scenario);
     }
 
+    return await this.getSuiteDetail(suiteId);
+  }
+
+  async updateSuiteCase(
+    suiteId: number,
+    caseId: number,
+    dto: { actorId?: number | null },
+  ) {
+    await this.ensureSuiteCasesBackfilled();
+    const link = await this.suiteCaseRepo.findOne({
+      where: { suiteId, caseId } as any,
+    });
+    if (!link) {
+      throw new NotFoundException(
+        `SuiteCase not found: suite=${suiteId} case=${caseId}`,
+      );
+    }
+
+    if (dto.actorId === undefined) {
+      return await this.getSuiteDetail(suiteId);
+    }
+
+    if (dto.actorId === null) {
+      link.actorId = null;
+      await this.suiteCaseRepo.save(link);
+      return await this.getSuiteDetail(suiteId);
+    }
+
+    const idNum = Number(dto.actorId);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      throw new BadRequestException('actorId is invalid');
+    }
+    const actor = await this.actorRepo.findOne({
+      where: { id: Math.floor(idNum) },
+    });
+    if (!actor) {
+      throw new BadRequestException('actorId not found');
+    }
+    link.actorId = actor.id;
+    await this.suiteCaseRepo.save(link);
     return await this.getSuiteDetail(suiteId);
   }
 

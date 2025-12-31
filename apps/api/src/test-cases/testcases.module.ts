@@ -12,6 +12,7 @@ import { ReportModule } from 'src/report/report.module';
 import { FilesModule } from 'src/files/files.module';
 import { IosModule } from 'src/mobile/ios/ios.module';
 import { SettingsModule } from 'src/settings/settings.module';
+import { Actor } from 'src/actors/entities/actor.entity';
 @Module({
   imports: [
     FastifyMulterModule.register({
@@ -25,7 +26,7 @@ import { SettingsModule } from 'src/settings/settings.module';
       },
       limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
     }),
-    TypeOrmModule.forFeature([TestCase]),
+    TypeOrmModule.forFeature([TestCase, Actor]),
     CommandModule,
     LoggerModule,
     AndroidModule,

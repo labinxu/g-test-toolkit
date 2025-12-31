@@ -6,25 +6,30 @@ import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { GTable } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { EmbedSelectSearch } from '@/components/select/embed-select-search'
+import type { OptionsSelectItem } from '@/components/select/options-select'
 import { AddSuiteCasesDialog } from '../dialogs/add-suite-cases-dialog'
 import type { UserScenarioSummary } from '../../types'
 
 type SuiteCasesTableProps = {
   suiteId: number
   suiteName?: string | null
+  actorItems: OptionsSelectItem<string>[]
   allCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[]
   adding?: boolean
   onAddCases: (caseIds: number[]) => Promise<boolean> | boolean
-  cases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[]
+  cases: Array<Pick<UserScenarioSummary, 'id' | 'code' | 'title'> & { actorId?: number | null }>
   selectedCaseId?: number | null
   removingCaseId?: number | null
   onEditCase: (id: number) => void
   onRemoveCase: (id: number) => void
+  onUpdateCaseActor: (caseId: number, actorId: number | null) => void
 }
 
 export function SuiteCasesTable({
   suiteId,
   suiteName,
+  actorItems,
   allCases,
   adding = false,
   onAddCases,
@@ -33,6 +38,7 @@ export function SuiteCasesTable({
   removingCaseId,
   onEditCase,
   onRemoveCase,
+  onUpdateCaseActor,
 }: SuiteCasesTableProps) {
   const [addOpen, setAddOpen] = useState(false)
   const highlightRowIndex = useMemo(() => {
@@ -43,7 +49,7 @@ export function SuiteCasesTable({
 
   const existingCaseIds = useMemo(() => new Set(cases.map((c) => c.id)), [cases])
 
-  const headers = ['用例ID', '用例编号', '标题', '']
+  const headers = ['用例ID', '用例编号', '标题', 'Actor', '']
 
   const rows = cases.map((c) => [
     <button
@@ -80,6 +86,21 @@ export function SuiteCasesTable({
     >
       {c.title}
     </button>,
+    <div
+      key={`actor-${c.id}`}
+      className="min-w-[160px]"
+    >
+      <EmbedSelectSearch
+        size="sm"
+        value={c.actorId ? String(c.actorId) : 'none'}
+        onChange={(val) => {
+          const next = val === 'none' ? null : Number(val)
+          onUpdateCaseActor(c.id, Number.isFinite(next as any) ? (next as any) : null)
+        }}
+        items={actorItems}
+        placeholder="选择 Actor"
+      />
+    </div>,
     <div key={`ops-${c.id}`} className="flex items-center justify-end gap-1">
       <Tooltip>
         <TooltipTrigger asChild>

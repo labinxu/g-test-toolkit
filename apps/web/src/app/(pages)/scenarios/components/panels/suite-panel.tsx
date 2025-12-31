@@ -22,6 +22,7 @@ import {
 import { ScenarioStepsTable } from '../shared/steps-table';
 import { SuiteCasesTable } from './suite-cases-table';
 import type { UserScenarioStep, UserScenarioSummary } from '../../types';
+import type { OptionsSelectItem } from '@/components/select/options-select';
 
 type SuiteSummary = {
   id: number;
@@ -31,18 +32,14 @@ type SuiteSummary = {
   sharedPreSteps?: string[];
 };
 
-type SuiteActorDraft = {
-  name: string;
-  scope: 'suite' | 'test';
-  authMode: 'ui' | 'cookies';
-  cookiesPath: string;
-};
-
 type SuitePanelProps = {
   suites: SuiteSummary[];
   selectedSuiteId: number | null;
-  suiteCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[];
+  suiteCases: Array<
+    Pick<UserScenarioSummary, 'id' | 'code' | 'title'> & { actorId?: number | null }
+  >;
   allCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[];
+  actorItems: OptionsSelectItem<string>[];
   selectedCaseId?: number | null;
   removingSuiteCaseId?: number | null;
   addingSuiteCases?: boolean;
@@ -53,16 +50,13 @@ type SuitePanelProps = {
   suiteDescDraft: string;
   suitePreSteps: string[];
   suitePreStepDraft: string;
-  suiteActorsDraft: SuiteActorDraft[];
-  suiteDefaultActorDraft: string;
   onSuiteDescChange: (val: string) => void;
   onSuitePreStepsChange: (steps: string[]) => void;
   onSuitePreStepDraftChange: (val: string) => void;
-  onSuiteActorsDraftChange: (actors: SuiteActorDraft[]) => void;
-  onSuiteDefaultActorDraftChange: (val: string) => void;
   onAssignSuite: (suiteId: number | null) => void;
   onEditSuiteCase: (caseId: number) => void;
   onRemoveSuiteCase: (caseId: number) => void;
+  onUpdateSuiteCaseActor: (caseId: number, actorId: number | null) => void;
   onAddSuiteCases: (suiteId: number, caseIds: number[]) => Promise<boolean> | boolean;
   onEditSuiteStep: (id: string) => void;
   onSaveSuitePreSteps: () => void;
@@ -77,6 +71,7 @@ export function SuitePanel({
   selectedSuiteId,
   suiteCases,
   allCases,
+  actorItems,
   selectedCaseId,
   removingSuiteCaseId,
   addingSuiteCases,
@@ -85,16 +80,13 @@ export function SuitePanel({
   suiteDescDraft,
   suitePreSteps,
   suitePreStepDraft,
-  suiteActorsDraft,
-  suiteDefaultActorDraft,
   onSuiteDescChange,
   onSuitePreStepsChange,
   onSuitePreStepDraftChange,
-  onSuiteActorsDraftChange,
-  onSuiteDefaultActorDraftChange,
   onAssignSuite,
   onEditSuiteCase,
   onRemoveSuiteCase,
+  onUpdateSuiteCaseActor,
   onAddSuiteCases,
   onEditSuiteStep,
   onSaveSuitePreSteps,
@@ -272,6 +264,7 @@ export function SuitePanel({
           <SuiteCasesTable
             suiteId={selectedSuiteId}
             suiteName={selectedSuite?.name || null}
+            actorItems={actorItems}
             allCases={allCases}
             adding={!!addingSuiteCases}
             onAddCases={(caseIds) => onAddSuiteCases(selectedSuiteId, caseIds)}
@@ -280,151 +273,9 @@ export function SuitePanel({
             removingCaseId={removingSuiteCaseId}
             onEditCase={onEditSuiteCase}
             onRemoveCase={onRemoveSuiteCase}
+            onUpdateCaseActor={onUpdateSuiteCaseActor}
           />
         ) : null}
-
-      <div className="space-y-2 rounded-md border bg-muted/20 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <Label className="text-xs">Actors（多账号）</Label>
-            <p className="text-muted-foreground mt-1 text-[11px]">
-              用例的 `submenu` 如果等于 actor name，生成的套件代码会自动插入 `tc.useActor(submenu)`。
-            </p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!selectedSuiteId}
-            onClick={() => {
-              onSuiteActorsDraftChange([
-                ...suiteActorsDraft,
-                { name: '', scope: 'suite', authMode: 'ui', cookiesPath: '' },
-              ]);
-            }}
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            添加 actor
-          </Button>
-        </div>
-
-        <div className="grid gap-2">
-          {suiteActorsDraft.length ? (
-            <div className="grid gap-2">
-              {suiteActorsDraft.map((row, idx) => (
-                <div
-                  key={`actor-${idx}`}
-                  className="grid items-center gap-2 rounded-md border bg-background p-2 md:grid-cols-12"
-                >
-                  <div className="md:col-span-2">
-                    <Label className="text-[11px]">name</Label>
-                    <Input
-                      value={row.name}
-                      onChange={(e) => {
-                        const next = suiteActorsDraft.slice();
-                        next[idx] = { ...row, name: e.target.value };
-                        onSuiteActorsDraftChange(next);
-                      }}
-                      placeholder="host / viewer / user1 ..."
-                      disabled={!selectedSuiteId}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label className="text-[11px]">scope</Label>
-                    <select
-                      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                      value={row.scope}
-                      disabled={!selectedSuiteId}
-                      onChange={(e) => {
-                        const v = e.target.value === 'test' ? 'test' : 'suite';
-                        const next = suiteActorsDraft.slice();
-                        next[idx] = { ...row, scope: v };
-                        onSuiteActorsDraftChange(next);
-                      }}
-                    >
-                      <option value="suite">suite</option>
-                      <option value="test">test</option>
-                    </select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label className="text-[11px]">auth</Label>
-                    <select
-                      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                      value={row.authMode}
-                      disabled={!selectedSuiteId}
-                      onChange={(e) => {
-                        const v = e.target.value === 'cookies' ? 'cookies' : 'ui';
-                        const next = suiteActorsDraft.slice();
-                        next[idx] = { ...row, authMode: v, cookiesPath: v === 'cookies' ? row.cookiesPath : '' };
-                        onSuiteActorsDraftChange(next);
-                      }}
-                    >
-                      <option value="ui">ui</option>
-                      <option value="cookies">cookies</option>
-                    </select>
-                  </div>
-                  <div className="md:col-span-5">
-                    <Label className="text-[11px]">cookiesPath</Label>
-                    <Input
-                      value={row.cookiesPath}
-                      onChange={(e) => {
-                        const next = suiteActorsDraft.slice();
-                        next[idx] = { ...row, cookiesPath: e.target.value };
-                        onSuiteActorsDraftChange(next);
-                      }}
-                      placeholder="auth/user1.cookies.json"
-                      disabled={!selectedSuiteId || row.authMode !== 'cookies'}
-                    />
-                  </div>
-                  <div className="flex justify-end md:col-span-1">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      disabled={!selectedSuiteId}
-                      onClick={() => {
-                        const next = suiteActorsDraft.filter((_, i) => i !== idx);
-                        onSuiteActorsDraftChange(next);
-                        if (suiteDefaultActorDraft && !next.some((a) => a.name === suiteDefaultActorDraft)) {
-                          onSuiteDefaultActorDraftChange('');
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-xs">
-              未配置 actors。需要多账号场景时添加 host/viewer 等。
-            </p>
-          )}
-
-          <div className="grid gap-1 md:grid-cols-3">
-            <div className="space-y-1 md:col-span-1">
-              <Label className="text-[11px]">defaultActor</Label>
-              <select
-                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={suiteDefaultActorDraft}
-                disabled={!selectedSuiteId}
-                onChange={(e) => onSuiteDefaultActorDraftChange(e.target.value)}
-              >
-                <option value="">（无）</option>
-                {suiteActorsDraft
-                  .map((a) => a.name.trim())
-                  .filter(Boolean)
-                  .map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">

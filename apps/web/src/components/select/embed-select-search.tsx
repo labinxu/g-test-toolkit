@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDownIcon } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { OptionsSelectItem } from './options-select';
 
-type OptionsSelectSearchProps<TValue extends string = string> = {
+type EmbedSelectSearchProps<TValue extends string = string> = {
   id?: string;
   placeholder?: string;
   value?: TValue | null;
@@ -20,7 +21,7 @@ type OptionsSelectSearchProps<TValue extends string = string> = {
   disabled?: boolean;
 };
 
-export function OptionsSelectSearch<TValue extends string = string>({
+export function EmbedSelectSearch<TValue extends string = string>({
   id,
   placeholder,
   value,
@@ -31,10 +32,13 @@ export function OptionsSelectSearch<TValue extends string = string>({
   triggerClassName,
   size = 'default',
   disabled = false,
-}: OptionsSelectSearchProps<TValue>) {
+}: EmbedSelectSearchProps<TValue>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [portalStyle, setPortalStyle] = useState<CSSProperties>({});
 
   const selected = useMemo(
     () => items.find((item) => item.value === value) || null,
@@ -44,8 +48,10 @@ export function OptionsSelectSearch<TValue extends string = string>({
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-      if (!containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const inContainer = !!containerRef.current?.contains(target);
+      const inDropdown = !!dropdownRef.current?.contains(target);
+      if (!inContainer && !inDropdown) {
         setOpen(false);
       }
     };
@@ -67,6 +73,30 @@ export function OptionsSelectSearch<TValue extends string = string>({
     }
   }, [disabled, open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const el = inputRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setPortalStyle({
+        position: 'fixed',
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width,
+        zIndex: 1000,
+        pointerEvents: 'auto',
+      });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open]);
+
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
@@ -84,9 +114,15 @@ export function OptionsSelectSearch<TValue extends string = string>({
       : '';
 
   return (
-    <div ref={containerRef} className={cn('relative', className)}>
+    <div
+      ref={containerRef}
+      className={cn('relative', className)}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
       <Input
         id={id}
+        ref={inputRef}
         className={cn(
           size === 'sm' ? 'h-8 pr-8' : 'h-9 pr-9',
           'w-full text-sm',
@@ -125,29 +161,46 @@ export function OptionsSelectSearch<TValue extends string = string>({
         <ChevronDownIcon className="h-4 w-4" />
       </button>
 
-      {open && filteredItems.length > 0 && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-sm shadow-md">
-          {filteredItems.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              className="flex w-full items-center px-2 py-1.5 text-left hover:bg-accent"
-              onClick={() => {
-                onChange(item.value);
-                setOpen(false);
-              }}
+      {open &&
+        createPortal(
+          filteredItems.length > 0 ? (
+            <div
+              ref={dropdownRef}
+              className="max-h-60 overflow-auto rounded-md border bg-popover text-sm shadow-md"
+              style={portalStyle}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {open && filteredItems.length === 0 && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-xs text-muted-foreground shadow-md">
-          <div className="px-2 py-1.5">无匹配项</div>
-        </div>
-      )}
+              {filteredItems.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  className="flex w-full items-center px-2 py-1.5 text-left hover:bg-accent"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onChange(item.value);
+                    setOpen(false);
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div
+              ref={dropdownRef}
+              className="rounded-md border bg-popover text-xs text-muted-foreground shadow-md"
+              style={portalStyle}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-2 py-1.5">无匹配项</div>
+            </div>
+          ),
+          document.body,
+        )}
     </div>
   );
 }
+

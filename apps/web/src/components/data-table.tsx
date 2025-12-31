@@ -591,13 +591,6 @@ export function GTable({
 }: GTableProps) {
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (selectedRow === null) return;
-    if (!onSelectedRow) return;
-    if (selectedRow < 0 || selectedRow >= rows.length) return;
-    onSelectedRow(selectedRow);
-  }, [selectedRow, rows, onSelectedRow]);
-
   return (
     <Table
       className="w-full border border-border text-xs"
@@ -656,6 +649,9 @@ export function GTable({
               )}
               onClick={() => {
                 setSelectedRow(rowIndex);
+                if (onSelectedRow) {
+                  onSelectedRow(rowIndex);
+                }
               }}
               onDoubleClick={() => {
                 if (onRowDoubleClick) {

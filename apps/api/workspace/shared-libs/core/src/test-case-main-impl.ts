@@ -482,7 +482,17 @@ async function runSingleTestCaseCtor(params: {
       context: rst.context ?? null,
       page: rst.page,
       scope: actorOpt?.scope === 'test' ? 'test' : 'suite',
-      auth: actorOpt?.auth ? { mode: actorOpt.auth.mode } : undefined,
+      auth: actorOpt?.auth
+        ? {
+            mode: actorOpt.auth.mode,
+            provider: actorOpt.auth.provider,
+            actorId:
+              actorOpt.auth.actorId != null && Number.isFinite(Number(actorOpt.auth.actorId))
+                ? Math.floor(Number(actorOpt.auth.actorId))
+                : undefined,
+          }
+        : undefined,
+      loggedIn: false,
     }
     await applyCookiesIfConfigured(rst.page, actorOpt)
     return session

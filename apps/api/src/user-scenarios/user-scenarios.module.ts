@@ -18,6 +18,7 @@ import { EnvTemplate } from './entities/env-template.entity';
 import { EnvTemplatesController } from './env-templates.controller';
 import { UserScenarioSuite } from './entities/user-scenario-suite.entity';
 import { UserScenarioSuiteCase } from './entities/user-scenario-suite-case.entity';
+import { Actor } from '../actors/entities/actor.entity';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { UserScenarioSuiteCase } from './entities/user-scenario-suite-case.entit
       EnvTemplate,
       UserScenarioSuite,
       UserScenarioSuiteCase,
+      Actor,
     ]),
     AiModule,
   ],

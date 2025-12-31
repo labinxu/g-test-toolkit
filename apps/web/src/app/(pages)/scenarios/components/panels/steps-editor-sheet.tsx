@@ -6,6 +6,7 @@ import { Plus, Save } from 'lucide-react';
 import { ScenarioStepsTable } from '../shared/steps-table';
 import { SuitePanel } from './suite-panel';
 import type { StepParamHint, UserScenarioStep, UserScenarioSummary, UserScenarioSuiteSummary } from '../../types';
+import type { OptionsSelectItem } from '@/components/select/options-select';
 
 export type StepsEditorSheetProps = {
   open: boolean;
@@ -15,38 +16,26 @@ export type StepsEditorSheetProps = {
   allCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[];
   suites: UserScenarioSuiteSummary[];
   selectedSuiteId: number | null;
-  suiteCases: Pick<UserScenarioSummary, 'id' | 'code' | 'title'>[];
+  suiteCases: Array<
+    Pick<UserScenarioSummary, 'id' | 'code' | 'title'> & { actorId?: number | null }
+  >;
+  actorItems: OptionsSelectItem<string>[];
   removingSuiteCaseId?: number | null;
   addingSuiteCases?: boolean;
   onEditSuiteCase: (id: number) => void;
   onRemoveSuiteCase: (id: number) => void;
+  onUpdateSuiteCaseActor: (caseId: number, actorId: number | null) => void;
   onAddSuiteCases: (suiteId: number, caseIds: number[]) => Promise<boolean> | boolean;
   suiteLoading: boolean;
   suiteGenerating: boolean;
   suiteDescDraft: string;
   suitePreSteps: string[];
   suitePreStepDraft: string;
-  suiteActorsDraft: {
-    name: string;
-    scope: 'suite' | 'test';
-    authMode: 'ui' | 'cookies';
-    cookiesPath: string;
-  }[];
-  suiteDefaultActorDraft: string;
   suiteSaving: boolean;
   suiteDeleting?: boolean;
   onSuiteDescChange: (val: string) => void;
   onSuitePreStepsChange: (steps: string[]) => void;
   onSuitePreStepDraftChange: (val: string) => void;
-  onSuiteActorsDraftChange: (
-    actors: {
-      name: string;
-      scope: 'suite' | 'test';
-      authMode: 'ui' | 'cookies';
-      cookiesPath: string;
-    }[],
-  ) => void;
-  onSuiteDefaultActorDraftChange: (val: string) => void;
   onOpenSuiteStepDialog: () => void;
   onEditSuiteStep: (id: string) => void;
   onAssignSuite: (id: number | null) => void;
@@ -72,25 +61,23 @@ export function StepsEditorSheet({
   suites,
   selectedSuiteId,
   suiteCases,
+  actorItems,
   removingSuiteCaseId,
   addingSuiteCases,
   onEditSuiteCase,
   onRemoveSuiteCase,
+  onUpdateSuiteCaseActor,
   onAddSuiteCases,
   suiteLoading,
   suiteGenerating,
   suiteDescDraft,
   suitePreSteps,
   suitePreStepDraft,
-  suiteActorsDraft,
-  suiteDefaultActorDraft,
   suiteSaving,
   suiteDeleting,
   onSuiteDescChange,
   onSuitePreStepsChange,
   onSuitePreStepDraftChange,
-  onSuiteActorsDraftChange,
-  onSuiteDefaultActorDraftChange,
   onOpenSuiteStepDialog,
   onEditSuiteStep,
   onAssignSuite,
@@ -132,26 +119,24 @@ export function StepsEditorSheet({
                 selectedSuiteId={selectedSuiteId}
                 suiteCases={suiteCases}
                 allCases={allCases}
+                actorItems={actorItems}
                 selectedCaseId={selectedCaseId}
                 removingSuiteCaseId={removingSuiteCaseId}
                 addingSuiteCases={addingSuiteCases}
                 suiteLoading={suiteLoading}
                 suiteGenerating={suiteGenerating}
-                suiteDescDraft={suiteDescDraft}
-                suitePreSteps={suitePreSteps}
-                suitePreStepDraft={suitePreStepDraft}
-                suiteActorsDraft={suiteActorsDraft}
-                suiteDefaultActorDraft={suiteDefaultActorDraft}
-                onSuiteDescChange={onSuiteDescChange}
-                onSuitePreStepsChange={onSuitePreStepsChange}
-                onSuitePreStepDraftChange={onSuitePreStepDraftChange}
-                onSuiteActorsDraftChange={onSuiteActorsDraftChange}
-                onSuiteDefaultActorDraftChange={onSuiteDefaultActorDraftChange}
-                onOpenSuiteStepDialog={onOpenSuiteStepDialog}
-                onEditSuiteStep={onEditSuiteStep}
-                onAssignSuite={(id) => void onAssignSuite(id)}
-                onEditSuiteCase={onEditSuiteCase}
+              suiteDescDraft={suiteDescDraft}
+              suitePreSteps={suitePreSteps}
+              suitePreStepDraft={suitePreStepDraft}
+              onSuiteDescChange={onSuiteDescChange}
+              onSuitePreStepsChange={onSuitePreStepsChange}
+              onSuitePreStepDraftChange={onSuitePreStepDraftChange}
+              onOpenSuiteStepDialog={onOpenSuiteStepDialog}
+              onEditSuiteStep={onEditSuiteStep}
+              onAssignSuite={(id) => void onAssignSuite(id)}
+              onEditSuiteCase={onEditSuiteCase}
                 onRemoveSuiteCase={onRemoveSuiteCase}
+                onUpdateSuiteCaseActor={onUpdateSuiteCaseActor}
                 onAddSuiteCases={onAddSuiteCases}
                 onSaveSuitePreSteps={onSaveSuitePreSteps}
                 onDeleteSuite={onDeleteSuite}

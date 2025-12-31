@@ -13,6 +13,15 @@ export type ActorAuthMode = 'ui' | 'cookies'
 export type ActorAuthOptions = {
   mode?: ActorAuthMode
   /**
+   * Optional provider hint for UI login.
+   * Currently supported: gettr-web
+   */
+  provider?: 'gettr-web' | string
+  /**
+   * Actor id from the Actors DB (resolved via runner-injected credentials).
+   */
+  actorId?: number
+  /**
    * Cookie JSON file path (absolute or relative to the current user's `userDir`).
    * Expected format: Puppeteer cookies array, or `{ cookies: [...] }`.
    */

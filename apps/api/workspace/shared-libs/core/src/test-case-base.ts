@@ -37,7 +37,8 @@ export type WebActorSession = {
   context?: BrowserContext | null;
   page: Page;
   scope: 'suite' | 'test';
-  auth?: { mode?: 'ui' | 'cookies' };
+  auth?: { mode?: 'ui' | 'cookies'; provider?: string; actorId?: number };
+  loggedIn?: boolean;
 };
 
 export class TestCase {
@@ -159,6 +160,90 @@ export class TestCase {
     }
     this.setBrowser(session.browser);
     this.setPage(session.page);
+  }
+
+  async ensureActorLoggedIn(name?: string) {
+    const actorName = name || this.sharedState.defaultActor;
+    if (!actorName) {
+      throw new Error('No actor specified and defaultActor is not set');
+    }
+    const session = this.sharedState.actors.get(actorName);
+    if (!session) {
+      throw new Error(`Actor session not found: ${actorName}`);
+    }
+    if (session.loggedIn) return;
+    const mode = session.auth?.mode || 'ui';
+    if (mode !== 'ui') {
+      // cookies mode handled at session creation time
+      session.loggedIn = true;
+      return;
+    }
+
+    const actorId = session.auth?.actorId;
+    if (!actorId) {
+      throw new Error(`UI login requires auth.actorId for actor ${actorName}`);
+    }
+    const credsMap = ((globalThis as any).__gttActorCredentials || null) as
+      | Record<string, { accountName: string; password: string }>
+      | null;
+    const creds = credsMap ? credsMap[String(actorId)] : null;
+    if (!creds || !creds.accountName) {
+      throw new Error(`Actor credentials not found for actorId=${actorId}`);
+    }
+    if (!creds.password) {
+      throw new Error(`Actor password is empty for actorId=${actorId}`);
+    }
+
+    const provider = (session.auth?.provider || 'gettr-web').toString();
+    const page: any = session.page as any;
+    if (!page || typeof page.$ !== 'function') {
+      throw new Error('ensureActorLoggedIn requires a Puppeteer Page (web actor)');
+    }
+
+    if (provider !== 'gettr-web') {
+      throw new Error(`Unsupported UI login provider: ${provider}`);
+    }
+
+    // gettr-web UI login (best-effort, selector-based; can be hardened later)
+    const clickIfExists = async (selector: string) => {
+      const el = await page.$(selector);
+      if (!el) return false;
+      await el.click();
+      return true;
+    };
+    const typeInto = async (selector: string, value: string) => {
+      await page.waitForSelector(selector, { timeout: 15000 });
+      await page.click(selector, { clickCount: 3 });
+      await page.type(selector, value);
+    };
+
+    // If the login button is not present, assume already logged in.
+    const loginBtnSelector =
+      '#root > div > div > div > div:nth-of-type(3)> button:nth-of-type(1)';
+    const hasLoginBtn = await page.$(loginBtnSelector);
+    if (!hasLoginBtn) {
+      session.loggedIn = true;
+      return;
+    }
+
+    await clickIfExists(loginBtnSelector);
+    await clickIfExists('form div:nth-of-type(3)>span'); // "With Password" tab (optional)
+    await typeInto('input#email', creds.accountName);
+    await typeInto('input#password', creds.password);
+
+    const nav = page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(
+      () => null,
+    );
+    await clickIfExists('button[type="submit"]');
+    await nav;
+
+    // Post-check: login button should disappear
+    const stillHasLogin = await page.$(loginBtnSelector);
+    if (stillHasLogin) {
+      throw new Error(`UI login failed for actor ${actorName} (actorId=${actorId})`);
+    }
+
+    session.loggedIn = true;
   }
 
   sharedSet(key: string, value: any) {

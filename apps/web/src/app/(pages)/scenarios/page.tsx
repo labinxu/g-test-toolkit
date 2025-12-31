@@ -33,10 +33,31 @@ function ScenariosPageContent() {
     const ids = Array.isArray(suite?.caseIds) ? suite!.caseIds! : [];
     if (!ids.length) return [];
     const byId = new Map(vm.cases.map((c) => [c.id, c]));
+    const actorByCaseId = new Map<number, number | null>();
+    if (Array.isArray((suite as any)?.caseBindings)) {
+      for (const row of (suite as any).caseBindings as any[]) {
+        const cid = Number(row?.caseId);
+        const aidRaw = row?.actorId;
+        const aid =
+          aidRaw === null || aidRaw === undefined
+            ? null
+            : Number.isFinite(Number(aidRaw))
+              ? Math.floor(Number(aidRaw))
+              : null;
+        if (Number.isFinite(cid)) {
+          actorByCaseId.set(cid, aid);
+        }
+      }
+    }
     return ids
       .map((id) => byId.get(id))
       .filter(Boolean)
-      .map((c) => ({ id: c!.id, code: c!.code, title: c!.title }));
+      .map((c) => ({
+        id: c!.id,
+        code: c!.code,
+        title: c!.title,
+        actorId: actorByCaseId.get(c!.id) ?? null,
+      }));
   })();
 
   return (
@@ -149,6 +170,7 @@ function ScenariosPageContent() {
         suites={vm.suites}
         selectedSuiteId={vm.selectedSuiteId}
         suiteCases={suiteCases}
+        actorItems={vm.actorItems}
         removingSuiteCaseId={vm.removingSuiteCaseId}
         addingSuiteCases={vm.addingSuiteCases}
         onEditSuiteCase={(id) => {
@@ -159,21 +181,21 @@ function ScenariosPageContent() {
           if (vm.selectedSuiteId == null) return;
           void vm.handleRemoveCaseFromSuite(vm.selectedSuiteId, id);
         }}
+        onUpdateSuiteCaseActor={(caseId, actorId) => {
+          if (vm.selectedSuiteId == null) return;
+          void vm.handleUpdateSuiteCaseActor(vm.selectedSuiteId, caseId, actorId);
+        }}
         onAddSuiteCases={(suiteId, ids) => vm.handleAddCasesToSuite(suiteId, ids)}
         suiteLoading={vm.suiteLoading}
         suiteGenerating={vm.suiteGenerating}
         suiteDescDraft={vm.suiteDescDraft}
         suitePreSteps={vm.suitePreSteps}
         suitePreStepDraft={vm.suitePreStepDraft}
-        suiteActorsDraft={vm.suiteActorsDraft}
-        suiteDefaultActorDraft={vm.suiteDefaultActorDraft}
         suiteSaving={vm.suiteSaving}
         suiteDeleting={vm.suiteDeleting}
         onSuiteDescChange={vm.setSuiteDescDraft}
         onSuitePreStepsChange={vm.setSuitePreSteps}
         onSuitePreStepDraftChange={vm.setSuitePreStepDraft}
-        onSuiteActorsDraftChange={vm.setSuiteActorsDraft}
-        onSuiteDefaultActorDraftChange={vm.setSuiteDefaultActorDraft}
         onOpenSuiteStepDialog={vm.handleAddSuitePreStep}
         onEditSuiteStep={vm.handleEditSuitePreStep}
         onAssignSuite={(id) => void vm.handleAssignSuite(id)}

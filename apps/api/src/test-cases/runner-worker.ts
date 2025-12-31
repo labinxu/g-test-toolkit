@@ -16,6 +16,7 @@ type RunMessage = {
     apiTestsConfig?: { baseUrl: string; defaultHeaders: Record<string, string> }
     workspace?: string
     envConfig?: any
+    actorCredentials?: Record<string, { accountName: string; password: string; env?: string }>
     reportMeta?: { platform?: string; module?: string; caseName?: string }
   }
 }
@@ -145,6 +146,7 @@ async function runInWorker(message: RunMessage) {
     // 将运行期 envConfig 与 logger 信息注入到全局，供 core-lib 使用
     try {
       ;(globalThis as any).__gttEnvConfig = options?.envConfig ?? null
+      ;(globalThis as any).__gttActorCredentials = options?.actorCredentials ?? null
       ;(globalThis as any).__gttLoggerService = loggerService
       ;(globalThis as any).__gttClientId = clientId
     } catch {

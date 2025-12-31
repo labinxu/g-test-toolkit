@@ -511,21 +511,28 @@ export class UserScenarioCodeGenerator {
     const relPath = path.relative(process.cwd(), filePath);
 
     const sharedPreSteps = this.parseSharedPreSteps(suite.sharedPreStepsJson);
-    let suiteActors: Record<string, any> | null = null;
-    try {
-      const raw = (suite as any).actorsJson as string | null | undefined;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          suiteActors = parsed as Record<string, any>;
-        }
-      }
-    } catch {
-      suiteActors = null;
+    // Actor binding v2: each suite-case link can bind to an actorId (from Actors DB).
+    // We generate a stable actor key as `actor-<id>` and let core-lib resolve credentials at runtime.
+    const suiteCaseActorIds = new Map<number, number | null>();
+    for (const link of links) {
+      const cid = Number((link as any).caseId);
+      if (!Number.isFinite(cid)) continue;
+      const aidRaw = (link as any).actorId;
+      const aid =
+        aidRaw === null || aidRaw === undefined
+          ? null
+          : Number.isFinite(Number(aidRaw))
+            ? Math.floor(Number(aidRaw))
+            : null;
+      suiteCaseActorIds.set(cid, aid);
     }
-    const suiteDefaultActor =
-      (suite as any).defaultActor != null ? String((suite as any).defaultActor) : null;
-    const suiteActorKeys = suiteActors ? Object.keys(suiteActors) : [];
+    const uniqueActorIds = Array.from(
+      new Set(
+        Array.from(suiteCaseActorIds.values()).filter(
+          (v): v is number => typeof v === 'number' && v > 0,
+        ),
+      ),
+    );
 
     const lines: string[] = [
       '// Auto-generated live stream suite',
@@ -647,8 +654,15 @@ export class UserScenarioCodeGenerator {
     const envConfigLines: string[] = [];
     const tplLines: string[] = [];
     const actorConfigLines: string[] = [];
-    if (!isApiPlatform && platform !== 'gettr-android' && suiteActors && suiteActorKeys.length) {
-      const rawLines = JSON.stringify(suiteActors, null, 2).split('\n');
+    if (!isApiPlatform && platform !== 'gettr-android' && uniqueActorIds.length) {
+      const actorDefs: Record<string, any> = {};
+      for (const id of uniqueActorIds) {
+        actorDefs[`actor-${id}`] = {
+          scope: 'suite',
+          auth: { mode: 'ui', provider: 'gettr-web', actorId: id },
+        };
+      }
+      const rawLines = JSON.stringify(actorDefs, null, 2).split('\n');
       if (rawLines.length === 1) {
         actorConfigLines.push(`    actors: ${rawLines[0]},`);
       } else {
@@ -656,9 +670,6 @@ export class UserScenarioCodeGenerator {
         actorConfigLines.push(...rawLines.slice(1).map((ln) => `    ${ln}`));
         actorConfigLines[actorConfigLines.length - 1] =
           actorConfigLines[actorConfigLines.length - 1] + ',';
-      }
-      if (suiteDefaultActor && suiteActorKeys.includes(suiteDefaultActor)) {
-        actorConfigLines.push(`    defaultActor: ${JSON.stringify(suiteDefaultActor)},`);
       }
     }
     if (envTemplateId && Number.isFinite(envTemplateId)) {
@@ -866,10 +877,14 @@ export class UserScenarioCodeGenerator {
       const steps = (sc.steps || []).slice().sort((a, b) => a.order - b.order);
       const caseTitle = `${sc.code} ${sc.title}`;
       lines.push(`  it(${JSON.stringify(caseTitle)}, async () => {`);
-      if (!isApiPlatform && suiteActors) {
-        const submenu = (sc.submenu || '').toString().trim();
-        if (submenu && (suiteActors as any)[submenu]) {
-          lines.push(`    (tc as any).useActor(${JSON.stringify(submenu)});`);
+      if (!isApiPlatform && uniqueActorIds.length) {
+        const aid = suiteCaseActorIds.get(sc.id) ?? null;
+        if (typeof aid === 'number' && aid > 0) {
+          const actorKey = `actor-${aid}`;
+          lines.push(`    (tc as any).useActor(${JSON.stringify(actorKey)});`);
+          lines.push(
+            `    await (tc as any).ensureActorLoggedIn?.(${JSON.stringify(actorKey)});`,
+          );
         }
       }
       if (isApiPlatform) {

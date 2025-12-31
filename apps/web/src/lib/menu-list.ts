@@ -89,6 +89,10 @@ export function getMenuList(pathname: string): Group[] {
               href: '/scenarios/action-catalog',
               label: 'Action Catalog',
             },
+            {
+              href: '/scenarios/actors',
+              label: 'Actors',
+            },
           ],
         },
         {

@@ -38,6 +38,9 @@ import { LiveModule } from './live/live.module';
 import { UserScenarioSuite } from './user-scenarios/entities/user-scenario-suite.entity';
 import { AuthAssetsModule } from './auth-assets/auth-assets.module';
 import { UserScenarioSuiteCase } from './user-scenarios/entities/user-scenario-suite-case.entity';
+import { ActorsModule } from './actors/actors.module';
+import { Actor } from './actors/entities/actor.entity';
+import { ActorEnv } from './actors/entities/actor-env.entity';
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -61,6 +64,8 @@ import { UserScenarioSuiteCase } from './user-scenarios/entities/user-scenario-s
         EnvTemplate,
         UserScenarioSuite,
         UserScenarioSuiteCase,
+        Actor,
+        ActorEnv,
       ],
       synchronize: true,
     }),
@@ -81,6 +86,7 @@ import { UserScenarioSuiteCase } from './user-scenarios/entities/user-scenario-s
     UserScenariosModule,
     LiveModule,
     AuthAssetsModule,
+    ActorsModule,
   ],
   controllers: [AppController],
   providers: [AppService, LoggerService, LoggerGateway],

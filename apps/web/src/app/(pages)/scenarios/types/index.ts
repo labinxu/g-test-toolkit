@@ -112,5 +112,6 @@ export type UserScenarioSuiteSummary = {
   actors?: Record<string, any> | null
   defaultActor?: string | null
   caseIds?: number[]
+  caseBindings?: { caseId: number; actorId: number | null }[]
   caseCount?: number
 }

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Put,
   Get,
   NotFoundException,
   Param,
@@ -172,6 +173,26 @@ export class UserScenariosController {
       throw new NotFoundException(
         (err && (err as Error).message) ||
           `Failed to remove case ${caseId} from suite ${suiteId}`,
+      );
+    }
+  }
+
+  @Put('suites/:id/cases/:caseId')
+  @UseGuards(AuthGuard('jwt'))
+  async updateSuiteCase(
+    @Param('id', ParseIntPipe) suiteId: number,
+    @Param('caseId', ParseIntPipe) caseId: number,
+    @Body() body: { actorId?: number | null },
+  ) {
+    try {
+      const actorIdRaw = (body as any)?.actorId;
+      const actorId =
+        actorIdRaw === null || actorIdRaw === undefined ? actorIdRaw : Number(actorIdRaw);
+      return await this.service.updateSuiteCase(suiteId, caseId, { actorId });
+    } catch (err) {
+      throw new NotFoundException(
+        (err && (err as Error).message) ||
+          `Failed to update suite case ${caseId} in suite ${suiteId}`,
       );
     }
   }
