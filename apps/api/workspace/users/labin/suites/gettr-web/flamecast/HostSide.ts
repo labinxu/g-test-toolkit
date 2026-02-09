@@ -1,6 +1,6 @@
 // Auto-generated live stream suite
 // Suite: HostSide
-// Generated at: 2025-12-29T06:53:18.490Z
+// Generated at: 2026-01-07T02:44:59.923Z
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -13,24 +13,6 @@ describe("[gettr-web] Suite: HostSide", () => {
     browser: {
       headless: false,
       debug: true,
-    },
-    actors: {
-      "actor-2": {
-        "scope": "suite",
-        "auth": {
-          "mode": "ui",
-          "provider": "gettr-web",
-          "actorId": 2
-        }
-      },
-      "actor-1": {
-        "scope": "suite",
-        "auth": {
-          "mode": "ui",
-          "provider": "gettr-web",
-          "actorId": 1
-        }
-      }
     },
   });
 
@@ -91,8 +73,6 @@ describe("[gettr-web] Suite: HostSide", () => {
   });
 
   it("US-0-host-1 As a host, I can start a livestream on GETTR (web) without OBS using Restream, so I can go live quickly.", async () => {
-    (tc as any).useActor("actor-2");
-    await (tc as any).ensureActorLoggedIn?.("actor-2");
     // 以下步骤由用例管理模块自动生成，已复用套件级前置步骤：
     // Step 1: 进入live host 页面
     //   Data / Precondition: username:post_notify_1 password:a111111 登陆状态并且在主页面
@@ -164,8 +144,6 @@ describe("[gettr-web] Suite: HostSide", () => {
   });
 
   it("US-0-user-check-livestream-status Start New Stream", async () => {
-    (tc as any).useActor("actor-1");
-    await (tc as any).ensureActorLoggedIn?.("actor-1");
     // 以下步骤由用例管理模块自动生成，已复用套件级前置步骤：
     // Step 1: Home page · Click Live Tab
     //   Expected: 出现直播/回放列表
